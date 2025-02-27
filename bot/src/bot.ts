@@ -76,7 +76,6 @@ bot.command("seed", context => {
 })
 
 bot.on("message", async (context) => {
-  console.log(context)
   if (context.chat.id !== config.DEFAULT_CHAT_ID) {
     return
   }
