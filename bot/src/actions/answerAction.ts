@@ -4,6 +4,7 @@ import type { Users } from "../utils/Users.js"
 import { config } from "../config.js"
 
 export async function answerAction(bot: Bot, llama: Llama, users: Users, context: MessageContext<Bot>) {
+  console.log(context)
   const defaultContextId = "abcdeabcde"
   const userId = context.from?.id
   const text = context.text
@@ -25,15 +26,20 @@ export async function answerAction(bot: Bot, llama: Llama, users: Users, context
 
   const isCall = regexpCall.test(text)
   const isQuestion = regexpQuestion.test(text)
+  let question = ""
 
   if (isCall) {
     if (!isQuestion) {
-      await askLlama(bot, llama, defaultContextId, text)
-      // await askLlama(bot, user.sessionId, text)
+      question = text
     } else {
-      const parseQuestion = text.replace(regexpForReplace, "")
-      await askLlama(bot, llama, defaultContextId, parseQuestion)
-      // await askLlama(bot, user.sessionId, parseQuestion)
+      question = text.replace(regexpForReplace, "")
+    }
+
+    // defaultContextId as user.sessionId
+    const answer = await askLlama(bot, llama, defaultContextId, question)
+
+    if (answer && !answer.error) {
+      bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: answer.message, reply_parameters: { message_id: context.id } })
     }
   }
 }
@@ -44,14 +50,6 @@ async function askLlama(bot: Bot, llama: Llama, sessionId: string, question: str
     return
   }
 
-  // const extendQuestions = [
-  //   "",
-  //   "Сформулируй свой ответ в два или три предложения. Тебе задали следующий вопрос:\n",
-  //   "Ты бот помощник в большом чате. К тебе могут обращаться совершенно разные люди. Отвечай им грубо. Ответь мне на следующий вопрос:",
-  //   "Ты милая девушка. Ты стесьняешься. Ответь мне на следующий вопрос:",
-  // ]
-  // const extendQuestion = `${extendQuestions[3]}${question}`
-
   const interval = setInterval(() => {
     bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
   }, 3000)
@@ -60,7 +58,5 @@ async function askLlama(bot: Bot, llama: Llama, sessionId: string, question: str
 
   clearInterval(interval)
 
-  if (answer && !answer.error) {
-    bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: answer.message })
-  }
+  return answer
 }

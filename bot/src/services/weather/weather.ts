@@ -35,6 +35,7 @@ const isImage = true
 const latitude = "12.2741076"
 const longitude = "109.2006335"
 const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,rain,pressure_msl,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=GMT&forecast_days=1`
+let isSent = false
 
 export async function sheduleWeatherAction(action: (weatherText: string | Blob) => void) {
   const date = new Date()
@@ -42,8 +43,15 @@ export async function sheduleWeatherAction(action: (weatherText: string | Blob) 
   const localHours = hours + 7
 
   if (localHours === 8 || localHours === 13 || localHours === 18) {
+    if (isSent) {
+      return
+    }
+
+    isSent = true
     const weatherText = await getWeather(hours)
     action(weatherText)
+  } else {
+    isSent = false
   }
 
   setTimeout(() => {

@@ -5,7 +5,7 @@ import { Llama } from "./services/llama/llama.js"
 import { sheduleWeatherAction } from "./services/weather/weather.js"
 import { Users } from "./utils/Users.js"
 
-type LlamaParam = 'maxTokens' | 'temperature' | 'minP' | 'topK' | 'topP' | 'seed'
+type LlamaParam = "maxTokens" | "temperature" | "minP" | "topK" | "topP" | "seed"
 
 const bot = new Bot(config.BOT_TOKEN)
 const users = new Users()
@@ -21,55 +21,55 @@ bot.onStart(({ info }) => {
 
 bot.command("start", context => context.send("Привет! Я бот Подслушано. Мне постоянно добавляют новые функции. Возможно, скоро, я смогу захватить мир."))
 
-bot.command("contextText", context => {
-  const contextText = context.text?.replace(/\/\w+\s/gi, "")
+bot.command("contextText", (context) => {
+  const contextText = context.text?.replace(/\/\w+\s/g, "")
   llama.setContextText(contextText ?? "")
-  context.send("Установлен текст:" + contextText)
+  context.send(`Установлен текст:${contextText}`)
 })
 
-bot.command("maxTokens", context => {
+bot.command("maxTokens", (context) => {
   const param = context.text
-  const reply = setParam('maxTokens', param)
+  const reply = setParam("maxTokens", param)
   if (reply) {
     context.send(reply)
   }
 })
 
-bot.command("temperature", context => {
+bot.command("temperature", (context) => {
   const param = context.text
-  const reply = setParam('temperature', param)
+  const reply = setParam("temperature", param)
   if (reply) {
     context.send(reply)
   }
 })
 
-bot.command("minP", context => {
+bot.command("minP", (context) => {
   const param = context.text
-  const reply = setParam('minP', param)
+  const reply = setParam("minP", param)
   if (reply) {
     context.send(reply)
   }
 })
 
-bot.command("topK", context => {
+bot.command("topK", (context) => {
   const param = context.text
-  const reply = setParam('topK', param)
+  const reply = setParam("topK", param)
   if (reply) {
     context.send(reply)
   }
 })
 
-bot.command("topP", context => {
+bot.command("topP", (context) => {
   const param = context.text
-  const reply = setParam('topP', param)
+  const reply = setParam("topP", param)
   if (reply) {
     context.send(reply)
   }
 })
 
-bot.command("seed", context => {
+bot.command("seed", (context) => {
   const param = context.text
-  const reply = setParam('seed', param)
+  const reply = setParam("seed", param)
   if (reply) {
     context.send(reply)
   }
@@ -85,20 +85,20 @@ bot.on("message", async (context) => {
 
 function setParam(name: LlamaParam, value: string | undefined) {
   if (!value) {
-    return 'Пустой параметр'
+    return "Пустой параметр"
   }
 
-  const param = Number(value?.replace(/\/\w+\s/gi, ""))
+  const param = Number(value?.replace(/\/\w+\s/g, ""))
 
   if (!(name in llama.params)) {
-    return 'Нет такого параметра'
+    return "Нет такого параметра"
   }
 
   if (!Number.isNaN(param)) {
     llama.params[name] = param
     return `Параметр "${name}" установлен в ${param}`
   } else {
-    return 'Неправильный формат параметра'
+    return "Неправильный формат параметра"
   }
 }
 
