@@ -24,7 +24,7 @@ interface BotPromptParams {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const modelsDirectory = path.join(__dirname, "..", "models")
 
-const USE_CPU = true
+const USE_CPU = false
 
 export class BotAi {
     model: LlamaModel | null
