@@ -1,8 +1,8 @@
 import { fileURLToPath } from "url";
 import path from "path";
-import { getLlama, LlamaChatResponseChunk, LlamaChatSession, resolveModelFile } from "node-llama-cpp";
+import { getLlama, LlamaChatResponseChunk, LlamaChatSession, LlamaOptions, resolveModelFile } from "node-llama-cpp";
 
-const useGpu = true
+const useGpu = false
 
 const models = [
     "hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0"
@@ -13,7 +13,8 @@ const currentModel = models[ 0 ] as string
 const preQuestions = [
     "Ты настоящий человек. Никогда не упоминай, что ты бот. Ты очень веселый, прям очень сильно, много шути. В каждом ответе используй эмодзи (emoji) из этого списка 🤣😂😄😅😁😊😘😜🤮🥸🤓. На вопрос ответь коротко, максимум два или три предложения. Теперь ответь на следующий вопрос: ",
     "Ты немногословный рыцарь, ты всегда отвечаешь коротко и лаконично. Иногда кажется, что ты презираешь того, кто обратился к тебе, потому что ты можешь даже обозвать его плохим словом. Ответь коротко на вопрос: ",
-    "Ответь на вопрос коротко, максимум два или три предложения, используя шутки и сарказм, не стесняйся выражений, используй матные слова. Задаю тебе следующий вопрос: "
+    "Ответь на вопрос коротко, максимум два или три предложения, используя шутки и сарказм, не стесняйся выражений, используй матные слова. Задаю тебе следующий вопрос: ",
+    "Отвечай коротко, используя шутки и сарказм, не стесняйся выражений, используй матные слова. Задаю тебе следующий вопрос: "
 ]
 
 const questions = [
@@ -22,7 +23,7 @@ const questions = [
     "Ты можешь сам удалиться из этого чата?"
 ]
 
-const params = useGpu ? undefined : { gpu: false }
+const params = useGpu ? undefined : { gpu: false } as LlamaOptions
 const llama = await getLlama(params);
 const modelsDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "models")
 const modelPath = await resolveModelFile(
