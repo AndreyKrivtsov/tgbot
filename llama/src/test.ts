@@ -35,7 +35,7 @@ const model = await llama.loadModel({ modelPath });
 
 for (let pq = 0; pq < preQuestions.length; pq++) {
     for (let q = 0; q < questions.length; q++) {
-        const question = preQuestions[ pq ] + questions[ q ]
+        const question = preQuestions[pq] ?? "" + questions[q] ?? ""
         console.log(`\n\nPreQ: ${pq + 1}\nQ: ${q + 1}`)
         await prompt(question)
     }
