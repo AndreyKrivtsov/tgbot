@@ -4,7 +4,6 @@ import type { Users } from "../utils/Users.js"
 import { config } from "../config.js"
 
 export async function answerAction(bot: Bot, llama: Llama, users: Users, context: MessageContext<Bot>) {
-  console.log(context)
   const defaultContextId = "abcdeabcde"
   const userId = context.from?.id
   const text = context.text
@@ -45,7 +44,6 @@ export async function answerAction(bot: Bot, llama: Llama, users: Users, context
 }
 
 async function askLlama(bot: Bot, llama: Llama, sessionId: string, question: string) {
-  console.log("Bot question", question)
   if (!question) {
     return
   }

@@ -42,7 +42,7 @@ export async function sheduleWeatherAction(action: (weatherText: string | Blob) 
   const hours = date.getUTCHours()
   const localHours = hours + 7
 
-  if (localHours === 8 || localHours === 13 || localHours === 18) {
+  if (localHours === 9 || localHours === 13 || localHours === 17 || localHours === 21) {
     if (isSent) {
       return
     }
@@ -75,7 +75,8 @@ export async function getWeather(hour: number) {
 }
 
 async function toImage(weather: WeatherData) {
-  const initialImage = await loadImage(path.join(import.meta.dirname, "image.jpg"))
+  const imagePath = path.join(import.meta.dirname, "image.jpg")
+  const initialImage = await loadImage(imagePath)
   const canvas = createCanvas(400, 400)
 
   let ctx = canvas.getContext("2d")
@@ -94,12 +95,11 @@ async function toImage(weather: WeatherData) {
   ctx = str(ctx, 310, "Направление ветра", `${weather.windDirection} °`)
 
   const image = new Blob([canvas.toBuffer("image/png")])
-  console.log(image)
   return image
 }
 
 function title(ctx: CanvasRenderingContext2D, y: number, str: string) {
-  return text(ctx, 40, y, "#fff", str, 26)
+  return text(ctx, 40, y, "#fff", str, 22)
 }
 
 function str(ctx: CanvasRenderingContext2D, y: number, title: string, str: string) {

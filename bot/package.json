@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "npx tsx watch --env-file .env src/index.ts",
-    "build": "npx tsc --build tsconfig.json",
+    "build": "npx tsc --build tsconfig.json && npm run copy",
+    "copy": "npx copyfiles -f src/services/weather/image.jpg dist/services/weather/",
     "start": "node --env-file .env ./dist/index.js",
     "lint": "npx eslint",
     "lint:fix": "npm run lint --fix",
@@ -16,6 +17,7 @@
     "@verrou/core": "^0.5.1",
     "axios": "^1.8.1",
     "canvas": "^3.1.0",
+    "copyfiles": "^2.4.1",
     "drizzle-orm": "^0.39.3",
     "env-var": "^7.5.0",
     "gramio": "^0.2.3",

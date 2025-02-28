@@ -15,7 +15,7 @@ export class Llama {
 
   constructor() {
     this.isBusy = false
-    this.contextText = ''
+    this.contextText = ""
   }
 
   async answer(sessionId: string, message: string) {
