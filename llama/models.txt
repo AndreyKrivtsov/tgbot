@@ -4,7 +4,7 @@ hf:bartowski/gemma-2-2b-it-GGUF:Q3_K_L
 
 Еще вариант без цензуры
 Довольно хорошая, может писать коротко
-hf:bartowski/gemma-2-2b-it-abliterated-GGUF:Q5_K_L
+hf:bartowski/gemma-2-2b-it-abliterated-GGUF:Q6_K_L
 Q5_K_S, Q6_K_L
 
 900 мб оперативы

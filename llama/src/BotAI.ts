@@ -13,6 +13,7 @@ interface BotAiSessionsList {
 }
 
 interface BotPromptParams {
+    newSession: boolean
     maxTokens: number
     temperature: number
     minP: number
@@ -39,7 +40,7 @@ export class BotAi {
         const params: LlamaOptions | undefined = USE_CPU ? { gpu: false } : undefined
         const llama = await getLlama(params)
         const modelPath = await resolveModelFile(
-            "hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0",
+            "hf:bartowski/gemma-2-2b-it-abliterated-GGUF:Q6_K_L",
             modelsDirectory
         )
         console.info('LLama load model...')
@@ -52,15 +53,18 @@ export class BotAi {
             return
         }
 
+        const { newSession, maxTokens, temperature, minP, topK, topP, seed } = params
+
         let session = this.getSessionWithCount(sessionId)
 
         if (!session) {
             session = await this.createSession(sessionId)
+        } else if (newSession) {
+            this.deleteSession(session.id)
+            session = await this.createSession(sessionId)
         }
 
         if (session) {
-            const { maxTokens, temperature, minP, topK, topP, seed } = params
-            console.log(params)
             return await session.session.prompt(text, params)
         } else {
             console.error('No session')
@@ -94,7 +98,6 @@ export class BotAi {
 
     async createSession(sessionId: string) {
         if (this.model) {
-            console.log('New session')
             const context = await this.model.createContext()
             const session = new LlamaChatSession({
                 contextSequence: context.getSequence()

@@ -23,7 +23,7 @@
   },
   "scripts": {
     "postinstall": "npm run models:pull",
-    "models:pull": "node-llama-cpp pull --dir ./models \"hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0\"",
+    "models:pull": "node-llama-cpp pull --dir ./models \"hf:bartowski/gemma-2-2b-it-abliterated-GGUF:Q6_K_L\"",
     "start": "vite-node ./src/index.ts",
     "start:build": "node ./dist/index.js",
     "test": "vite-node ./src/test.ts",
