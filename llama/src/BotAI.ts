@@ -42,7 +42,7 @@ export class BotAi {
             "hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0",
             modelsDirectory
         )
-        console.info('LLama load mode...')
+        console.info('LLama load model...')
         this.model = await llama.loadModel({modelPath})
         console.info('LLama inited successfull')
     }
