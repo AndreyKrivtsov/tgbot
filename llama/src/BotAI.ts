@@ -39,7 +39,7 @@ export class BotAi {
         const params: LlamaOptions | undefined = USE_CPU ? { gpu: false } : undefined
         const llama = await getLlama(params)
         const modelPath = await resolveModelFile(
-            "hf:Vikhrmodels/Vikhr-Gemma-2B-instruct-GGUF:Q4_K",
+            "hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0",
             modelsDirectory
         )
         console.info('LLama load mode...')
