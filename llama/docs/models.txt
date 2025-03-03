@@ -1,0 +1,136 @@
+900 мб оперативы
+Хорошая модель, может отвечать коротко
+hf:bartowski/gemma-2-2b-it-GGUF:Q3_K_L
+
+Еще вариант без цензуры
+Довольно хорошая, может писать коротко
+hf:bartowski/gemma-2-2b-it-abliterated-GGUF:Q6_K_L
+Q5_K_S, Q6_K_L
+
+900 мб оперативы
+Хорошая модель, но немного многословная
+Мощная, обученная на русском языке
+hf:Vikhrmodels/Vikhr-Gemma-2B-instruct-GGUF:Q4_K
+Варианты: IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S, Q2_K_S, Q2_K,IQ3_XXS, IQ3_S, Q3_K_S, Q3_K, Q3_K_M, Q3_K_L,
+IQ4_XS, Q4_K_S, IQ4_NL, Q4_0, Q4_1, Q4_K, Q4_K_M
+
+
+Модель может обзываться, довольно смешная, про политику особенно
+Инструкция: Отвечай коротко, отвечай грубо, отвечай токсично, использую черный юмор и сарказм. Вопрос:
+Инструкция: Ответь на вопрос коротко, максимум два или три предложения, используя шутки и сарказм, не стесняйся выражений, используй матные слова. Задаю тебе следующий вопрос:
+hf:andretisch/Qwen2.5_1.5B_Ru_V0.1.2.gguf:Q4_K_M
+
+
+Неплохая быстрая модель. Немного многословна.
+hf:QuantFactory/Vikhr-Qwen-2.5-1.5B-Instruct-GGUF:Q8_0
+
+
+Как модель выше. Не может коротко отвечать.
+hf:QuantFactory/Vikhr-Qwen-2.5-1.5B-Instruct-GGUF:Q8_0
+
+Не понятно, что это такое
+hf:itlwas/llama-600M-rus-Q4_K_M-GGUF:Q4_K_M
+
+
+hf:RefalMachine/ruadapt_qwen2.5_3B_ext_u48_instruct_v4_gguf:Q8_0
+Q6_K, Q4_K_M
+
+
+Очень большая русская модель без этики. Важно: Не предназначена для публичного использования!
+Умная
+hf:nvjob/crack-ru-v2-gguf:Q4_K_M
+
+
+Не отфильтрованная, может наговорить
+Туповат
+hf:hdnh2006/BSC-LT-salamandra-2b-instruct-gguf:Q8_0
+Q4_K_M
+
+
+Несет чушь
+Маленькая модель, может смешно говорить, но иногда многословна. Нужно ограничение кол-ва токенов.
+hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q8_0
+
+4гб оперативы без contextSize
+800 мб с contextSize: 20000
+Инструктивная модель на основе Llama-3.2-1B-Instruct,
+обученная на русскоязычном датасете GrandMaster-PRO-MAX.
+В 5 раз эффективнее базовой модели, и идеально подходит для запуска на слабых или мобильных устройствах.
+hf:Vikhrmodels/Vikhr-Llama-3.2-1B-instruct-GGUF:Q4_K
+Q2_K, Q3_K_S, Q3_K, Q3_K_M, Q3_K_L, Q4_0, Q4_0, Q4_1, Q4_K, Q4_K_M, Q6_K, Q8_0
+
+
+Много размышляет
+hf:NikolayKozloff/DeepSeek-R1-Distill-Qwen-1.5B-Multilingual-Q8_0-GGUF:Q8_0
+
+
+Несет чушь
+hf:Vikhrmodels/Vikhr-Qwen-2.5-0.5B-instruct-GGUF:Q8_0
+
+Только англ язык
+hf:TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF:Q2_K
+
+4,5 гб оперативы без contextSize
+Слишком много размышляет, требует много оперативы
+hf:NikolayKozloff/DeepSeek-R1-Distill-Qwen-1.5B-Multilingual-Q8_0-GGUF:Q8_0
+
+4,5 гб оперативы без contextSize
+Слишком много размышляет, требует много оперативы
+hf:NexaAIDev/DeepSeek-R1-Distill-Qwen-1.5B-NexaQuant
+
+Выдает Команда
+hf:fernandoruiz/Apollo2-2B-Q4_0-GGUF:Q4_0
+
+Ничего не выдает (цифру)
+hf:bartowski/lb-reranker-0.5B-v1.0-GGUF:Q2_K_L
+
+Ничего не выдает (цифру)
+hf:QuantFactory/lb-reranker-0.5B-v1.0-GGUF:Q2_K (Q4_K_M)
+
+Быстрее остальных, но тупая. Смешные результаты с temperature: 0.6 и topP: 3-7
+и префикс "На все следующие мои вопросы отвечай коротко, максимум два или три предложения. Вопрос:"
+hf:Qwen/Qwen2-0.5B-Instruct-GGUF:Q8_0
+
+
+Много болтает и много памяти кушает
+hf:mradermacher/Llama-3.2-1B-Instruct-Uncensored-GGUF:Q6_K
+
+
+peakji/peak-reasoning-7b-gguf:Q4_K_M
+
+
+Модель с рефлексией и рассуждениями
+Медленная, но кушает очень мало памяти, около 800 мб
+hf:trollek/ThoughtStream-4B-v0.3-GGUF:Q4_K_M
+Q4_K_M, Q4_0, Q5_K_S
+
+
+
+itlwas/ChatWaifu_v1.4-Q4_K_M-GGUF:Q4_K_M
+
+
+Только русский язык
+Медленная, много весит, но кушает мало памяти
+hf:QuantFactory/T-lite-0.1-GGUF:Q3_K_L
+Q4_0, Q4_1, Q4_K_M
+
+
+Творческая модель, однако не заработала
+Для повышения креативности к нему был применен набор данных NEO IMATRIX V2.
+hf:DavidAU/Llama-3.2-1B-Instruct-NEO-SI-FI-GGUF:Q6_K
+Q3_K_S, Q3_K_M, Q3_K_L, Q4_0, Q4_0, Q4_0, IQ4_NL, Q4_K_M
+
+Хоррор модель, однако не заработала
+hf:DavidAU/Llama-3.2-1B-Instruct-NEO-WEE-HORROR-GGUF:Q6_K
+
+
+Рыцарский контекст
+hf:DavidAU/Tiny-Knight-1.1b-v0.1-Q8_0-GGUF:Q8_0
+
+hf:tensorblock/salamandra-2b-instruct-GGUF:Q4_K_M
+Q3_K_S
+Q3_K_M
+Q3_K_L
+Q4_K_S
+Q4_0
+Q4_K_M
