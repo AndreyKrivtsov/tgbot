@@ -1,25 +1,25 @@
 interface Message {
-    id: number
-    message: string
-    contextId: string
-  }
+  id: number
+  message: string
+  contextId: string
+}
 
 export class MessageQueue {
-    queue: Message[]
+  queue: Message[]
 
-    constructor() {
-        this.queue = []
-    }
+  constructor() {
+    this.queue = []
+  }
 
-    length() {
-        return this.queue.length
-    }
+  length() {
+    return this.queue.length
+  }
 
-    add(id: number, message: string, contextId: string) {
-        this.queue.push({ id, message, contextId })
-    }
+  add(id: number, message: string, contextId: string) {
+    this.queue.push({ id, message, contextId })
+  }
 
-    get() {
-        return this.queue.shift()
-    }
+  get() {
+    return this.queue.shift()
+  }
 }

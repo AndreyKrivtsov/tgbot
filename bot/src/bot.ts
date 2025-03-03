@@ -1,11 +1,12 @@
-import { Bot, MessageContext } from "gramio"
-import { AI } from "services/aiService/AI.js"
+import type { MessageContext } from "gramio"
+import { aiAnswerAction } from "actions/aiAnswerAction.js"
+import { Bot } from "gramio"
 import { answerAction } from "./actions/answerAction.js"
 import { config } from "./config.js"
+import { AI } from "./services/aiService/AI.js"
 import { Llama } from "./services/llama/llama.js"
 import { sheduleWeatherAction } from "./services/weather/weather.js"
 import { Users } from "./utils/Users.js"
-import { aiAnswerAction } from "actions/aiAnswerAction.js"
 
 type LlamaParam = "maxTokens" | "temperature" | "minP" | "topK" | "topP" | "seed"
 type AiBotParam = "maxOutputTokens" | "temperature" | "topK" | "topP" | "seed" | "frequencyPenalty"
@@ -68,7 +69,7 @@ function setParam(context: MessageContext<Bot>) {
   const value = Number(context.text?.replace(/\/\w+\s/g, ""))
 
   if (!param || !params.includes(param) || !Number.isInteger(value)) {
-    context.reply("Пустой параметр или значение. Передано: " + context.text)
+    context.reply(`Пустой параметр или значение. Передано: ${context.text}`)
     return
   }
 

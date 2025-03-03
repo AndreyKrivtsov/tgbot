@@ -1,22 +1,20 @@
 import type { ChatSession, GenerativeModel } from "@google/generative-ai"
-import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "@google/generative-ai"
-
-const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам."
 
 interface AIParams {
-  modelName: string,
-  systemInstruction: string,
-  seed: number | undefined,
-  temperature: number,
-  topP: number,
-  topK: number,
-  frequencyPenalty: number,
-  maxOutputTokens: number,
-  stopSequences: string[],
-  responseMimeType: string,
+  modelName: string
+  systemInstruction: string
+  seed: number | undefined
+  temperature: number
+  topP: number
+  topK: number
+  frequencyPenalty: number
+  maxOutputTokens: number
+  stopSequences: string[]
+  responseMimeType: string
 }
 
 export class AI {
@@ -65,7 +63,7 @@ export class AI {
   }
 
   deleteStopSequesce(index: number) {
-    
+
   }
 
   getContext(contextId: string) {
@@ -105,7 +103,7 @@ export class AI {
 
   async request(contextId: string, text: string) {
     const chatContext = this.getContext(contextId)
-    const result = await chatContext?.sendMessage(text, )
+    const result = await chatContext?.sendMessage(text)
 
     if (result) {
       return result.response.text()
