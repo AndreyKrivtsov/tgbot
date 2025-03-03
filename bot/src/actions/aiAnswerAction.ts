@@ -52,7 +52,7 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
         bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
       }, 3000)
 
-      const responce = await throttleQuery(ai.request(contextId, message), 10000)
+      const responce = await throttleQuery(ai.request(contextId, message), 60000)
 
       if (responce) {
         bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "Markdown" })
