@@ -53,7 +53,7 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
       const responce = await throttleQuery(ai.request(contextId, message), 60000)
 
       if (responce) {
-        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "Markdown" })
+        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "MarkdownV2" })
       }
 
       clearInterval(interval)
