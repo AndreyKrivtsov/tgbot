@@ -37,7 +37,7 @@ export async function answerAction({ bot, context, llama }: AnswerArgs) {
     const answer = await askLlama(bot, llama, defaultContextId, question)
 
     if (answer && !answer.error) {
-      bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: answer.message, reply_parameters: { message_id: context.id }, parse_mode: "MarkdownV2" })
+      bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: answer.message, reply_parameters: { message_id: context.id } })
     }
   }
 }
