@@ -1,6 +1,7 @@
 import type { Bot, MessageContext } from "gramio"
 import type { AI } from "../services/aiService/AI.js"
 import { config } from "../config.js"
+import { escapeChars } from "../utils/escapeChars.js"
 import { Log } from "../utils/Log.js"
 import { MessageQueue } from "../utils/MessageQueue.js"
 
@@ -51,6 +52,7 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
       }, 3000)
 
       const responce = await throttleQuery(ai.request(contextId, message), 60000)
+      const escapedText = escapeChars(responce)
 
       if (responce) {
         bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "MarkdownV2" })
@@ -75,16 +77,20 @@ async function throttleQuery(requestFunction: Promise<string>, pause: number): P
     if (!isWorking) {
       isWorking = true
 
-      requestFunction.then((responce) => {
-        if (responce) {
-          setTimeout(() => {
-            isWorking = false
-            resolve(responce)
-          }, pause)
-        } else {
-          resolve("")
-        }
-      })
+      try {
+        requestFunction.then((responce) => {
+          if (responce) {
+            setTimeout(() => {
+              isWorking = false
+              resolve(responce)
+            }, pause)
+          } else {
+            resolve("")
+          }
+        })
+      } catch (e) {
+        log.e(e)
+      }
     } else {
       resolve("")
     }
