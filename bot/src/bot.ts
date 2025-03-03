@@ -1,6 +1,6 @@
 import type { MessageContext } from "gramio"
-import { aiAnswerAction } from "actions/aiAnswerAction.js"
 import { Bot } from "gramio"
+import { aiAnswerAction } from "./actions/aiAnswerAction.js"
 import { answerAction } from "./actions/answerAction.js"
 import { config } from "./config.js"
 import { AI } from "./services/aiService/AI.js"
