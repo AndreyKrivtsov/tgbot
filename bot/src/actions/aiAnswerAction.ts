@@ -55,7 +55,7 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
       const escapedText = escapeChars(responce)
 
       if (responce) {
-        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "MarkdownV2" })
+        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: escapedText, reply_parameters: { message_id: id }, parse_mode: "MarkdownV2" })
       }
 
       clearInterval(interval)
