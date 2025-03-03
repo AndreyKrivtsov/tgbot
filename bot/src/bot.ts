@@ -19,7 +19,7 @@ const ai = new AI(config.AISTUDIO_KEY)
 ai.initModel("gemini-2.0-flash")
 
 bot.onStart(({ info }) => {
-  console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n ===== \n\n`)
+  console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n Version 0.2 \n\n ===== \n\n`)
 
   sheduleWeatherAction((data) => {
     bot.api.sendPhoto({ chat_id: config.DEFAULT_CHAT_ID, photo: data })
