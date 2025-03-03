@@ -43,8 +43,6 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
   try {
     const queueItem = queue.get()
 
-    console.log("queue item:", queueItem ? queueItem.id : undefined)
-
     if (queueItem) {
       const { id, message, contextId } = queueItem
 
@@ -96,8 +94,8 @@ async function throttleQuery(requestFunction: Promise<string>, pause: number): P
 function getBotMessage(bot: Bot, context: MessageContext<Bot>) {
   let messageForBot = ""
   const prependMessage = `${context.from?.username}/${context.from?.firstName} спрашивает тебя: `
-  const regexp = /эй.{0,3}бот\W?.*/i
-  const regexpReplace = /Эй.{0,3}бот\W?/i
+  const regexp = /^эй.{0,3}бот\W?.*/i
+  const regexpReplace = /^Эй.{0,3}бот\W?/i
 
   if (context.text && context.from && !context.from.isBot()) {
     const botUserName = `@${bot.info?.username}`
