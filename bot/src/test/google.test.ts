@@ -1,7 +1,7 @@
 import { config } from "../config.js"
-import { GoogleAI } from "../services/aiService/AI.js"
+import { AI } from "../services/aiService/AI.js"
 
-const ai = new GoogleAI(config.AISTUDIO_KEY)
+const ai = new AI(config.AISTUDIO_KEY)
 ai.initModel("gemini-2.0-flash", "")
 const contextId = "sdfadsf"
 
