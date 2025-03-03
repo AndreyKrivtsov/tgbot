@@ -1,9 +1,14 @@
 import type { Bot, MessageContext } from "gramio"
 import type { Llama } from "../services/llama/llama.js"
-import type { Users } from "../utils/Users.js"
 import { config } from "../config.js"
 
-export async function answerAction(bot: Bot, llama: Llama, users: Users, context: MessageContext<Bot>) {
+interface AnswerArgs {
+  bot: Bot
+  context: MessageContext<Bot>
+  llama: Llama
+}
+
+export async function answerAction({ bot, context, llama }: AnswerArgs) {
   const defaultContextId = "abcdeabcde"
   const userId = context.from?.id
   const text = context.text
@@ -13,15 +18,9 @@ export async function answerAction(bot: Bot, llama: Llama, users: Users, context
     return
   }
 
-  let user = users.getUser(userId)
-
-  if (!user) {
-    user = users.newUser(userId)
-  }
-
-  const regexpCall = /Эй.{0,3}бот\W*/i
-  const regexpQuestion = /Эй.{0,3}бот.+/i
-  const regexpForReplace = /Эй.{0,3}бот/i
+  const regexpCall = /Эй\s{0,3}старый\s{0,3}бот\W*/i
+  const regexpQuestion = /Эй\s{0,3}старый\s{0,3}бот.+/i
+  const regexpForReplace = /Эй\s{0,3}старый\s{0,3}бот/i
 
   const isCall = regexpCall.test(text)
   const isQuestion = regexpQuestion.test(text)

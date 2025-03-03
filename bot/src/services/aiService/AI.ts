@@ -1,0 +1,116 @@
+import type { ChatSession, GenerativeModel } from "@google/generative-ai"
+import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "@google/generative-ai"
+
+const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
+const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам."
+
+interface AIParams {
+  modelName: string,
+  systemInstruction: string,
+  seed: number | undefined,
+  temperature: number,
+  topP: number,
+  topK: number,
+  frequencyPenalty: number,
+  maxOutputTokens: number,
+  stopSequences: string[],
+  responseMimeType: string,
+}
+
+export class AI {
+  api: GoogleGenerativeAI
+  model: GenerativeModel | null = null
+  contexts: Record<string, ChatSession> = {}
+
+  tempHistory: any[] = []
+
+  config: AIParams = {
+    modelName: "gemini-2.0-flash",
+    systemInstruction: "",
+    seed: undefined,
+    temperature: 1,
+    topP: 0.95,
+    topK: 40,
+    frequencyPenalty: 1,
+    maxOutputTokens: 8192,
+    stopSequences: [],
+    responseMimeType: "text/plain",
+  }
+
+  constructor(apiKey: string) {
+    this.api = new GoogleGenerativeAI(apiKey)
+  }
+
+  initModel(modelName?: string, systemInstruction?: string) {
+    this.contexts = {}
+    this.config.modelName = modelName ?? DEFAULT_MODEL_NAME
+    this.config.systemInstruction = systemInstruction ?? DEFAULT_INSTRUCION
+
+    this.model = this.api.getGenerativeModel({
+      model: this.config.modelName,
+      systemInstruction: this.config.systemInstruction,
+    })
+  }
+
+  setInstrucion(systemInstruction: string) {
+    this.initModel(this.config.modelName, systemInstruction)
+  }
+
+  addStopSequesce(sequence: string) {
+    if (this.config.stopSequences.length < 5) {
+      this.config.stopSequences.push(sequence)
+    }
+  }
+
+  deleteStopSequesce(index: number) {
+    
+  }
+
+  getContext(contextId: string) {
+    let chatContext
+
+    if (!this.hasContext(contextId)) {
+      chatContext = this.newContext(contextId)
+    } else {
+      chatContext = this.contexts[contextId]
+    }
+
+    if (!chatContext) {
+      console.error("Unknown error with creating context.")
+      return null
+    }
+
+    return chatContext
+  }
+
+  newContext(contextId: string) {
+    if (!this.model) {
+      console.error("Error creating context, because model is empty")
+      return undefined
+    }
+
+    const context = this.model.startChat({
+      history: [],
+    })
+
+    this.contexts[contextId] = context
+    return context
+  }
+
+  hasContext(contextId: string) {
+    return contextId in this.contexts
+  }
+
+  async request(contextId: string, text: string) {
+    const chatContext = this.getContext(contextId)
+    const result = await chatContext?.sendMessage(text, )
+
+    if (result) {
+      return result.response.text()
+    }
+
+    return ""
+  }
+}

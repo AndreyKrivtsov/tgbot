@@ -11,9 +11,11 @@
     "generate": "npx drizzle-kit generate",
     "push": "npx drizzle-kit push",
     "migrate": "npx drizzle-kit migrate",
-    "studio": "npx drizzle-kit studio"
+    "studio": "npx drizzle-kit studio",
+    "test": "npx tsx --env-file .env src/test/google.test.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.22.0",
     "@verrou/core": "^0.5.1",
     "axios": "^1.8.1",
     "canvas": "^3.1.0",
