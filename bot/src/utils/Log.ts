@@ -5,8 +5,6 @@ import { config } from "../config.js"
 const LOG_FILE_NAME = "bot.log"
 const LOG_FILE_PATH = path.join(process.cwd(), LOG_FILE_NAME)
 
-console.log(LOG_FILE_PATH)
-
 export class Log {
   token: string
   logLevel: number
@@ -65,7 +63,9 @@ export class Log {
 
   writeToFile(text: string) {
     try {
-      appendFile(this.filePath, `${this.getPrefix()} ${text}\n`)
+      if (config.LOG_FILE) {
+        appendFile(this.filePath, `${this.getPrefix()} ${text}\n`)
+      }
     } catch (e) {
       this.e(e)
     }

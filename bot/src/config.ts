@@ -13,4 +13,5 @@ export const config = {
   LLAMA_URL: env.get("LLAMA_URL").required().asString(),
   AISTUDIO_KEY: env.get("AISTUDIO_KEY").required().asString(),
   LOG_LEVEL: env.get("LOG_LEVEL").default(2).asInt(),
+  LOG_FILE: env.get("LOG_FILE").default(0).asBool(),
 }
