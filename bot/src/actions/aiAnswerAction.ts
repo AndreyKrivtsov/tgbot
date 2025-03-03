@@ -1,6 +1,7 @@
 import type { Bot, MessageContext } from "gramio"
 import type { AI } from "../services/aiService/AI.js"
 import { config } from "../config.js"
+import { Log } from "../utils/Log.js"
 import { MessageQueue } from "../utils/MessageQueue.js"
 
 interface ActionArgs {
@@ -8,6 +9,8 @@ interface ActionArgs {
   context: MessageContext<Bot>
   ai: AI
 }
+
+const log = new Log("aiAnswerAction.ts")
 
 let isWorking = false
 
@@ -24,7 +27,7 @@ export async function aiAnswerAction({ bot, context, ai }: ActionArgs) {
     }
 
     if (queue.length() < 8) {
-      queue.add(context.id, message, defaultContextId)
+      queue.set(context.id, message, defaultContextId)
     } else {
       context.reply("Слишком много сообщений в моей памяти ждут ответа. Вы можете спросить меня сразу после того, как я отвечу на предыдущее сообщение. Спасибо ;)")
     }
@@ -37,27 +40,36 @@ export async function aiAnswerAction({ bot, context, ai }: ActionArgs) {
 }
 
 async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
-  const queueItem = queue.get()
+  try {
+    const queueItem = queue.get()
 
-  if (queueItem) {
-    const { id, message, contextId } = queueItem
+    console.log("queue item:", queueItem ? queueItem.id : undefined)
 
-    const interval = setInterval(() => {
-      bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
-    }, 3000)
+    if (queueItem) {
+      const { id, message, contextId } = queueItem
 
-    const responce = await throttleQuery(ai.request(contextId, message), 60000)
+      const interval = setInterval(() => {
+        bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
+      }, 3000)
 
-    if (responce) {
-      bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "Markdown" })
+      const responce = await throttleQuery(ai.request(contextId, message), 10000)
+
+      if (responce) {
+        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id }, parse_mode: "Markdown" })
+      }
+
+      clearInterval(interval)
     }
 
-    clearInterval(interval)
+    setTimeout(() => {
+      startQueue(bot, ai, queue)
+    }, 1000)
+  } catch (e) {
+    log.e(e)
+    setTimeout(() => {
+      startQueue(bot, ai, queue)
+    }, 1000)
   }
-
-  setTimeout(() => {
-    startQueue(bot, ai, queue)
-  }, 1000)
 }
 
 async function throttleQuery(requestFunction: Promise<string>, pause: number): Promise<string> {

@@ -1,5 +1,6 @@
 import type { ChatSession, GenerativeModel } from "@google/generative-ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { Log } from "utils/Log.js"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам."
@@ -36,6 +37,8 @@ export class AI {
     stopSequences: [],
     responseMimeType: "text/plain",
   }
+
+  log = new Log("[AI.ts]")
 
   constructor(apiKey: string) {
     this.api = new GoogleGenerativeAI(apiKey)
@@ -106,7 +109,11 @@ export class AI {
     const result = await chatContext?.sendMessage(text)
 
     if (result) {
-      return result.response.text()
+      try {
+        return result.response.text()
+      } catch (e) {
+        this.log.e(e)
+      }
     }
 
     return ""

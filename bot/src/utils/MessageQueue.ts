@@ -15,11 +15,18 @@ export class MessageQueue {
     return this.queue.length
   }
 
-  add(id: number, message: string, contextId: string) {
+  set(id: number, message: string, contextId: string) {
     this.queue.push({ id, message, contextId })
+    console.log("Set, length", this.length())
   }
 
   get() {
-    return this.queue.shift()
+    if (this.length()) {
+      const result = this.queue.shift()
+      console.log("Get, length", this.length())
+      return result
+    }
+
+    return undefined
   }
 }

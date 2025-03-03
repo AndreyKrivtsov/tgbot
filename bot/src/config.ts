@@ -12,4 +12,5 @@ export const config = {
   DEFAULT_CHAT_ID: env.get("DEFAULT_CHAT_ID").required().asInt(),
   LLAMA_URL: env.get("LLAMA_URL").required().asString(),
   AISTUDIO_KEY: env.get("AISTUDIO_KEY").required().asString(),
+  LOG_LEVEL: env.get("LOG_LEVEL").default(2).asInt(),
 }
