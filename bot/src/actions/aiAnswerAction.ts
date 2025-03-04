@@ -51,7 +51,7 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
         bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
       }, 3000)
 
-      const responce = await throttleQuery(ai.request(contextId, message), 5000)
+      const responce = await throttleQuery(ai.request(contextId, message), 60000)
       const escapedText = escapeForMarkdown(responce)
 
       if (escapedText) {
