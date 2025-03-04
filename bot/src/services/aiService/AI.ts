@@ -117,6 +117,8 @@ export class AI {
       if (result) {
         return result.response.text()
       }
+
+      return ""
     } catch (e) {
       this.log.e(e)
       return ""
