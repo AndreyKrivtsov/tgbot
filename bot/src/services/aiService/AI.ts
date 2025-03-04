@@ -108,20 +108,19 @@ export class AI {
   }
 
   async request(contextId: string, text: string) {
-    const chatContext = await this.getContext(contextId)
-    const result = await chatContext?.sendMessage(text)
+    try {
+      const chatContext = await this.getContext(contextId)
+      const result = await chatContext?.sendMessage(text)
 
-    this.saveHistory(contextId, await chatContext?.getHistory())
+      this.saveHistory(contextId, await chatContext?.getHistory())
 
-    if (result) {
-      try {
+      if (result) {
         return result.response.text()
-      } catch (e) {
-        this.log.e(e)
       }
+    } catch (e) {
+      this.log.e(e)
+      return ""
     }
-
-    return ""
   }
 
   async saveHistory(contextId: string, context?: Content[]) {

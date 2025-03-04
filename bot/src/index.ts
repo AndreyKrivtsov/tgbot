@@ -18,7 +18,7 @@ process.on("uncaughtException", (error) => {
 })
 
 process.on("unhandledRejection", (error) => {
-  log.e("uncaughtException:", error)
+  log.e("unhandledRejection:", error)
 })
 
 async function botStart() {
