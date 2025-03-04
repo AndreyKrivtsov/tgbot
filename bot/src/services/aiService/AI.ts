@@ -1,6 +1,7 @@
-import type { ChatSession, GenerativeModel } from "@google/generative-ai"
+import type { ChatSession, Content, GenerativeModel } from "@google/generative-ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { Log } from "../../utils/Log.js"
+import { loadHistory, saveHistory } from "./history.js"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам. Не используй Markdown."
@@ -86,14 +87,16 @@ export class AI {
     return chatContext
   }
 
-  newContext(contextId: string) {
+  async newContext(contextId: string) {
     if (!this.model) {
       console.error("Error creating context, because model is empty")
       return undefined
     }
 
+    const history = await this.loadHistory(contextId)
+
     const context = this.model.startChat({
-      history: [],
+      history: history ?? [],
     })
 
     this.contexts[contextId] = context
@@ -105,8 +108,10 @@ export class AI {
   }
 
   async request(contextId: string, text: string) {
-    const chatContext = this.getContext(contextId)
+    const chatContext = await this.getContext(contextId)
     const result = await chatContext?.sendMessage(text)
+
+    this.saveHistory(contextId, await chatContext?.getHistory())
 
     if (result) {
       try {
@@ -117,5 +122,17 @@ export class AI {
     }
 
     return ""
+  }
+
+  async saveHistory(contextId: string, context?: Content[]) {
+    if (context) {
+      await saveHistory(contextId, context)
+    }
+  }
+
+  async loadHistory(contextId: string): Promise<Content[] | undefined> {
+    if (contextId) {
+      return await loadHistory(contextId)
+    }
   }
 }

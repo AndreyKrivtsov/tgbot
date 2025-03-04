@@ -11,7 +11,9 @@ export const config = {
   LOCK_STORE: env.get("LOCK_STORE").default("memory").asEnum(["memory"]),
   DEFAULT_CHAT_ID: env.get("DEFAULT_CHAT_ID").required().asInt(),
   LLAMA_URL: env.get("LLAMA_URL").required().asString(),
-  AISTUDIO_KEY: env.get("AISTUDIO_KEY").required().asString(),
+  AI_API_KEY: env.get("AI_API_KEY").required().asString(),
+  AI_API_THROTTLE: env.get("AI_API_THROTTLE").default(120000).asInt(),
   LOG_LEVEL: env.get("LOG_LEVEL").default(2).asInt(),
   LOG_FILE: env.get("LOG_FILE").default(0).asBool(),
+  LOG_DIR: env.get("LOG_DIR").default("").asString(),
 }

@@ -15,7 +15,7 @@ const bot = new Bot(config.BOT_TOKEN)
 const users = new Users()
 const llama = new Llama()
 
-const ai = new AI(config.AISTUDIO_KEY)
+const ai = new AI(config.AI_API_KEY)
 ai.initModel("gemini-2.0-flash")
 
 bot.onStart(({ info }) => {
