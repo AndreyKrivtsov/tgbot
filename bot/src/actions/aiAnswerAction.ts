@@ -1,7 +1,7 @@
 import type { Bot, MessageContext } from "gramio"
 import type { AI } from "../services/aiService/AI.js"
 import { config } from "../config.js"
-import { escapeChars } from "../utils/escapeChars.js"
+import { escapeForMarkdown } from "../utils/escapeForMarkdown.js"
 import { Log } from "../utils/Log.js"
 import { MessageQueue } from "../utils/MessageQueue.js"
 
@@ -51,11 +51,11 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
         bot.api.sendChatAction({ chat_id: config.DEFAULT_CHAT_ID, action: "typing" })
       }, 3000)
 
-      const responce = await throttleQuery(ai.request(contextId, message), 10000)
-      const escapedText = escapeChars(responce)
+      const responce = await throttleQuery(ai.request(contextId, message), 5000)
+      const escapedText = escapeForMarkdown(responce)
 
-      if (responce) {
-        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: escapedText, reply_parameters: { message_id: id } })
+      if (escapedText) {
+        bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: escapedText, reply_parameters: { message_id: id }, parse_mode: "MarkdownV2" })
       }
 
       clearInterval(interval)
