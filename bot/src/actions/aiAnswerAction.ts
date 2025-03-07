@@ -102,6 +102,7 @@ function getBotMessage(bot: Bot, context: MessageContext<Bot>) {
   const prependMessage = `${context.from?.username}/${context.from?.firstName} спрашивает тебя: `
   const regexp = /^эй.{0,3}бот\W?.*/i
   const regexpReplace = /^Эй.{0,3}бот\W?/i
+  const regexp2 = /^альтрон.*/gi
 
   if (context.text && context.from && !context.from.isBot()) {
     const botUserName = `@${bot.info?.username}`
@@ -112,6 +113,8 @@ function getBotMessage(bot: Bot, context: MessageContext<Bot>) {
       messageForBot = prependMessage + context.text
     } else if (regexp.test(context.text)) {
       messageForBot = prependMessage + context.text.replace(regexpReplace, "")
+    } else if (regexp2.test(context.text)) {
+      messageForBot = prependMessage + context.text
     }
   }
 
