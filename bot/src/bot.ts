@@ -32,9 +32,10 @@ bot.command("start", context => context.send("Привет! Я бот Подсл
 bot.command("context", (context) => {
   console.log("Context length requested")
   loadHistory("000000000").then((history) => {
-    const fullHistory = history?.map(item => item.parts.map(part => part.text).join("")).join("").length
-    if (fullHistory) {
-      context.reply(fullHistory.toString())
+    const fullHistoryArray = history?.map(item => item.parts.map(part => part.text).join(""))
+    if (fullHistoryArray?.length) {
+      const replyText = `Длина массива сообщений: ${fullHistoryArray.length}\nОбщая длина текста: ${fullHistoryArray.join("").length}`
+      context.reply(replyText)
     } else {
       context.reply("История пуста")
     }
