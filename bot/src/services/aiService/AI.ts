@@ -131,9 +131,7 @@ export class AI {
     }
   }
 
-  async loadHistory(contextId: string): Promise<Content[] | undefined> {
-    if (contextId) {
-      return await loadHistory(contextId)
-    }
+  async loadHistory(contextId: string): Promise<Content[] | null> {
+    return await loadHistory(contextId)
   }
 }
