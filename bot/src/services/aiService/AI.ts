@@ -1,10 +1,13 @@
-import type { ChatSession, Content, GenerativeModel } from "@google/generative-ai"
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import type { ChatSession, Content, GenerativeModel, GoogleGenerativeAI } from "@google/generative-ai"
+import type { MyChatSession } from "./MyChatSession.js"
+import type { MyGenerativeModel } from "./MyGenerativeModel.js"
 import { Log } from "../../utils/Log.js"
-import { loadHistory, saveHistory } from "./history.js"
+import { loadHistory, saveHistory } from "./historyFile.js"
+import { MyGoogleGenerativeAI } from "./MyGoogleGenerativeAI.js"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам. Не используй Markdown."
+const HISTORY_LENGTH = 1000
 
 interface AIParams {
   modelName: string
@@ -20,9 +23,9 @@ interface AIParams {
 }
 
 export class AI {
-  api: GoogleGenerativeAI
-  model: GenerativeModel | null = null
-  contexts: Record<string, ChatSession> = {}
+  api: MyGoogleGenerativeAI
+  model: MyGenerativeModel | null = null
+  contexts: Record<string, MyChatSession> = {}
 
   tempHistory: any[] = []
 
@@ -30,9 +33,9 @@ export class AI {
     modelName: "gemini-2.0-flash",
     systemInstruction: "",
     seed: undefined,
-    temperature: 1,
+    temperature: 30,
     topP: 0.95,
-    topK: 40,
+    topK: 80,
     frequencyPenalty: 1,
     maxOutputTokens: 8192,
     stopSequences: [],
@@ -42,7 +45,7 @@ export class AI {
   log = new Log("[AI.ts]")
 
   constructor(apiKey: string) {
-    this.api = new GoogleGenerativeAI(apiKey)
+    this.api = new MyGoogleGenerativeAI(apiKey)
   }
 
   initModel(modelName?: string, systemInstruction?: string) {
@@ -53,10 +56,10 @@ export class AI {
     this.model = this.api.getGenerativeModel({
       model: this.config.modelName,
       systemInstruction: this.config.systemInstruction,
-    })
+    }) as MyGenerativeModel
   }
 
-  setInstrucion(systemInstruction: string) {
+  setInstruction(systemInstruction: string) {
     this.initModel(this.config.modelName, systemInstruction)
   }
 
@@ -70,18 +73,17 @@ export class AI {
 
   }
 
-  getContext(contextId: string) {
+  async getContext(contextId: string): Promise<MyChatSession | undefined> {
     let chatContext
 
     if (!this.hasContext(contextId)) {
-      chatContext = this.newContext(contextId)
+      chatContext = await this.newContext(contextId)
     } else {
       chatContext = this.contexts[contextId]
     }
 
     if (!chatContext) {
       console.error("Unknown error with creating context.")
-      return null
     }
 
     return chatContext
@@ -110,9 +112,22 @@ export class AI {
   async request(contextId: string, text: string) {
     try {
       const chatContext = await this.getContext(contextId)
-      const result = await chatContext?.sendMessage(text)
+      
+      let result
 
-      this.saveHistory(contextId, await chatContext?.getHistory())
+      try {
+        result = await chatContext?.sendMessage(text)
+      } catch (e) {
+        this.log.e(e)
+      }
+
+      let history = await chatContext?.getHistory()
+
+      if (history && history.length > HISTORY_LENGTH) {
+        chatContext?.cutHistory(HISTORY_LENGTH)
+      }
+
+      this.saveHistory(contextId, history)
 
       if (result) {
         return result.response.text()
