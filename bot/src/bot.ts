@@ -1,5 +1,6 @@
 import type { MessageContext } from "gramio"
 import { Bot } from "gramio"
+import { loadHistory } from "services/aiService/history.js"
 import { aiAnswerAction } from "./actions/aiAnswerAction.js"
 import { answerAction } from "./actions/answerAction.js"
 import { config } from "./config.js"
@@ -27,6 +28,17 @@ bot.onStart(({ info }) => {
 })
 
 bot.command("start", context => context.send("Привет! Я бот Подслушано. Мне постоянно добавляют новые функции. Возможно, скоро, я смогу захватить мир."))
+
+bot.command("context", (context) => {
+  loadHistory("000000000").then((history) => {
+    const fullHistory = history?.map(item => item.parts.map(part => part.text).join("")).join("").length
+    if (fullHistory) {
+      context.reply(fullHistory.toString())
+    } else {
+      context.reply("История пуста")
+    }
+  })
+})
 
 bot.command("contextText", (context) => {
   // llama.setContextText(context.text ?? "")

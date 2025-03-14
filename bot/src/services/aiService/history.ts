@@ -15,7 +15,7 @@ export async function saveHistory(contextId: string, context: Content[]) {
   }
 }
 
-export async function loadHistory(contextId: string) {
+export async function loadHistory(contextId: string): Promise<Content[] | null> {
   try {
     const filePath = getFilePath(`context-${contextId}.json`)
     const data = await readFile(filePath, { encoding: "utf-8" })
