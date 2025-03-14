@@ -7,7 +7,7 @@ import { MyGoogleGenerativeAI } from "./MyGoogleGenerativeAI.js"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам. Не используй Markdown."
-const HISTORY_LENGTH = 1000
+const HISTORY_LENGTH = 600
 
 interface AIParams {
   modelName: string
