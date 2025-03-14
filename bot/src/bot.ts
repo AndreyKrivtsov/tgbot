@@ -20,7 +20,7 @@ const ai = new AI(config.AI_API_KEY)
 ai.initModel("gemini-2.0-flash")
 
 bot.onStart(({ info }) => {
-  console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n Version 0.3 \n\n ===== \n\n`)
+  console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n Version 0.4 \n\n ===== \n\n`)
 
   sheduleWeatherAction((data) => {
     bot.api.sendPhoto({ chat_id: config.DEFAULT_CHAT_ID, photo: data })
@@ -30,6 +30,7 @@ bot.onStart(({ info }) => {
 bot.command("start", context => context.send("Привет! Я бот Подслушано. Мне постоянно добавляют новые функции. Возможно, скоро, я смогу захватить мир."))
 
 bot.command("context", (context) => {
+  console.log("Context length requested")
   loadHistory("000000000").then((history) => {
     const fullHistory = history?.map(item => item.parts.map(part => part.text).join("")).join("").length
     if (fullHistory) {
