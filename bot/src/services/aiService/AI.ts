@@ -1,12 +1,13 @@
-import type { ChatSession, Content, GenerativeModel, GoogleGenerativeAI } from "@google/generative-ai"
+import type { Content } from "@google/generative-ai"
 import type { MyChatSession } from "./MyChatSession.js"
 import type { MyGenerativeModel } from "./MyGenerativeModel.js"
 import { Log } from "../../utils/Log.js"
 import { loadHistory, saveHistory } from "./historyFile.js"
 import { MyGoogleGenerativeAI } from "./MyGoogleGenerativeAI.js"
+import { systemInstruction } from "./systemInstruction.js"
 
 const DEFAULT_MODEL_NAME = "gemini-2.0-flash"
-const DEFAULT_INSTRUCION = "Тебя зовут Бот, тебя сделал админ этого чата. Ты бот-помощник в большом чате, в котором много пользователей. Вопрос от пользователя будет начинаться с его никнейма и имени, например \"senen/Кирилл:\". Пожалуйста, запоминай пользователей по именам, а не по никнеймам. Не используй Markdown."
+const DEFAULT_INSTRUCION = systemInstruction
 const HISTORY_LENGTH = 600
 
 interface AIParams {
@@ -112,7 +113,7 @@ export class AI {
   async request(contextId: string, text: string) {
     try {
       const chatContext = await this.getContext(contextId)
-      
+
       let result
 
       try {

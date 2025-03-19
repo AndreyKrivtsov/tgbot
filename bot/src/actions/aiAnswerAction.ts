@@ -52,7 +52,6 @@ async function startQueue(bot: Bot, ai: AI, queue: MessageQueue) {
       }, 3000)
 
       const responce = await throttleQuery(ai.request(contextId, message), config.AI_API_THROTTLE)
-      // const escapedText = escapeForMarkdown(responce)
 
       if (responce) {
         bot.api.sendMessage({ chat_id: config.DEFAULT_CHAT_ID, text: responce, reply_parameters: { message_id: id } })
@@ -99,7 +98,8 @@ async function throttleQuery(requestFunction: Promise<string>, pause: number): P
 
 function getBotMessage(bot: Bot, context: MessageContext<Bot>) {
   let messageForBot = ""
-  const prependMessage = `${context.from?.username}/${context.from?.firstName} спрашивает тебя: `
+  const date = new Date()
+  const prependMessage = `[${date.toISOString()}][@${context.from?.username}][${context.from?.firstName}]:`
   const regexp = /^эй.{0,3}бот\W?.*/i
   const regexpReplace = /^Эй.{0,3}бот\W?/i
   const regexp2 = /^альтрон.*/gi
