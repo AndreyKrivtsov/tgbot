@@ -32,9 +32,9 @@ export class AI {
 
   config: AIParams = {
     modelName: "gemini-2.0-flash",
-    systemInstruction: "",
+    systemInstruction: DEFAULT_INSTRUCION,
     seed: undefined,
-    temperature: 30,
+    temperature: 1.5,
     topP: 0.95,
     topK: 80,
     frequencyPenalty: 1,

@@ -23,7 +23,7 @@ bot.onStart(({ info }) => {
   console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n Version 0.4 \n\n ===== \n\n`)
 
   sheduleWeatherAction((data) => {
-    bot.api.sendPhoto({ chat_id: config.DEFAULT_CHAT_ID, photo: data })
+    bot.api.sendPhoto({ chat_id: config.DEFAULT_CHAT_ID, photo: data, caption: "#погода", show_caption_above_media: true })
   })
 })
 

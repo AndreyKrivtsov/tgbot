@@ -1,7 +1,6 @@
 import type { Bot, MessageContext } from "gramio"
 import type { AI } from "../services/aiService/AI.js"
 import { config } from "../config.js"
-import { escapeForMarkdown } from "../utils/escapeForMarkdown.js"
 import { Log } from "../utils/Log.js"
 import { MessageQueue } from "../utils/MessageQueue.js"
 
@@ -99,7 +98,8 @@ async function throttleQuery(requestFunction: Promise<string>, pause: number): P
 function getBotMessage(bot: Bot, context: MessageContext<Bot>) {
   let messageForBot = ""
   const date = new Date()
-  const prependMessage = `[${date.toISOString()}][@${context.from?.username}][${context.from?.firstName}]:`
+  const messageDate = date.toISOString().replace(/:\d+\.\d+Z/gi, "").replace("T", " ")
+  const prependMessage = `[${messageDate}][@${context.from?.username}][${context.from?.firstName}] пользователь спрашивает тебя: `
   const regexp = /^эй.{0,3}бот\W?.*/i
   const regexpReplace = /^Эй.{0,3}бот\W?/i
   const regexp2 = /^альтрон.*/gi
