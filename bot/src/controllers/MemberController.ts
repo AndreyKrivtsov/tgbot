@@ -50,7 +50,18 @@ export class MemberController {
    *
    * @param context
    */
-  leftMember(context: LeftChatMemberContext<Bot>) {
+  async leftMember(context: LeftChatMemberContext<Bot>) {
+    const userId = context.from?.id
+
+    if (userId) {
+      const restrictedUser = this.restrictedUsers[userId]
+      if (restrictedUser) {
+        await this.clearMessage(restrictedUser.chatId, restrictedUser.questionId)
+        await this.sendCancelMessage(restrictedUser.username, restrictedUser.firstname, restrictedUser.chatId)
+        this.deleteRestrictedUser(userId)
+      }
+    }
+
     this.clearMessage(context.chat.id, context.id)
   }
 
@@ -91,7 +102,6 @@ export class MemberController {
    * @returns {Promise<void>}
    */
   async waitingUsers(): Promise<void> {
-    console.log("waiting")
     if (this.isWaiting)
       return
 
@@ -106,7 +116,6 @@ export class MemberController {
     restrictedUsers.forEach(async (user) => {
       const now = Date.now()
       if (now > user.timestamp + timeForTest) {
-        console.log("check", user.userId, user.timestamp, now)
         await this.clearMessage(user.chatId, user.questionId)
         this.temporaryBanUser(user.chatId, user.userId)
         this.deleteRestrictedUser(user.userId)
@@ -190,6 +199,22 @@ export class MemberController {
   async sendTimeoutMessage(username: string | undefined, firstname: string, chatId: number) {
     const name = username ? `@${username}` : firstname
     const text = `К сожалению, ${name} не выбрал ни один вариант ответа 🧐`
+    const messageResult = await this.sendMessage(text, chatId)
+
+    setTimeout(() => {
+      this.clearMessage(chatId, messageResult.message_id)
+    }, 60000)
+  }
+
+  /**
+   *
+   * @param username
+   * @param firstname
+   * @param chatId
+   */
+  async sendCancelMessage(username: string | undefined, firstname: string, chatId: number) {
+    const name = username ? `@${username}` : firstname
+    const text = `К сожалению, ${name} передумал 🙃`
     const messageResult = await this.sendMessage(text, chatId)
 
     setTimeout(() => {
