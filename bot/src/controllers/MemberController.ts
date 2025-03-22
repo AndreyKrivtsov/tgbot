@@ -110,8 +110,10 @@ export class MemberController {
     const timeForTest = 60000
     const restrictedUsers = Object.values(this.restrictedUsers)
 
-    if (!restrictedUsers.length)
+    if (!restrictedUsers.length) {
+      this.isWaiting = false
       return
+    }
 
     restrictedUsers.forEach(async (user) => {
       const now = Date.now()
