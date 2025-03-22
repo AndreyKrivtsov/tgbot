@@ -53,6 +53,8 @@ export class MemberController {
   async leftMember(context: LeftChatMemberContext<Bot>) {
     const userId = context.from?.id
 
+    await this.clearMessage(context.chat.id, context.id)
+
     if (userId) {
       const restrictedUser = this.restrictedUsers[userId]
       if (restrictedUser) {
@@ -61,8 +63,6 @@ export class MemberController {
         this.deleteRestrictedUser(userId)
       }
     }
-
-    this.clearMessage(context.chat.id, context.id)
   }
 
   async checkMember() {
