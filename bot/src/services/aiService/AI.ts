@@ -1,7 +1,7 @@
 import type { Content } from "@google/generative-ai"
 import type { MyChatSession } from "./MyChatSession.js"
 import type { MyGenerativeModel } from "./MyGenerativeModel.js"
-import { Log } from "../../utils/Log.js"
+import { Log } from "../../helpers/Log.js"
 import { loadHistory, saveHistory } from "./historyFile.js"
 import { MyGoogleGenerativeAI } from "./MyGoogleGenerativeAI.js"
 import { systemInstruction } from "./systemInstruction.js"
@@ -110,6 +110,16 @@ export class AI {
     return contextId in this.contexts
   }
 
+  async contextLength(contextId: string) {
+    const history = await this.loadHistory(contextId)
+    const flatHistory = history?.map(item => item.parts.map(part => part.text).join(""))
+
+    return {
+      text: flatHistory ? flatHistory.join("").length : 0,
+      messages: flatHistory ? flatHistory.length : 0,
+    }
+  }
+
   async request(contextId: string, text: string) {
     try {
       const chatContext = await this.getContext(contextId)
@@ -122,7 +132,7 @@ export class AI {
         this.log.e(e)
       }
 
-      let history = await chatContext?.getHistory()
+      const history = await chatContext?.getHistory()
 
       if (history && history.length > HISTORY_LENGTH) {
         chatContext?.cutHistory(HISTORY_LENGTH)

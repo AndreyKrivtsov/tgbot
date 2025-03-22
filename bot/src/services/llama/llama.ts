@@ -1,6 +1,8 @@
 import axios from "axios"
 import { config } from "../../config.js"
 
+type LlamaParam = "maxTokens" | "temperature" | "minP" | "topK" | "topP" | "seed"
+
 export class Llama {
   isBusy: boolean
   contextText: string

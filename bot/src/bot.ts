@@ -1,99 +1,20 @@
-import type { MessageContext } from "gramio"
+import { Controllers } from "./Controllers.js"
 import { Bot } from "gramio"
-import { aiAnswerAction } from "./actions/aiAnswerAction.js"
-import { answerAction } from "./actions/answerAction.js"
 import { config } from "./config.js"
-import { AI } from "./services/aiService/AI.js"
-import { loadHistory } from "./services/aiService/historyFile.js"
-import { Llama } from "./services/llama/llama.js"
-import { sheduleWeatherAction } from "./services/weather/weather.js"
-import { Users } from "./utils/Users.js"
-
-type LlamaParam = "maxTokens" | "temperature" | "minP" | "topK" | "topP" | "seed"
-type AiBotParam = "maxOutputTokens" | "temperature" | "topK" | "topP" | "seed" | "frequencyPenalty"
 
 const bot = new Bot(config.BOT_TOKEN)
-const users = new Users()
-const llama = new Llama()
+const controllers = new Controllers(bot)
 
-const ai = new AI(config.AI_API_KEY)
-ai.initModel("gemini-2.0-flash")
+bot.onStart(() => controllers.startController.run())
 
-bot.onStart(({ info }) => {
-  console.log(`\n\n ===== \n\n✨ Bot ${info.username} was started!\n\n Version 0.4 \n\n ===== \n\n`)
+bot.on("new_chat_members", context => controllers.memberController.newMember(context))
 
-  sheduleWeatherAction((data) => {
-    bot.api.sendPhoto({ chat_id: config.DEFAULT_CHAT_ID, photo: data, caption: "#погода", show_caption_above_media: true })
-  })
+bot.on("left_chat_member", context => controllers.memberController.leftMember(context))
+
+bot.on("message", context => controllers.messageController.start(context))
+
+controllers.commandController.listCommands().forEach((command) => {
+  bot.command(command, context => controllers.commandController.start(command, context))
 })
-
-bot.command("start", context => context.send("Привет! Я бот Подслушано. Мне постоянно добавляют новые функции. Возможно, скоро, я смогу захватить мир."))
-
-bot.command("context", (context) => {
-  console.log("Context length requested")
-  loadHistory("000000000").then((history) => {
-    const fullHistoryArray = history?.map(item => item.parts.map(part => part.text).join(""))
-    if (fullHistoryArray?.length) {
-      const replyText = `Длина массива сообщений: ${fullHistoryArray.length}\nОбщая длина текста: ${fullHistoryArray.join("").length}`
-      context.reply(replyText)
-    } else {
-      context.reply("История пуста")
-    }
-  })
-})
-
-bot.command("contextText", (context) => {
-  // llama.setContextText(context.text ?? "")
-  // context.send(`Установлен текст:${context.text}`)
-})
-
-bot.command("maxTokens", (context) => {
-  setParam(context)
-})
-
-bot.command("temperature", (context) => {
-  setParam(context)
-})
-
-bot.command("topK", (context) => {
-  setParam(context)
-})
-
-bot.command("topP", (context) => {
-  setParam(context)
-})
-
-bot.command("seed", (context) => {
-  setParam(context)
-})
-
-bot.command("reload", (context) => {
-  ai.initModel()
-})
-
-bot.on("message", async (context) => {
-  // console.log(context)
-  aiAnswerAction({ bot, context, ai })
-  answerAction({ bot, context, llama })
-})
-
-function setParam(context: MessageContext<Bot>) {
-  const params = ["maxOutputTokens", "temperature", "topK", "topP", "seed"]
-  const param = context.text?.replace("/", "").replace(/\s\d*/g, "")
-  const value = Number(context.text?.replace(/\/\w+\s/g, ""))
-
-  if (!param || !params.includes(param) || !Number.isInteger(value)) {
-    context.reply(`Пустой параметр или значение. Передано: ${context.text}`)
-    return
-  }
-
-  if (!(param in ai.config)) {
-    context.reply("Нет такого параметра")
-    return
-  }
-
-  ai.config[param as AiBotParam] = value
-  context.reply(`Параметр "${param}" установлен в ${value}`)
-}
 
 export { bot }

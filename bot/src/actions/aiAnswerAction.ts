@@ -1,8 +1,8 @@
 import type { Bot, MessageContext } from "gramio"
 import type { AI } from "../services/aiService/AI.js"
 import { config } from "../config.js"
-import { Log } from "../utils/Log.js"
-import { MessageQueue } from "../utils/MessageQueue.js"
+import { Log } from "../helpers/Log.js"
+import { MessageQueue } from "../helpers/MessageQueue.js"
 
 interface ActionArgs {
   bot: Bot

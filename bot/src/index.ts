@@ -1,5 +1,5 @@
 import { bot } from "./bot.js"
-import { Log } from "./utils/Log.js"
+import { Log } from "./helpers/Log.js"
 
 const log = new Log("[index.js]")
 
@@ -7,7 +7,6 @@ const signals = ["SIGINT", "SIGTERM"]
 
 for (const signal of signals) {
   process.on(signal, async () => {
-    console.log(`Received ${signal}. Initiating graceful shutdown...`)
     await bot.stop()
     process.exit(0)
   })
