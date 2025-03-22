@@ -1,4 +1,4 @@
-import type { Bot, CallbackQueryContext, LeftChatMemberContext, NewChatMembersContext, TelegramChatPermissions, User } from "gramio"
+import type { Bot, CallbackQueryContext, LeftChatMemberContext, MaybeSuppressedParams, NewChatMembersContext, TelegramChatPermissions, User } from "gramio"
 import { InlineKeyboard } from "gramio"
 import { getCaptcha } from "../helpers/getCaptcha.js"
 
@@ -91,6 +91,7 @@ export class MemberController {
    * @returns {Promise<void>}
    */
   async waitingUsers(): Promise<void> {
+    console.log("waiting")
     if (this.isWaiting)
       return
 
@@ -105,6 +106,7 @@ export class MemberController {
     restrictedUsers.forEach(async (user) => {
       const now = Date.now()
       if (now > user.timestamp + timeForTest) {
+        console.log("check", user.userId, user.timestamp, now)
         await this.clearMessage(user.chatId, user.questionId)
         this.temporaryBanUser(user.chatId, user.userId)
         this.deleteRestrictedUser(user.userId)
@@ -179,20 +181,32 @@ export class MemberController {
     }, 5000)
   }
 
+  /**
+   *
+   * @param username
+   * @param firstname
+   * @param chatId
+   */
   async sendTimeoutMessage(username: string | undefined, firstname: string, chatId: number) {
     const name = username ? `@${username}` : firstname
     const text = `К сожалению, ${name} не выбрал ни один вариант ответа 🧐`
-    const messageResult = await this.bot.api.sendMessage({ text, chat_id: chatId })
+    const messageResult = await this.sendMessage(text, chatId)
 
     setTimeout(() => {
       this.clearMessage(chatId, messageResult.message_id)
     }, 60000)
   }
 
+  /**
+   *
+   * @param username
+   * @param firstname
+   * @param chatId
+   */
   async sendFailMessage(username: string | undefined, firstname: string, chatId: number) {
     const name = username ? `@${username}` : firstname
     const text = `К сожалению, ${name} выбрал неправильный вариант ответа 😢`
-    const messageResult = await this.bot.api.sendMessage({ text, chat_id: chatId })
+    const messageResult = await this.sendMessage(text, chatId)
 
     setTimeout(() => {
       this.clearMessage(chatId, messageResult.message_id)
@@ -220,10 +234,40 @@ export class MemberController {
     const text = this.getText(user.username, user.firstName, question[0] as number, question[1] as number)
 
     const keyboard = this.getKeyboard(options)
-    const keyboardResult = await this.bot.api.sendMessage({ text, chat_id: chatId, reply_markup: keyboard, parse_mode: "HTML" })
+    const keyboardResult = await this.sendMessage(text, chatId, keyboard)
     return keyboardResult.message_id
   }
 
+  /**
+   *
+   * @param text
+   * @param chatId
+   * @param keyboard
+   * @returns
+   */
+  sendMessage(text: string, chatId: number, keyboard?: InlineKeyboard) {
+    const params: MaybeSuppressedParams<"sendMessage", undefined> = {
+      text,
+      chat_id: chatId,
+      parse_mode: "HTML",
+      disable_notification: true,
+    }
+
+    if (keyboard) {
+      params.reply_markup = keyboard
+    }
+
+    return this.bot.api.sendMessage(params)
+  }
+
+  /**
+   *
+   * @param username
+   * @param firstName
+   * @param q1
+   * @param q2
+   * @returns
+   */
   getText(username: string | undefined, firstName: string, q1: number, q2: number) {
     let text = username ? `@${username}\n` : ""
     text += `<b>${firstName}</b>, добро пожаловать!\n`

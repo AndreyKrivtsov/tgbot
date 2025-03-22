@@ -1,6 +1,6 @@
-import { Controllers } from "./Controllers.js"
 import { Bot } from "gramio"
 import { config } from "./config.js"
+import { Controllers } from "./Controllers.js"
 
 const bot = new Bot(config.BOT_TOKEN)
 const controllers = new Controllers(bot)
