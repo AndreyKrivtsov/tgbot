@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+transformers
+-f https://download.pytorch.org/whl/cpu
+torch

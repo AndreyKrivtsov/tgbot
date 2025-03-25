@@ -4,6 +4,8 @@ export interface AppConfig {
   NODE_ENV: string
   BOT_TOKEN: string
   DATABASE_URL: string
+  ANTISPAM_URL: string
+  ADMIN_USERNAME?: string
   LOCK_STORE: string
   DEFAULT_CHAT_ID: number
   LLAMA_URL: string
@@ -23,6 +25,10 @@ export const config: AppConfig = {
   BOT_TOKEN: env.get("BOT_TOKEN").required().asString(),
 
   DATABASE_URL: env.get("DATABASE_URL").required().asString(),
+
+  ANTISPAM_URL: env.get("ANTISPAM_URL").required().asString(),
+
+  ADMIN_USERNAME: env.get("ADMIN_USERNAME").asString(),
 
   LOCK_STORE: env.get("LOCK_STORE").default("memory").asEnum(["memory"]),
 

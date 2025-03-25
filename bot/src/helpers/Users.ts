@@ -1,23 +1,30 @@
-interface UserData {
+export interface User {
   id: number
+  username?: string
+  firstname: string
+  messages: number
   sessionId: string
 }
 
 export class Users {
-  users: Record<UserData["id"], UserData>
+  users: Record<User["id"], User>
 
   constructor() {
     this.users = {}
   }
 
-  newUser(userId: number) {
+  newUser(user: Omit<User, "messages" | "sessionId">) {
     const sessionId = this.createSessionId()
-    this.users[userId] = {
-      id: userId,
+
+    this.users[user.id] = {
+      id: user.id,
+      username: user.username,
+      firstname: user.firstname,
+      messages: 0,
       sessionId,
     }
 
-    return this.users[userId]
+    return this.users[user.id]
   }
 
   getUser(userId: number) {
@@ -26,6 +33,16 @@ export class Users {
 
   deleteUser(userId: number) {
     delete this.users[userId]
+  }
+
+  exist(userId: number): boolean {
+    return !!this.users[userId]
+  }
+
+  increaseMessages(userId: number) {
+    if (this.users[userId]) {
+      this.users[userId].messages += 1
+    }
   }
 
   createSessionId() {

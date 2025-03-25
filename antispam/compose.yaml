@@ -1,0 +1,11 @@
+services:
+  antispam:
+    build:
+      context: .
+    networks:
+      - local-net
+
+networks:
+  local-net:
+    name: local-net
+    external: false
