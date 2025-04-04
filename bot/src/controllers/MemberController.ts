@@ -50,8 +50,6 @@ export class MemberController {
       isMember: _new.isMember(),
     }
 
-    console.log(context.chat)
-
     const formatUser = (user: User) => `${user.id} @${user.username ?? ""} | ${user.firstName ?? ""} ${user.lastName ?? ""}`
 
     this.log.i("F:", formatUser(from.user), "|", from.status, from.isMember)

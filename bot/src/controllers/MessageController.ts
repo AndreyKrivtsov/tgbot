@@ -27,6 +27,8 @@ export class MessageController {
   async start(context: MessageContext<Bot>) {
     const user = this.getUser(context)
 
+    console.log(context.chat)
+
     if (!user || !context.text) {
       return
     }
