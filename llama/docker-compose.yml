@@ -1,0 +1,16 @@
+services:
+    llama:
+        container_name: llama
+        restart: unless-stopped
+        build:
+            context: .
+            dockerfile: Dockerfile
+        environment:
+        - NODE_ENV=production
+        networks:
+            - local-net
+    
+networks:
+  local-net:
+    name: local-net
+    external: false
