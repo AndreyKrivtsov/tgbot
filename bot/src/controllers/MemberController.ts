@@ -50,8 +50,12 @@ export class MemberController {
       isMember: _new.isMember(),
     }
 
-    this.log.i("From:", "id:", from.user.id, "username:", from.user.username, "firstname:", from.user.firstName, "status:", from.status, from.isMember)
-    this.log.i("To:", "id:", to.user.id, "username:", to.user.username, "firstname:", to.user.firstName, "status:", to.status, to.isMember)
+    console.log("From:", from)
+
+    const formatUser = (user: User) => `${user.id} @${user.username} | ${user.firstName ?? ""} ${user.lastName ?? ""}`
+
+    this.log.i("F:", formatUser(from.user), "|", from.status, from.isMember)
+    this.log.i("T:", formatUser(from.user), "|", to.status, to.isMember)
   }
 
   /**
