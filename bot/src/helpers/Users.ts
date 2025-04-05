@@ -32,7 +32,9 @@ export class Users {
   }
 
   deleteUser(userId: number) {
-    delete this.users[userId]
+    if (this.exist(userId)) {
+      delete this.users[userId]
+    }
   }
 
   exist(userId: number): boolean {

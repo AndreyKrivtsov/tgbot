@@ -25,7 +25,7 @@ export class MessageController {
   }
 
   async start(context: MessageContext<Bot>) {
-    const user = this.getUser(context)
+    const user = this.getUserOrNew(context)
 
     if (!user || !context.text) {
       return
@@ -44,7 +44,7 @@ export class MessageController {
     this.users.increaseMessages(user.id)
   }
 
-  getUser(context: MessageContext<Bot>) {
+  getUserOrNew(context: MessageContext<Bot>) {
     if (!context.from?.id) {
       return
     }
@@ -77,6 +77,9 @@ export class MessageController {
   }
 
   spamAction(context: MessageContext<Bot>) {
-    context.reply(`Хмм... Очень похоже на спам 🧐\n\n${this.config.ADMIN_USERNAME ?? ""}`)
+    context.delete()
+    const username = context.from?.username ?? ""
+    const fullName = `${context.from?.firstName ?? ""} ${context.from?.lastName ?? ""}`.trim()
+    context.reply(`Хмм... Сообщение от [${fullName}${username ? `, ${username}` : ""}] похоже на спам 🧐. Сообщение удалено. \n\n${this.config.ADMIN_USERNAME ?? ""}`)
   }
 }

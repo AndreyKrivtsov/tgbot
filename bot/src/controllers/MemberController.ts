@@ -1,5 +1,22 @@
-import type { Bot, CallbackQueryContext, Chat, ChatMemberContext, LeftChatMemberContext, MaybeSuppressedParams, NewChatMembersContext, TelegramChatPermissions, User } from "gramio"
-import { InlineKeyboard } from "gramio"
+import type {
+  Bot,
+  CallbackQueryContext,
+  ChatMember,
+  ChatMemberContext,
+  Context,
+  MaybeSuppressedParams,
+  TelegramChatPermissions,
+  User,
+} from "gramio"
+
+import type { Users } from "../helpers/Users.js"
+
+import {
+  InlineKeyboard,
+  LeftChatMemberContext,
+  NewChatMembersContext,
+} from "gramio"
+
 import { getCaptcha } from "../helpers/getCaptcha.js"
 import { Log } from "../helpers/Log.js"
 
@@ -16,6 +33,7 @@ interface RestrictedUser {
 
 export class MemberController {
   bot: Bot
+  users: Users
   restrictedUsers: Record<number, RestrictedUser> = {}
   isWaiting: boolean = false
 
@@ -25,35 +43,47 @@ export class MemberController {
    *
    * @param bot
    */
-  constructor(bot: Bot) {
+  constructor(bot: Bot, users: Users) {
     this.bot = bot
     this.bot.on("callback_query", context => this.answerCallback(context))
+    this.users = users
+  }
+
+  async start(context: Context<Bot>) {
+    if (context instanceof NewChatMembersContext) {
+      this.newMember(context)
+    }
+
+    if (context instanceof LeftChatMemberContext) {
+      this.leftMember(context)
+    }
   }
 
   async chatMember(context: ChatMemberContext<Bot>) {
     this.log.i("------ Chat member event:")
-    this.log.i("Changed:")
 
-    const old = context.oldChatMember
-    const _new = context.newChatMember
+    const oldMember = context.oldChatMember
+    const newMember = context.newChatMember
+    const chatId = context.chat.id
+    const user = newMember.user
 
-    const from = {
-      user: old.user,
-      status: old.status,
-      isMember: old.isMember(),
-      chatType: context.chatType,
+    this.chatMemberInfo(oldMember, newMember)
+
+    if (oldMember.status === "left" && newMember.status === "member") {
+      this.captcha(chatId, user)
     }
+  }
 
-    const to = {
-      user: _new.user,
-      status: _new.status,
-      isMember: _new.isMember(),
-    }
-
+  /**
+   *
+   * @param oldMember
+   * @param newMember
+   */
+  chatMemberInfo(oldMember: ChatMember, newMember: ChatMember) {
     const formatUser = (user: User) => `${user.id} @${user.username ?? ""} | ${user.firstName ?? ""} ${user.lastName ?? ""}`
 
-    this.log.i("F:", formatUser(from.user), "|", from.status, from.isMember)
-    this.log.i("T:", formatUser(from.user), "|", to.status, to.isMember)
+    this.log.i("F:", formatUser(oldMember.user), "|", oldMember.status, oldMember.isMember())
+    this.log.i("T:", formatUser(newMember.user), "|", newMember.status, newMember.isMember(), "\n")
   }
 
   /**
@@ -62,14 +92,18 @@ export class MemberController {
    */
   async newMember(context: NewChatMembersContext<Bot>) {
     this.log.i("=== New member event")
+
     await this.clearMessage(context.chat.id, context.id)
 
-    const chat = context.chat
     const users = context.newChatMembers
 
     users?.forEach(async (user) => {
-      this.log.i("New member:", user.id, user.username, user.firstName)
-      this.captcha(chat, user)
+      if (!this.isUserRestricted(user.id)) {
+        this.log.i("New member:", user.id, user.username, user.firstName, "\n")
+        this.captcha(context.chat.id, user)
+      } else {
+        this.log.i("=== New member event skipped:", user.id, user.username, user.firstName, "\n")
+      }
     })
   }
 
@@ -80,23 +114,22 @@ export class MemberController {
   async leftMember(context: LeftChatMemberContext<Bot>) {
     const userId = context.from?.id
 
-    await this.clearMessage(context.chat.id, context.id)
-
     if (userId) {
-      const restrictedUser = this.restrictedUsers[userId]
-      if (restrictedUser) {
-        await this.clearMessage(restrictedUser.chatId, restrictedUser.questionId)
-        await this.sendCancelMessage(restrictedUser.username, restrictedUser.firstname, restrictedUser.chatId)
+      this.users.deleteUser(userId)
+      if (this.isUserRestricted(userId)) {
+        const restrictedUser = this.restrictedUsers[userId] as RestrictedUser
+        this.clearMessage(restrictedUser.chatId, restrictedUser.questionId)
+        this.sendCancelMessage(restrictedUser.username, restrictedUser.firstname, restrictedUser.chatId)
         this.deleteRestrictedUser(userId)
       }
     }
   }
 
-  async captcha(chat: Chat, user: User) {
+  async captcha(chatId: number, user: User) {
     const { question, answer, options } = getCaptcha()
-    const questionId = await this.sendKeyboard(user, chat.id, question, options)
-    this.addRestrictedUser(user, chat.id, questionId, answer)
-    await this.muteUser(chat.id, user.id)
+    const questionId = await this.sendKeyboard(user, chatId, question, options)
+    this.addRestrictedUser(user, chatId, questionId, answer)
+    await this.muteUser(chatId, user.id)
     await this.waitingUsers()
   }
 
@@ -188,6 +221,10 @@ export class MemberController {
    */
   deleteRestrictedUser(userId: number) {
     delete this.restrictedUsers[userId]
+  }
+
+  isUserRestricted(userId: number) {
+    return !!this.restrictedUsers[userId]
   }
 
   /**
