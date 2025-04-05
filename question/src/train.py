@@ -9,8 +9,10 @@ batch_size = 32
 # dataset, labels, id2label, label2id = load_ds("ai-forever/headline-classification")
 dataset, labels, id2label, label2id = get_csv_dataset('./src/process_dataset/q_tg_chat_dataset.csv')
 
-classifier = Model()
-classifier.load_model_for_train(len(labels))
+model_path = './models/initial'
+
+classifier = Model(model_path)
+classifier.load_cf_train_model(num_labels = len(labels))
 
 model = classifier.model
 tokenizer = classifier.tokenizer
@@ -38,13 +40,12 @@ def compute_metrics(eval_pred):
 
 def train():
     args = TrainingArguments(
-        "model",
         eval_strategy = "epoch",
         save_strategy = "no",
         learning_rate=2e-5,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        num_train_epochs=10,
+        num_train_epochs=5,
         weight_decay=0.01,
     )
 

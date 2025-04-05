@@ -18,7 +18,7 @@ def load_ds(name):
 def get_csv_dataset(file_path):
     # Загрузка и подготовка датасета
     df = pd.read_csv(file_path, sep="\t")
-    df = pd.concat([df.loc[df.label == 0][:2000], df.loc[df.label == 1][:2000]])
+    df = pd.concat([df.loc[df.label == 0][:3000], df.loc[df.label == 1][:3000]])
 
     dataset = Dataset.from_dict(df)
     dataset = dataset.train_test_split(test_size=0.1, shuffle=True, seed=42)

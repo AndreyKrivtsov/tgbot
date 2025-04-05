@@ -1,5 +1,5 @@
 services:
-  bert-service:
+  question-service:
     build:
       context: .
     networks:
