@@ -30,6 +30,6 @@ export class Controllers {
     this.startController = new StartController(bot, weatherService)
     this.commandController = new CommandController(bot, aiService)
     this.messageController = new MessageController(bot, config, usersRepository, aiService, llama, antispamService)
-    this.memberController = new MemberController(bot)
+    this.memberController = new MemberController(bot, usersRepository)
   }
 }
