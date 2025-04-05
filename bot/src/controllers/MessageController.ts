@@ -77,9 +77,9 @@ export class MessageController {
   }
 
   spamAction(context: MessageContext<Bot>) {
-    context.delete()
     const username = context.from?.username ?? ""
     const fullName = `${context.from?.firstName ?? ""} ${context.from?.lastName ?? ""}`.trim()
     context.reply(`Хмм... Сообщение от [${fullName}${username ? `, ${username}` : ""}] похоже на спам 🧐. Сообщение удалено. \n\n${this.config.ADMIN_USERNAME ?? ""}`)
+    context.delete()
   }
 }
