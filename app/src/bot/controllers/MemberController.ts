@@ -1,24 +1,12 @@
-import type {
-  Bot,
-  CallbackQueryContext,
-  ChatMember,
-  ChatMemberContext,
-  Context,
-  MaybeSuppressedParams,
-  TelegramChatPermissions,
-  User,
-} from "gramio"
-
-import type { Users } from "../helpers/Users.js"
-
+import type { User, UserRepository } from "../../types.d.js"
+import type { Bot, CallbackQueryContext, ChatMember, Context, MaybeSuppressedParams, TelegramChatPermissions } from "../bot/Bot.js"
+import { getCaptcha } from "../../helpers/getCaptcha.js"
 import {
+  ChatMemberContext,
   InlineKeyboard,
   LeftChatMemberContext,
   NewChatMembersContext,
-} from "gramio"
-
-import { getCaptcha } from "../helpers/getCaptcha.js"
-import { Log } from "../helpers/Log.js"
+} from "../bot/Bot.js"
 
 interface RestrictedUser {
   userId: number
@@ -33,28 +21,31 @@ interface RestrictedUser {
 
 export class MemberController {
   bot: Bot
-  users: Users
+  users: UserRepository
   restrictedUsers: Record<number, RestrictedUser> = {}
   isWaiting: boolean = false
 
-  log = new Log("NewMember")
+  log: Logger
 
   /**
    *
    * @param bot
    */
-  constructor(bot: Bot, users: Users) {
+  constructor(logger: Logger, bot: Bot, users: UserRepository) {
+    this.log = logger
     this.bot = bot
     this.bot.on("callback_query", context => this.answerCallback(context))
     this.users = users
   }
 
   async start(context: Context<Bot>) {
-    if (context instanceof NewChatMembersContext) {
-      this.newMember(context)
-    }
-
-    if (context instanceof LeftChatMemberContext) {
+    if (context instanceof ChatMemberContext) {
+      this.chatMember(context)
+    } else if (context instanceof NewChatMembersContext) {
+      if (!this.users.getUser(context?.from?.id)) {
+        this.newMember(context)
+      }
+    } else if (context instanceof LeftChatMemberContext) {
       this.leftMember(context)
     }
   }

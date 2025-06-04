@@ -4,3 +4,4 @@ datasets
 accelerate
 evaluate
 scikit-learn
+optimum[exporters]

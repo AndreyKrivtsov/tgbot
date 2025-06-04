@@ -1,8 +1,8 @@
 import type { Bot, MessageContext } from "gramio"
-import type { AI } from "../services/aiService/AI.js"
-import { config } from "../config.js"
-import { Log } from "../helpers/Log.js"
-import { MessageQueue } from "../helpers/MessageQueue.js"
+import type { AI } from "../../services/aiService/AI.js"
+import { config } from "../../config.js"
+import { Logger } from "../../helpers/Logger.js"
+import { MessageQueue } from "../../helpers/MessageQueue.js"
 
 interface ActionArgs {
   bot: Bot
@@ -10,7 +10,7 @@ interface ActionArgs {
   ai: AI
 }
 
-const log = new Log("aiAnswerAction.ts")
+const log = new Logger("aiAnswerAction.ts")
 
 let isWorking = false
 

@@ -13,7 +13,7 @@ const DEFAULT_LOG_LEVEL = 2
 const DEFAULT_LOG_NAME = "bot.log"
 const DEFAULT_LOG_DIR = process.cwd()
 
-export class Log {
+export class Logger {
   token: string
   logLevel: number
   filename: string

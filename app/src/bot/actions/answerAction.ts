@@ -1,6 +1,6 @@
 import type { Bot, MessageContext } from "gramio"
-import type { Llama } from "../services/llama/llama.js"
-import { config } from "../config.js"
+import type { Llama } from "../../services/llama/llama.js"
+import { config } from "../../config.js"
 
 interface AnswerArgs {
   bot: Bot

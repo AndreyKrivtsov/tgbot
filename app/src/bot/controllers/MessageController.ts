@@ -1,23 +1,22 @@
 import type { Bot, MessageContext } from "gramio"
-import type { AppConfig } from "../config.js"
-import type { User, Users } from "../helpers/Users.js"
-import type { AiService } from "../services/aiService/AiService.js"
-import type { AntispamService } from "../services/antispam/AntispamService.js"
-import type { Llama } from "../services/llama/llama.js"
+import type { AiService } from "../../services/aiService/AiService.js"
+import type { AntispamService } from "../../services/antispam/AntispamService.js"
+import type { Llama } from "../../services/llama/llama.js"
+import type { AppConfig, User, UserRepository } from "../../types.d.js"
 import { aiAnswerAction } from "../actions/aiAnswerAction.js"
 import { answerAction } from "../actions/answerAction.js"
 
 export class MessageController {
-  bot: Bot
   config: AppConfig
-  users: Users
+  bot: Bot
+  users: UserRepository
   aiService: AiService
   llama: Llama
   antispamService: AntispamService
 
-  constructor(bot: Bot, config: AppConfig, users: Users, aiService: AiService, llama: Llama, antispamService: AntispamService) {
-    this.bot = bot
+  constructor(config: AppConfig, bot: Bot, users: UserRepository, aiService: AiService, llama: Llama, antispamService: AntispamService) {
     this.config = config
+    this.bot = bot
     this.users = users
     this.aiService = aiService
     this.llama = llama
@@ -31,8 +30,15 @@ export class MessageController {
       return
     }
 
-    const isSpam = await this.antispam(user, context.text)
+    const restricted = this.users.isRestricted(user.id)
+    if (restricted) {
+      const message = context.text
+      context.delete()
+      context.reply(`Вы заблокированы. \n\nПричина: ${restricted.reason}\n\n${this.config.ADMIN_USERNAME ?? ""}`)
+      return
+    }
 
+    const isSpam = await this.antispam(user, context.text)
     if (isSpam) {
       this.spamAction(context)
       return

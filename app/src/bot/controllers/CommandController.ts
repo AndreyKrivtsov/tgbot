@@ -1,17 +1,19 @@
 import type { Bot, MessageContext } from "gramio"
-import type { AiService } from "../services/aiService/AiService.js"
-import { config } from "../config.js"
+import type { AiService } from "../../services/aiService/AiService.js"
+import type { AppConfig } from "../../types.d.js"
 
 type Command = "start" | "context"
 
 type AiServiceParam = "maxOutputTokens" | "temperature" | "topK" | "topP" | "seed" | "frequencyPenalty"
 
 export class CommandController {
+  config: AppConfig
   bot: Bot
   aiService: AiService
   commands: Record<Command, (...args: any) => any>
 
-  constructor(bot: Bot, aiService: AiService) {
+  constructor(config: AppConfig, bot: Bot, aiService: AiService) {
+    this.config = config
     this.bot = bot
     this.aiService = aiService
 
@@ -34,7 +36,7 @@ export class CommandController {
   }
 
   async contextCommand(context: MessageContext<Bot>) {
-    const contextLength = await this.aiService.contextLength(config.DEFAULT_CHAT_ID.toString())
+    const contextLength = await this.aiService.contextLength(this.config.DEFAULT_CHAT_ID.toString())
     if (contextLength) {
       const replyText = `Длина массива сообщений: ${contextLength.messages}\nОбщая длина текста: ${contextLength.text}`
       context.reply(replyText)

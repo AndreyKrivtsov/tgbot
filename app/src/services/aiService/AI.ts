@@ -1,7 +1,7 @@
 import type { Content } from "@google/generative-ai"
 import type { MyChatSession } from "./MyChatSession.js"
 import type { MyGenerativeModel } from "./MyGenerativeModel.js"
-import { Log } from "../../helpers/Log.js"
+import { Logger } from "../../helpers/Logger.js"
 import { loadHistory, saveHistory } from "./historyFile.js"
 import { MyGoogleGenerativeAI } from "./MyGoogleGenerativeAI.js"
 import { systemInstruction } from "./systemInstruction.js"
@@ -43,7 +43,7 @@ export class AI {
     responseMimeType: "text/plain",
   }
 
-  log = new Log("[AI.ts]")
+  log = new Logger("[AI.ts]")
 
   constructor(apiKey: string) {
     this.api = new MyGoogleGenerativeAI(apiKey)
