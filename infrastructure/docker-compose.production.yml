@@ -1,0 +1,188 @@
+services:
+  # PostgreSQL - основная база данных (продакшен)
+  postgres:
+    image: postgres:15-alpine
+    container_name: tgbot-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tgbot}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "127.0.0.1:5432:5432"  # Только localhost
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./postgres/postgresql.production.conf:/etc/postgresql/postgresql.conf:ro
+      - postgres_logs:/var/log/postgresql
+    command: >
+      postgres 
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tgbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - tgbot-network-prod
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Redis - кэширование (продакшен)
+  redis:
+    image: redis:7-alpine
+    container_name: tgbot-redis-prod
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"  # Только localhost
+    volumes:
+      - redis_data_prod:/data
+      - ./redis/redis.production.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_logs:/var/log/redis
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tgbot-network-prod
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Nginx для reverse proxy (опционально)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: tgbot-nginx-prod
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/ssl:/etc/nginx/ssl:ro
+  #     - nginx_logs:/var/log/nginx
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - tgbot-network-prod
+  #   profiles:
+  #     - proxy
+
+  # Monitoring с Prometheus (опционально)
+  prometheus:
+    # image: prom/prometheus:latest
+    # container_name: tgbot-prometheus
+    # restart: always
+    # ports:
+    #   - "127.0.0.1:9090:9090"
+    # volumes:
+    #   - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    #   - prometheus_data:/prometheus
+    # command:
+    #   - '--config.file=/etc/prometheus/prometheus.yml'
+    #   - '--storage.tsdb.path=/prometheus'
+    #   - '--web.console.libraries=/etc/prometheus/console_libraries'
+    #   - '--web.console.templates=/etc/prometheus/consoles'
+    #   - '--storage.tsdb.retention.time=200h'
+    #   - '--web.enable-lifecycle'
+    # networks:
+    #   - tgbot-network-prod
+    # profiles:
+    #   - monitoring
+
+  # Grafana для визуализации (опционально)
+  grafana:
+    # image: grafana/grafana:latest
+    # container_name: tgbot-grafana
+    # restart: always
+    # ports:
+    #   - "127.0.0.1:3001:3000"
+    # environment:
+    #   - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    #   - GF_USERS_ALLOW_SIGN_UP=false
+    # volumes:
+    #   - grafana_data:/var/lib/grafana
+    #   - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    #   - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    # depends_on:
+    #   - prometheus
+    # networks:
+    #   - tgbot-network-prod
+    # profiles:
+    #   - monitoring
+
+  # PostgreSQL Exporter для метрик
+  # postgres-exporter:
+  #   image: quay.io/prometheuscommunity/postgres-exporter:latest
+  #   container_name: tgbot-postgres-exporter
+  #   restart: always
+  #   environment:
+  #     DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tgbot}?sslmode=disable"
+  #   ports:
+  #     - "127.0.0.1:9187:9187"
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - tgbot-network-prod
+  #   profiles:
+  #     - monitoring
+
+  # Redis Exporter для метрик
+  # redis-exporter:
+  #   image: oliver006/redis_exporter:latest
+  #   container_name: tgbot-redis-exporter
+  #   restart: always
+  #   environment:
+  #     REDIS_ADDR: "redis://redis:6379"
+  #   ports:
+  #     - "127.0.0.1:9121:9121"
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - tgbot-network-prod
+  #   profiles:
+  #     - monitoring
+
+volumes:
+  postgres_data_prod:
+    driver: local
+  redis_data_prod:
+    driver: local
+  postgres_logs:
+    driver: local
+  redis_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+  # prometheus_data:
+  #   driver: local
+  # grafana_data:
+  #   driver: local
+
+networks:
+  tgbot-network-prod:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-tgbot-prod 

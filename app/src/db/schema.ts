@@ -1,207 +1,137 @@
-import { relations } from "drizzle-orm"
-import { boolean, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core"
+import { 
+  pgTable, 
+  bigint, 
+  varchar, 
+  text, 
+  boolean, 
+  integer, 
+  timestamp, 
+  date,
+  jsonb,
+  index,
+  primaryKey
+} from "drizzle-orm/pg-core"
 
-// Группы Telegram
-export const groups = pgTable("groups", {
-  id: serial("id").primaryKey(),
-  telegramId: text("telegram_id").notNull().unique(),
-  name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  settings: jsonb("settings").default({}),
-  aiConfig: jsonb("ai_config").default({}),
-  status: varchar("status", { length: 20 }).notNull().default("active"), // active, inactive, suspended
-  ownerId: integer("owner_id"), // Telegram user ID владельца
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
-
-// Пользователи
+/**
+ * Пользователи Telegram
+ */
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  telegramId: text("telegram_id").notNull().unique(),
+  id: bigint("id", { mode: "number" }).primaryKey(), // Telegram user ID
   username: varchar("username", { length: 255 }),
   firstName: varchar("first_name", { length: 255 }),
   lastName: varchar("last_name", { length: 255 }),
-  role: varchar("role", { length: 20 }).notNull().default("user"), // admin, user, moderator
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
-
-// Участники групп
-export const groupMembers = pgTable("group_members", {
-  id: serial("id").primaryKey(),
-  groupId: integer("group_id").notNull().references(() => groups.id),
-  userId: integer("user_id").notNull().references(() => users.id),
-  role: varchar("role", { length: 20 }).notNull().default("member"), // admin, member, moderator
-  permissions: jsonb("permissions").default({}),
-  joinedAt: timestamp("joined_at").defaultNow().notNull(),
-  leftAt: timestamp("left_at"),
+  languageCode: varchar("language_code", { length: 10 }),
+  isBot: boolean("is_bot").default(false),
+  isRestricted: boolean("is_restricted").default(false),
+  restrictionReason: text("restriction_reason"),
+  messageCount: integer("message_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
 }, (table) => ({
-  uniqueGroupUser: uniqueIndex("unique_group_user").on(table.groupId, table.userId),
+  usernameIdx: index("idx_users_username").on(table.username),
+  createdAtIdx: index("idx_users_created_at").on(table.createdAt),
+  messageCountIdx: index("idx_users_message_count").on(table.messageCount)
 }))
 
-// Диалоги/конверсации
-export const conversations = pgTable("conversations", {
-  id: serial("id").primaryKey(),
-  groupId: integer("group_id").notNull().references(() => groups.id),
-  userId: integer("user_id").notNull().references(() => users.id),
-  context: jsonb("context").default({}), // Контекст диалога для AI
-  metadata: jsonb("metadata").default({}), // Дополнительные данные
+/**
+ * Чаты (группы/супергруппы)
+ */
+export const chats = pgTable("chats", {
+  id: bigint("id", { mode: "number" }).primaryKey(), // Telegram chat ID
+  type: varchar("type", { length: 50 }).notNull(), // 'private', 'group', 'supergroup'
+  title: varchar("title", { length: 255 }),
+  settings: jsonb("settings"), // Настройки бота для чата
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
-
-// Сообщения
-export const messages = pgTable("messages", {
-  id: serial("id").primaryKey(),
-  conversationId: integer("conversation_id").notNull().references(() => conversations.id),
-  telegramMessageId: text("telegram_message_id").notNull(),
-  content: text("content").notNull(),
-  aiResponse: text("ai_response"),
-  messageType: varchar("message_type", { length: 20 }).notNull().default("text"), // text, photo, document, etc.
-  metadata: jsonb("metadata").default({}),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-})
-
-// Настройки групп (детальные)
-export const groupSettings = pgTable("group_settings", {
-  groupId: integer("group_id").primaryKey().references(() => groups.id),
-  aiProvider: varchar("ai_provider", { length: 50 }).default("openai"), // openai, anthropic, local
-  aiModel: varchar("ai_model", { length: 100 }).default("gpt-4"),
-  systemPrompt: text("system_prompt"),
-  customPrompts: jsonb("custom_prompts").default({}),
-  featuresEnabled: jsonb("features_enabled").default({
-    aiChat: true,
-    antiSpam: true,
-    moderation: false,
-    analytics: true,
-  }),
-  rateLimits: jsonb("rate_limits").default({
-    messagesPerMinute: 10,
-    messagesPerHour: 60,
-    maxContextLength: 4000,
-  }),
-  autoModerationRules: jsonb("auto_moderation_rules").default({}),
-  webhookUrl: text("webhook_url"), // Для интеграций
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
-
-// AI провайдеры и их настройки
-export const aiProviders = pgTable("ai_providers", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull().unique(),
-  type: varchar("type", { length: 50 }).notNull(), // openai, anthropic, local, custom
-  config: jsonb("config").notNull(), // API keys, endpoints, etc.
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
-
-// Аналитика и статистика
-export const analytics = pgTable("analytics", {
-  id: serial("id").primaryKey(),
-  groupId: integer("group_id").notNull().references(() => groups.id),
-  userId: integer("user_id").references(() => users.id),
-  eventType: varchar("event_type", { length: 50 }).notNull(), // message, command, ai_request, etc.
-  eventData: jsonb("event_data").default({}),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-})
-
-// Системные логи
-export const systemLogs = pgTable("system_logs", {
-  id: serial("id").primaryKey(),
-  level: varchar("level", { length: 10 }).notNull(), // error, warn, info, debug
-  message: text("message").notNull(),
-  context: jsonb("context").default({}),
-  groupId: integer("group_id").references(() => groups.id),
-  userId: integer("user_id").references(() => users.id),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-})
-
-// Отношения между таблицами
-export const groupsRelations = relations(groups, ({ many, one }) => ({
-  members: many(groupMembers),
-  conversations: many(conversations),
-  settings: one(groupSettings, {
-    fields: [groups.id],
-    references: [groupSettings.groupId],
-  }),
-  analytics: many(analytics),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => ({
+  typeIdx: index("idx_chats_type").on(table.type),
+  activeIdx: index("idx_chats_active").on(table.isActive)
 }))
 
-export const usersRelations = relations(users, ({ many }) => ({
-  groupMemberships: many(groupMembers),
-  conversations: many(conversations),
-  analytics: many(analytics),
+/**
+ * AI контексты чатов
+ */
+export const aiContexts = pgTable("ai_contexts", {
+  chatId: bigint("chat_id", { mode: "number" }).primaryKey(),
+  messages: jsonb("messages"), // История сообщений [{role, content, timestamp}]
+  totalRequestCount: integer("total_request_count").default(0),
+  dailyRequestCount: integer("daily_request_count").default(0),
+  lastDailyReset: date("last_daily_reset").defaultNow(),
+  lastActivity: timestamp("last_activity").defaultNow(),
+  settings: jsonb("settings") // Настройки AI для чата (лимиты и т.д.)
+}, (table) => ({
+  lastActivityIdx: index("idx_ai_contexts_last_activity").on(table.lastActivity),
+  dailyResetIdx: index("idx_ai_contexts_daily_reset").on(table.lastDailyReset)
 }))
 
-export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
-  group: one(groups, {
-    fields: [groupMembers.groupId],
-    references: [groups.id],
-  }),
-  user: one(users, {
-    fields: [groupMembers.userId],
-    references: [users.id],
-  }),
+/**
+ * Участники чатов (для отслеживания статуса)
+ */
+export const chatMembers = pgTable("chat_members", {
+  chatId: bigint("chat_id", { mode: "number" }).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  status: varchar("status", { length: 50 }).notNull(), // 'member', 'administrator', 'owner', 'left', 'kicked'
+  joinedAt: timestamp("joined_at").defaultNow(),
+  leftAt: timestamp("left_at"),
+  captchaSolved: boolean("captcha_solved").default(false),
+  captchaSolvedAt: timestamp("captcha_solved_at")
+}, (table) => ({
+  pk: primaryKey({ columns: [table.chatId, table.userId] }),
+  statusIdx: index("idx_chat_members_status").on(table.status),
+  joinedAtIdx: index("idx_chat_members_joined_at").on(table.joinedAt)
 }))
 
-export const conversationsRelations = relations(conversations, ({ one, many }) => ({
-  group: one(groups, {
-    fields: [conversations.groupId],
-    references: [groups.id],
-  }),
-  user: one(users, {
-    fields: [conversations.userId],
-    references: [users.id],
-  }),
-  messages: many(messages),
+/**
+ * Статистика работы бота
+ */
+export const botStats = pgTable("bot_stats", {
+  date: date("date").primaryKey(),
+  newUsers: integer("new_users").default(0),
+  messagesProcessed: integer("messages_processed").default(0),
+  aiRequests: integer("ai_requests").default(0),
+  spamDetected: integer("spam_detected").default(0),
+  captchaSolved: integer("captcha_solved").default(0),
+  captchaFailed: integer("captcha_failed").default(0),
+  captchaTimeout: integer("captcha_timeout").default(0)
+}, (table) => ({
+  dateIdx: index("idx_bot_stats_date").on(table.date)
 }))
 
-export const messagesRelations = relations(messages, ({ one }) => ({
-  conversation: one(conversations, {
-    fields: [messages.conversationId],
-    references: [conversations.id],
-  }),
+/**
+ * Лог важных событий
+ */
+export const eventLogs = pgTable("event_logs", {
+  id: bigint("id", { mode: "number" }).primaryKey(), // Auto-increment
+  eventType: varchar("event_type", { length: 50 }).notNull(), // 'user_joined', 'spam_detected', 'ai_request', etc.
+  chatId: bigint("chat_id", { mode: "number" }),
+  userId: bigint("user_id", { mode: "number" }),
+  data: jsonb("data"), // Дополнительные данные события
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => ({
+  eventTypeIdx: index("idx_event_logs_event_type").on(table.eventType),
+  createdAtIdx: index("idx_event_logs_created_at").on(table.createdAt),
+  chatIdIdx: index("idx_event_logs_chat_id").on(table.chatId),
+  userIdIdx: index("idx_event_logs_user_id").on(table.userId)
 }))
 
-export const groupSettingsRelations = relations(groupSettings, ({ one }) => ({
-  group: one(groups, {
-    fields: [groupSettings.groupId],
-    references: [groups.id],
-  }),
-}))
-
-export const analyticsRelations = relations(analytics, ({ one }) => ({
-  group: one(groups, {
-    fields: [analytics.groupId],
-    references: [groups.id],
-  }),
-  user: one(users, {
-    fields: [analytics.userId],
-    references: [users.id],
-  }),
-}))
-
-// Типы для TypeScript
-export type Group = typeof groups.$inferSelect
-export type NewGroup = typeof groups.$inferInsert
+/**
+ * Типы данных для TypeScript
+ */
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
-export type GroupMember = typeof groupMembers.$inferSelect
-export type NewGroupMember = typeof groupMembers.$inferInsert
-export type Conversation = typeof conversations.$inferSelect
-export type NewConversation = typeof conversations.$inferInsert
-export type Message = typeof messages.$inferSelect
-export type NewMessage = typeof messages.$inferInsert
-export type GroupSettings = typeof groupSettings.$inferSelect
-export type NewGroupSettings = typeof groupSettings.$inferInsert
-export type AIProvider = typeof aiProviders.$inferSelect
-export type NewAIProvider = typeof aiProviders.$inferInsert
-export type Analytics = typeof analytics.$inferSelect
-export type NewAnalytics = typeof analytics.$inferInsert
-export type SystemLog = typeof systemLogs.$inferSelect
-export type NewSystemLog = typeof systemLogs.$inferInsert
+
+export type Chat = typeof chats.$inferSelect
+export type NewChat = typeof chats.$inferInsert
+
+export type AiContext = typeof aiContexts.$inferSelect
+export type NewAiContext = typeof aiContexts.$inferInsert
+
+export type ChatMember = typeof chatMembers.$inferSelect
+export type NewChatMember = typeof chatMembers.$inferInsert
+
+export type BotStats = typeof botStats.$inferSelect
+export type NewBotStats = typeof botStats.$inferInsert
+
+export type EventLog = typeof eventLogs.$inferSelect
+export type NewEventLog = typeof eventLogs.$inferInsert

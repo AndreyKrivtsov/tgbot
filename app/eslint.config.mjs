@@ -15,6 +15,7 @@ export default antfu(
       "no-console": "off",
       "antfu/no-top-level-await": "off",
       "style/brace-style": "off",
+      "perfectionist/sort-imports": "unsorted",
     },
     plugins: {
       drizzle,

@@ -36,30 +36,59 @@ export class Logger {
     }
   }
 
+  /**
+   * Debug level logging (level 3)
+   */
+  d(...data: any[]) {
+    if (this.logLevel > 2) {
+      console.debug(this.getPrefix("DEBUG"), ...data)
+      this.writeToFile("DEBUG", ...data)
+    }
+  }
+
+  /**
+   * Info level logging (level 2)
+   */
   i(...data: any[]) {
     if (this.logLevel > 1) {
-      console.info(this.getPrefix(), ...data)
-      this.writeToFile(...data)
+      console.info(this.getPrefix("INFO"), ...data)
+      this.writeToFile("INFO", ...data)
     }
   }
 
+  /**
+   * Log level logging (level 1)
+   */
   l(...data: any[]) {
     if (this.logLevel > 0) {
-      console.log(this.getPrefix(), ...data)
-      this.writeToFile(...data)
+      console.log(this.getPrefix("LOG"), ...data)
+      this.writeToFile("LOG", ...data)
     }
   }
 
+  /**
+   * Error level logging (always shown)
+   */
   e(...data: any[]) {
-    console.error(this.getPrefix(), ...data)
-    this.writeToFile(...data)
+    console.error(this.getPrefix("ERROR"), ...data)
+    this.writeToFile("ERROR", ...data)
+  }
+
+  /**
+   * Warning level logging (level 1)
+   */
+  w(...data: any[]) {
+    if (this.logLevel > 0) {
+      console.warn(this.getPrefix("WARN"), ...data)
+      this.writeToFile("WARN", ...data)
+    }
   }
 
   writeFileError(...data: any[]) {
-    console.error(this.getPrefix(), ...data)
+    console.error(this.getPrefix("FILE_ERROR"), ...data)
   }
 
-  writeToFile(...data: any) {
+  writeToFile(level: string, ...data: any) {
     if (!this.useFile) {
       return
     }
@@ -67,15 +96,17 @@ export class Logger {
     try {
       const text = data.map((item: any) => typeof item === "object" ? `\n${JSON.stringify(item)}\n` : item).join(", ")
       const filepath = path.join(this.filePath, this.filename)
-      appendFile(filepath, `${this.getPrefix()} ${text}\n`)
+      appendFile(filepath, `${this.getPrefix(level)} ${text}\n`)
         .catch(e => this.writeFileError(e))
-    } catch (e) {
+    } 
+    catch (e) {
       this.writeFileError(e)
     }
   }
 
-  getPrefix() {
-    return `[${this.getDate()}][${this.token}]:`
+  getPrefix(level?: string) {
+    const levelStr = level ? `[${level}]` : ""
+    return `[${this.getDate()}][${this.token}]${levelStr}:`
   }
 
   getDate() {

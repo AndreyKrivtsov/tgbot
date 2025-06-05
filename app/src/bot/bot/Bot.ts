@@ -33,6 +33,14 @@ export class Bot {
     return this.bot.api
   }
 
+  get __Derives() {
+    return this.bot.__Derives
+  }
+
+  get downloadFile() {
+    return this.bot.downloadFile.bind(this.bot)
+  }
+
   onStart(callback: () => void) {
     this.bot.onStart(callback)
   }

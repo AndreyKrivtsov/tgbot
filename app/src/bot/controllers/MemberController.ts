@@ -1,4 +1,5 @@
 import type { User, UserRepository } from "../../types.d.js"
+import type { Logger } from "../../helpers/Logger.js"
 import type { Bot, CallbackQueryContext, ChatMember, Context, MaybeSuppressedParams, TelegramChatPermissions } from "../bot/Bot.js"
 import { getCaptcha } from "../../helpers/getCaptcha.js"
 import {
