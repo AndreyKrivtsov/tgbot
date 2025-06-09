@@ -16,7 +16,7 @@
 cd app
 npm install
 
-# 2. Настройка базы данных (см. DATABASE_SETUP.md)
+# 2. Настройка базы данных (см. docs/DATABASE_SETUP.md)
 # PostgreSQL + Redis для оптимальной производительности
 
 # 3. Настройка окружения
@@ -34,10 +34,10 @@ npm start
 ## 📚 Документация
 
 ### 📖 Основная документация
-- **[ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)** - Полное описание архитектуры
-- **[BOT_LOGIC_REFERENCE.md](BOT_LOGIC_REFERENCE.md)** - Краткий справочник логики бота
-- **[ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)** - Диаграммы архитектуры
-- **[DATABASE_SETUP.md](DATABASE_SETUP.md)** - 🗄️ Настройка баз данных
+- **[ARCHITECTURE_OVERVIEW.md](docs/ARCHITECTURE_OVERVIEW.md)** - Полное описание архитектуры
+- **[BOT_LOGIC_REFERENCE.md](docs/BOT_LOGIC_REFERENCE.md)** - Краткий справочник логики бота
+- **[ARCHITECTURE_DIAGRAM.md](docs/ARCHITECTURE_DIAGRAM.md)** - Диаграммы архитектуры
+- **[DATABASE_SETUP.md](docs/DATABASE_SETUP.md)** - 🗄️ Настройка баз данных
 
 ### 🏗️ Архитектурные принципы
 - **Dependency Injection** - все зависимости инжектируются через конструктор
@@ -51,14 +51,27 @@ app/src/
 ├── core/                    # Архитектурные компоненты
 │   ├── Container.ts         # DI контейнер
 │   └── Application.ts       # Оркестратор сервисов
-├── services/                # Бизнес-сервисы
-│   ├── TelegramBotService.ts    # Главный сервис бота
-│   ├── DatabaseService.ts       # 🗄️ PostgreSQL + Drizzle ORM
-│   ├── RedisService.ts          # 🔄 Redis для кэширования
-│   ├── CaptchaService.ts        # Сервис капчи
-│   ├── AntiSpamService.ts       # Сервис антиспама
-│   ├── AIChatService.ts         # Сервис AI чата
-│   └── ...                      # Другие сервисы
+├── services/                # Бизнес-сервисы (модульная структура)
+│   ├── TelegramBot/         # Главный сервис бота
+│   │   └── index.ts
+│   ├── DatabaseService/     # 🗄️ PostgreSQL + Drizzle ORM
+│   │   └── index.ts
+│   ├── RedisService/        # 🔄 Redis для кэширования
+│   │   └── index.ts
+│   ├── CaptchaService/      # Сервис капчи
+│   │   └── index.ts
+│   ├── AntiSpamService/     # Сервис антиспама
+│   │   └── index.ts
+│   ├── AIChatService/       # Сервис AI чата
+│   │   └── index.ts
+│   ├── CacheService/        # Сервис кэша
+│   │   └── index.ts
+│   ├── AI/                  # Сервис AI API
+│   │   └── index.ts
+│   ├── WebServerService/    # Веб-сервер
+│   │   └── index.ts
+│   └── weather/             # Сервис погоды
+│       └── WeatherService.ts
 ├── db/                      # База данных
 │   └── schema.ts            # Drizzle ORM схема
 ├── helpers/                 # Утилиты
@@ -67,6 +80,27 @@ app/src/
 ├── app.ts                   # Главный класс приложения
 ├── index.ts                 # Точка входа
 └── config.ts                # Конфигурация
+```
+
+### 🎯 Преимущества модульной структуры
+
+**✅ Что дает новая структура сервисов:**
+- **Изолированность** - каждый сервис в отдельной папке
+- **Расширяемость** - можно добавлять утилиты, типы и вспомогательные файлы рядом с сервисом
+- **Удобство рефакторинга** - легко найти и модифицировать код конкретного сервиса
+- **Чистота архитектуры** - корень `services/` больше не захламлен файлами
+
+**🔧 Возможности для расширения:**
+```
+services/TelegramBot/
+├── index.ts                 # Основной сервис
+├── types.ts                 # Типы сервиса
+├── utils.ts                 # Утилиты
+├── handlers/                # Обработчики событий
+│   ├── messageHandler.ts
+│   └── callbackHandler.ts
+└── middleware/              # Миддлвары
+    └── authMiddleware.ts
 ```
 
 ## 🎮 Логика работы
@@ -122,7 +156,7 @@ npm run db:studio    # Веб-интерфейс БД
 npm run db:push      # Push схемы (dev)
 ```
 
-**📖 Подробная настройка**: [DATABASE_SETUP.md](DATABASE_SETUP.md)
+**📖 Подробная настройка**: [DATABASE_SETUP.md](docs/DATABASE_SETUP.md)
 
 ## ⚙️ Конфигурация
 

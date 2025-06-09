@@ -84,6 +84,24 @@ services:
     networks:
       - tgbot-network
 
+  # AntiSpam Service - сервис проверки спама на Python/FastAPI
+  antispam:
+    build:
+      context: ../antispam
+      dockerfile: Dockerfile
+    container_name: antispam
+    restart: unless-stopped
+    ports:
+      - "6323:6323"  # Проброс порта наружу
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6323/docs", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - tgbot-network
+
 volumes:
   postgres_data:
     driver: local

@@ -9,7 +9,8 @@ import {
   date,
   jsonb,
   index,
-  primaryKey
+  primaryKey,
+  unique
 } from "drizzle-orm/pg-core"
 
 /**
@@ -34,32 +35,59 @@ export const users = pgTable("users", {
 }))
 
 /**
- * Чаты (группы/супергруппы)
+ * Чаты (группы/супергруппы) с настройками ИИ
  */
 export const chats = pgTable("chats", {
   id: bigint("id", { mode: "number" }).primaryKey(), // Telegram chat ID
   type: varchar("type", { length: 50 }).notNull(), // 'private', 'group', 'supergroup'
   title: varchar("title", { length: 255 }),
-  settings: jsonb("settings"), // Настройки бота для чата
+  
+  // Настройки ИИ для группы
+  geminiApiKey: varchar("gemini_api_key", { length: 512 }), // API ключ для Gemini (может быть NULL для использования по умолчанию)
+  systemPrompt: text("system_prompt"), // Контекст группы для AI
+  isAiEnabled: boolean("is_ai_enabled").default(true), // Включен ли ИИ в группе
+  dailyLimit: integer("daily_limit").default(1500), // Дневной лимит запросов к AI
+  throttleDelay: integer("throttle_delay").default(3000), // Задержка между запросами в мс
+  maxContextCharacters: integer("max_context_characters").default(600), // Максимальная длина контекста в символах
+  
+  // Общие настройки
+  settings: jsonb("settings"), // Другие настройки бота для чата
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 }, (table) => ({
   typeIdx: index("idx_chats_type").on(table.type),
-  activeIdx: index("idx_chats_active").on(table.isActive)
+  activeIdx: index("idx_chats_active").on(table.isActive),
+  aiEnabledIdx: index("idx_chats_ai_enabled").on(table.isAiEnabled)
 }))
 
 /**
- * AI контексты чатов
+ * Администраторы групп
+ */
+export const groupAdmins = pgTable("group_admins", {
+  groupId: bigint("group_id", { mode: "number" }).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  role: varchar("role", { length: 50 }).default("admin"), // 'admin', 'owner', 'moderator'
+  permissions: jsonb("permissions"), // Разрешения администратора
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => ({
+  pk: primaryKey({ columns: [table.groupId, table.userId] }),
+  groupIdx: index("idx_group_admins_group").on(table.groupId),
+  userIdx: index("idx_group_admins_user").on(table.userId),
+  roleIdx: index("idx_group_admins_role").on(table.role)
+}))
+
+/**
+ * AI контексты чатов (обновленная версия)
  */
 export const aiContexts = pgTable("ai_contexts", {
   chatId: bigint("chat_id", { mode: "number" }).primaryKey(),
-  messages: jsonb("messages"), // История сообщений [{role, content, timestamp}]
+  messages: text("messages"), // История сообщений как единый текст (ограниченный по символам)
   totalRequestCount: integer("total_request_count").default(0),
   dailyRequestCount: integer("daily_request_count").default(0),
   lastDailyReset: date("last_daily_reset").defaultNow(),
   lastActivity: timestamp("last_activity").defaultNow(),
-  settings: jsonb("settings") // Настройки AI для чата (лимиты и т.д.)
+  contextLength: integer("context_length").default(0) // Текущая длина контекста в символах
 }, (table) => ({
   lastActivityIdx: index("idx_ai_contexts_last_activity").on(table.lastActivity),
   dailyResetIdx: index("idx_ai_contexts_daily_reset").on(table.lastDailyReset)
@@ -123,6 +151,9 @@ export type NewUser = typeof users.$inferInsert
 
 export type Chat = typeof chats.$inferSelect
 export type NewChat = typeof chats.$inferInsert
+
+export type GroupAdmin = typeof groupAdmins.$inferSelect
+export type NewGroupAdmin = typeof groupAdmins.$inferInsert
 
 export type AiContext = typeof aiContexts.$inferSelect
 export type NewAiContext = typeof aiContexts.$inferInsert
