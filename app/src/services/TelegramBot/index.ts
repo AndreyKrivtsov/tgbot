@@ -7,7 +7,6 @@ import type { AIChatService } from "../AIChatService/index.js"
 import type { Bot, MessageContext, NewChatMembersContext } from "gramio"
 
 interface TelegramBotDependencies {
-  repository?: any
   captchaService?: CaptchaService
   antiSpamService?: AntiSpamService
   aiChatService?: AIChatService
@@ -134,7 +133,6 @@ export class TelegramBotService implements IService {
 
     // Проверяем зависимости
     this.logger.i("🔍 [ANTISPAM DEBUG] Checking dependencies:")
-    this.logger.i(`  Repository: ${!!this.dependencies.repository}`)
     this.logger.i(`  CaptchaService: ${!!this.dependencies.captchaService}`)
     this.logger.i(`  AntiSpamService: ${!!this.dependencies.antiSpamService}`)
     this.logger.i(`  AIChatService: ${!!this.dependencies.aiChatService}`)
@@ -833,15 +831,14 @@ ${question[0]} + ${question[1]} = ?
     if (!fromUser?.id)
       return null
 
-    if (!this.dependencies.repository?.exist?.(fromUser.id)) {
-      return this.dependencies.repository?.newUser?.({
-        id: fromUser.id,
-        username: fromUser.username,
-        firstname: fromUser.firstName,
-      })
+    // В упрощенной архитектуре просто возвращаем информацию о пользователе
+    return {
+      id: fromUser.id,
+      username: fromUser.username,
+      firstname: fromUser.first_name,
+      messages: 0,
+      sessionId: `session_${fromUser.id}_${Date.now()}`,
     }
-
-    return this.dependencies.repository?.getUser?.(fromUser.id)
   }
 
   /**
@@ -1128,7 +1125,7 @@ ${question[0]} + ${question[1]} = ?
     return {
       isRunning: this.isRunning,
       hasGramIO: this.hasGramIO,
-      hasRepository: !!this.dependencies.repository,
+
       hasCaptchaService: !!this.dependencies.captchaService,
       hasAntiSpamService: !!this.dependencies.antiSpamService,
       hasAIChatService: !!this.dependencies.aiChatService,
@@ -1238,7 +1235,7 @@ ${question[0]} + ${question[1]} = ?
       // Блокируем пользователя
       if (targetUserId) {
         await this.deleteUserFromChat(chatId, targetUserId)
-        this.dependencies.repository?.banUser?.(targetUserId, "Заблокирован администратором")
+        // В упрощенной архитектуре не используем repository
       }
 
       await context.reply(`✅ Пользователь ${targetUsername} заблокирован.`)

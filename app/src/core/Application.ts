@@ -67,12 +67,6 @@ export class Application {
   async registerCoreServices(): Promise<void> {
     this.logger.i("📦 Registering core services...")
 
-    // Repository
-    this.container.register("repository", async () => {
-      const { Repository } = await import("../repository/Repository.js")
-      return new Repository(this.logger)
-    })
-
     // Database Service
     this.container.register("database", async () => {
       const { DatabaseService } = await import("../services/DatabaseService/index.js")
@@ -112,7 +106,6 @@ export class Application {
     // Captcha Service
     this.container.register("captcha", async () => {
       const { CaptchaService } = await import("../services/CaptchaService/index.js")
-      const repository = await this.container.getAsync("repository")
 
       // Настройки капчи (можно перенести в БД позже)
       const captchaSettings = {
@@ -120,9 +113,7 @@ export class Application {
         checkIntervalMs: 5000, // 5 секунд
       }
 
-      return new CaptchaService(this.config, this.logger, {
-        repository,
-      }, captchaSettings)
+      return new CaptchaService(this.config, this.logger, {}, captchaSettings)
     })
 
     // Anti-Spam Service
@@ -166,7 +157,6 @@ export class Application {
     // Telegram Bot Service (с зависимостями)
     this.container.register("telegramBot", async () => {
       const { TelegramBotService } = await import("../services/TelegramBot/index.js")
-      const repository = await this.container.getAsync("repository")
       const captchaService = await this.container.getAsync("captcha")
       const antiSpamService = await this.container.getAsync("antiSpam")
       const aiChatService = await this.container.getAsync("aiChat")
@@ -183,7 +173,6 @@ export class Application {
       }
 
       return new TelegramBotService(this.config, this.logger, {
-        repository,
         captchaService: captchaService as any,
         antiSpamService: antiSpamService as any,
         aiChatService: aiChatService as any,
@@ -194,12 +183,10 @@ export class Application {
     this.container.register("apiServer", async () => {
       const { ApiServerService } = await import("../services/ApiServerService/index.js")
       const database = await this.container.getAsync("database")
-      const repository = await this.container.getAsync("repository")
       const telegramBot = await this.container.getAsync("telegramBot")
 
       return new ApiServerService(this.config, this.logger, {
         database,
-        repository,
         telegramBot,
       })
     })

@@ -4,7 +4,6 @@ import type { AppConfig } from "../../config.js"
 
 interface ApiServiceDependencies {
   database?: any
-  repository?: any
   telegramBot?: any
 }
 
@@ -152,7 +151,6 @@ export class ApiServerService implements IService {
       host: this.config.WEB_HOST,
       port: this.config.WEB_PORT,
       hasDatabase: !!this.dependencies.database,
-      hasRepository: !!this.dependencies.repository,
       hasTelegramBot: !!this.dependencies.telegramBot,
       status: this.hasFastify ? "ready" : "disabled",
       note: this.hasFastify ? "Web interface ready" : "Install Fastify to enable web interface",

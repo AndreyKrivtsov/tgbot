@@ -3,7 +3,6 @@ import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 
 interface CaptchaDependencies {
-  repository?: any
   telegramBot?: any
 }
 
