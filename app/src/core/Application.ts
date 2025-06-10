@@ -190,14 +190,14 @@ export class Application {
       }, botSettings)
     })
 
-    // Web Server Service
-    this.container.register("webServer", async () => {
-      const { WebServerService } = await import("../services/WebServerService/index.js")
+    // API Server Service
+    this.container.register("apiServer", async () => {
+      const { ApiServerService } = await import("../services/ApiServerService/index.js")
       const database = await this.container.getAsync("database")
       const repository = await this.container.getAsync("repository")
       const telegramBot = await this.container.getAsync("telegramBot")
       
-      return new WebServerService(this.config, this.logger, {
+      return new ApiServerService(this.config, this.logger, {
         database,
         repository,
         telegramBot

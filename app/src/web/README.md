@@ -24,8 +24,8 @@ app/src/web/
 
 ## 🏗️ Архитектура
 
-### Backend (WebServerService)
-- **Сервис**: `app/src/services/WebServerService.ts`
+### Backend (ApiServerService)
+- **Сервис**: `app/src/services/ApiServerService.ts`
 - **Статус**: ✅ Готов (заглушка без Fastify)
 - **API**: `/api/health`, `/api/config`, `/api/stats`
 
@@ -109,7 +109,7 @@ GET /api/health
 {
   "status": "ok",
   "services": {
-    "webServer": true,
+    "apiServer": true,
     "database": true, 
     "telegramBot": true
   }
@@ -125,7 +125,7 @@ GET /api/health
 ## 🔄 Жизненный цикл
 
 ### Разработка
-1. **Текущий этап**: Структура готова, WebServerService создан
+1. **Текущий этап**: Структура готова, ApiServerService создан
 2. **Следующий этап**: Установка Fastify, создание API
 3. **Будущий этап**: React приложение, продвинутая аналитика
 
@@ -144,7 +144,7 @@ GET /api/health
 ## 🎯 Roadmap
 
 ### v1.0 (Текущий)
-- [x] WebServerService интеграция
+- [x] ApiServerService интеграция
 - [x] Структура папок
 - [x] API endpoints планирование
 - [ ] Fastify активация

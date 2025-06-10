@@ -13,7 +13,7 @@ app/src/web/
 ## 🚀 Текущее состояние
 
 ✅ **Готово:**
-- WebServerService создан и интегрирован
+- ApiServerService создан и интегрирован
 - Архитектура поддерживает веб-интерфейс
 - Структура папок создана
 - Graceful fallback без Fastify
@@ -153,7 +153,7 @@ frontend/src/
 
 ## 🔧 API Endpoints
 
-WebServerService предоставляет:
+ApiServerService предоставляет:
 
 - `GET /api/health` - Состояние сервисов
 - `GET /api/config` - Конфигурация бота
@@ -266,7 +266,7 @@ const health = {
   uptime: process.uptime(),
   memory: process.memoryUsage(),
   services: {
-    webServer: true,
+    apiServer: true,
     database: true,
     telegramBot: true
   }
