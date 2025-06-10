@@ -396,8 +396,38 @@ export class TelegramBotService implements IService {
    * Обработка ушедших участников
    */
   private async handleLeftChatMember(context: any): Promise<void> {
-    // Обработка покидания участника
-    // Пока не реализовано
+    try {
+      const chatId = context.chat.id
+      const leftUser = context.leftChatMember
+      const messageId = context.messageId || context.message_id || context.id
+
+      this.logger.i(`👋 User left chat: ${leftUser?.firstName} (ID: ${leftUser?.id})`)
+      this.logger.i(`💬 Chat ID: ${chatId}, Message ID: ${messageId}`)
+
+      // Удаляем системное сообщение о покидании/исключении, если включена настройка
+      if (this.settings.deleteSystemMessages && messageId) {
+        this.logger.i("🗑️ Deleting left chat member system message...")
+        await this.deleteMessage(chatId, messageId)
+      }
+
+      // Если пользователь был в ограниченном состоянии (капча), удаляем его из списка
+      if (this.dependencies.captchaService && leftUser?.id) {
+        if (this.dependencies.captchaService.isUserRestricted(leftUser.id)) {
+          this.logger.i(`🧹 Removing user ${leftUser.id} from captcha restrictions`)
+          this.dependencies.captchaService.removeRestrictedUser(leftUser.id)
+        }
+      }
+
+      // Удаляем счетчик сообщений пользователя из кэша
+      if (leftUser?.id && this.userMessageCounters.has(leftUser.id)) {
+        this.userMessageCounters.delete(leftUser.id)
+        this.logger.i(`🧹 Removed message counter for user ${leftUser.id}`)
+      }
+
+      this.logger.i("✅ Left chat member processing completed")
+    } catch (error) {
+      this.logger.e("❌ Error handling left chat member:", error)
+    }
   }
 
   /**
@@ -528,7 +558,26 @@ ${question[0]} + ${question[1]} = ?
 
     try {
       const userId = context.from.id
-      const userAnswer = Number.parseInt(context.data)
+      const callbackData = context.data
+      
+      // Парсим callback data в формате: captcha_${userId}_${optionIndex}_${correct|wrong}
+      const callbackParts = callbackData.split('_')
+      if (callbackParts.length !== 4 || callbackParts[0] !== 'captcha') {
+        this.logger.e(`❌ Invalid callback data format: ${callbackData}`)
+        await context.answerCallbackQuery()
+        return
+      }
+
+      const callbackUserId = Number.parseInt(callbackParts[1])
+      const optionIndex = Number.parseInt(callbackParts[2])
+      const isCorrect = callbackParts[3] === 'correct'
+
+      // Проверяем, что пользователь отвечает на свою капчу
+      if (callbackUserId !== userId) {
+        this.logger.w(`❌ User ${userId} trying to answer captcha for user ${callbackUserId}`)
+        await context.answerCallbackQuery({ text: "Это не ваша капча!" })
+        return
+      }
 
       // Получаем messageId из callback query
       let messageId: number | undefined
@@ -546,7 +595,7 @@ ${question[0]} + ${question[1]} = ?
         messageId = context.id
       }
 
-      this.logger.i(`📝 Callback details: userId=${userId}, messageId=${messageId}, answer=${userAnswer}`)
+      this.logger.i(`📝 Callback details: userId=${userId}, messageId=${messageId}, optionIndex=${optionIndex}, isCorrect=${isCorrect}`)
 
       if (messageId === undefined) {
         this.logger.e("❌ Could not determine messageId from callback context")
@@ -554,11 +603,11 @@ ${question[0]} + ${question[1]} = ?
         return
       }
 
-      const validation = this.dependencies.captchaService.validateAnswer(
-        userId,
-        messageId,
-        userAnswer,
-      )
+      // Используем простую проверку на основе callback data
+      const validation = {
+        isValid: isCorrect,
+        user: this.dependencies.captchaService?.getRestrictedUser(userId)
+      }
 
       this.logger.i(`🔍 Validation result: isValid=${validation.isValid}, user found=${!!validation.user}`)
 
@@ -566,9 +615,11 @@ ${question[0]} + ${question[1]} = ?
         if (validation.isValid) {
           this.logger.i("✅ Captcha answer is CORRECT!")
           await this.handleCaptchaSuccess(validation.user)
+          await context.answerCallbackQuery({ text: "✅ Правильно! Добро пожаловать!" })
         } else {
           this.logger.i("❌ Captcha answer is WRONG!")
           await this.handleCaptchaFailed(validation.user)
+          await context.answerCallbackQuery({ text: "❌ Неправильный ответ!" })
         }
 
         // Удаляем сообщение с капчей
@@ -577,12 +628,12 @@ ${question[0]} + ${question[1]} = ?
         this.logger.i("🧹 User removed from restricted list")
       } else {
         this.logger.w("⚠️ No restricted user found for this callback")
+        await context.answerCallbackQuery({ text: "⚠️ Капча не найдена" })
       }
 
-      // Отвечаем на колбэк
-      await context.answerCallbackQuery()
     } catch (error) {
       this.logger.e("❌ Error handling callback query:", error)
+      await context.answerCallbackQuery({ text: "❌ Произошла ошибка" })
     }
   }
 
@@ -630,8 +681,7 @@ ${question[0]} + ${question[1]} = ?
       const spamCheck = await this.dependencies.antiSpamService.checkMessage(userId, messageText)
 
       if (spamCheck.isSpam) {
-        // Увеличиваем счетчик спама
-        userCounter.spamCount++
+        // Передаем обработку спама в специализированный метод
         await this.handleSpamMessage(context, spamCheck.reason, userCounter)
         return
       }
@@ -724,7 +774,29 @@ ${question[0]} + ${question[1]} = ?
         this.logger.w(`User ${userId} (${firstName}) received spam warning (${userCounter.spamCount}/2)`)
       } else {
         // Второе нарушение - кик из группы
+        const fullName = firstName
+        const displayName = username ? `${fullName}, @${username}` : fullName
+        const kickText = `Хмм... 🧐\nСообщение от [${displayName}] похоже на спам.\n\nПользователь исключен из чата.\n\n${this.config.ADMIN_USERNAME || ""}`
+
+        if (!this.bot) {
+          this.logger.e("Bot is not available for sending kick message")
+          return
+        }
+
+        // Отправляем сообщение о кике
+        const messageResult = await this.bot.api.sendMessage({
+          chat_id: chatId,
+          text: kickText,
+          parse_mode: "HTML",
+        })
+
+        // Кикаем пользователя
         await this.kickUserFromChat(chatId, userId, firstName)
+
+        // Удаляем сообщение о кике через заданное время
+        setTimeout(() => {
+          this.deleteMessage(chatId, messageResult.message_id)
+        }, this.settings.errorMessageDeleteTimeoutMs)
 
         // Удаляем счетчик сообщений пользователя
         this.userMessageCounters.delete(userId)
