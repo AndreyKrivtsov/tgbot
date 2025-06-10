@@ -9,32 +9,32 @@
 ### Базовое использование:
 
 ```typescript
-import { GeminiAdapter } from './services/ai/providers/GeminiAdapter.js'
+import { GeminiAdapter } from "./services/ai/providers/GeminiAdapter.js"
 
 // Создание адаптера
 const adapter = new GeminiAdapter()
 
 // Простой запрос (API ключ передается при вызове)
-const response = await adapter.generateContent('your-api-key', 'Объясни как работает ИИ')
+const response = await adapter.generateContent("your-api-key", "Объясни как работает ИИ")
 console.log(response)
 
 // Запрос с системным промптом
-const systemPrompt = 'Ты помощник в группе разработчиков. Отвечай кратко.'
-const response2 = await adapter.generateContent('your-api-key', 'Что такое Git?', undefined, systemPrompt)
+const systemPrompt = "Ты помощник в группе разработчиков. Отвечай кратко."
+const response2 = await adapter.generateContent("your-api-key", "Что такое Git?", undefined, systemPrompt)
 console.log(response2)
 
 // Запрос с историей разговора
 const conversationHistory = [
   {
-    role: 'user',
-    parts: [{ text: 'Привет! Как дела?' }]
+    role: "user",
+    parts: [{ text: "Привет! Как дела?" }]
   },
   {
-    role: 'model',
-    parts: [{ text: 'Привет! У меня всё отлично, спасибо!' }]
+    role: "model",
+    parts: [{ text: "Привет! У меня всё отлично, спасибо!" }]
   }
 ]
-const response3 = await adapter.generateContent('your-api-key', 'Можешь помочь с кодом?', conversationHistory)
+const response3 = await adapter.generateContent("your-api-key", "Можешь помочь с кодом?", conversationHistory)
 console.log(response3)
 
 // Запрос с кастомной конфигурацией
@@ -43,7 +43,7 @@ const customConfig = {
   maxOutputTokens: 200,
   topP: 0.9
 }
-const response4 = await adapter.generateContent('your-api-key', 'Расскажи анекдот', undefined, undefined, customConfig)
+const response4 = await adapter.generateContent("your-api-key", "Расскажи анекдот", undefined, undefined, customConfig)
 console.log(response4)
 ```
 
@@ -58,7 +58,7 @@ const systemPrompt = await this.getSystemPromptForChat(chatId)
 // Получаем историю разговора из контекста
 const context = this.getOrCreateContext(chatId.toString())
 const conversationHistory = context.messages.map(msg => ({
-  role: msg.role === 'assistant' ? 'model' : 'user',
+  role: msg.role === "assistant" ? "model" : "user",
   parts: [{ text: msg.content }]
 }))
 
@@ -74,11 +74,11 @@ const response = await geminiAdapter.generateContent(apiKey, message, conversati
 
 ```typescript
 interface GenerationConfig {
-  temperature: number        // Творческость ответов (0.0-2.0, по умолчанию: 1.0)
-  maxOutputTokens: number   // Максимальное количество токенов в ответе (по умолчанию: 800)
-  topP: number             // Nucleus sampling (0.0-1.0, по умолчанию: 0.8)
-  topK: number             // Top-K sampling (по умолчанию: 10)
-  stopSequences: string[]  // Последовательности для остановки генерации (по умолчанию: ["Title"])
+  temperature: number // Творческость ответов (0.0-2.0, по умолчанию: 1.0)
+  maxOutputTokens: number // Максимальное количество токенов в ответе (по умолчанию: 800)
+  topP: number // Nucleus sampling (0.0-1.0, по умолчанию: 0.8)
+  topK: number // Top-K sampling (по умолчанию: 10)
+  stopSequences: string[] // Последовательности для остановки генерации (по умолчанию: ["Title"])
 }
 ```
 
@@ -86,10 +86,10 @@ interface GenerationConfig {
 
 ```typescript
 const defaultConfig = {
-  temperature: 1.0,        // Сбалансированная творческость
-  maxOutputTokens: 800,    // Достаточно для развернутых ответов
-  topP: 0.8,              // Разнообразие в ответах
-  topK: 10,               // Ограничение выбора слов
+  temperature: 1.0, // Сбалансированная творческость
+  maxOutputTokens: 800, // Достаточно для развернутых ответов
+  topP: 0.8, // Разнообразие в ответах
+  topK: 10, // Ограничение выбора слов
   stopSequences: ["Title"] // Остановка на заголовках
 }
 ```
@@ -251,15 +251,15 @@ node test-gemini-adapter.js YOUR_API_KEY
 - API ключи хранятся в базе данных
 - Логи не содержат полных API ключей (маскируются)
 - Лимиты запросов защищают от злоупотреблений
-- Валидация входных данных 
+- Валидация входных данных
 
 ### Структура сообщений
 
 ```typescript
 interface GeminiMessage {
-  role: 'user' | 'model'  // 'user' для пользователя, 'model' для ИИ
+  role: "user" | "model" // 'user' для пользователя, 'model' для ИИ
   parts: Array<{
     text: string
   }>
 }
-``` 
+```

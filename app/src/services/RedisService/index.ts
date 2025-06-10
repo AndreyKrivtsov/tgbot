@@ -1,7 +1,8 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
-import { createClient, type RedisClientType } from "redis"
+import { createClient } from "redis"
+import type { RedisClientType } from "redis"
 
 /**
  * Сервис Redis для высокопроизводительного кэширования
@@ -35,39 +36,39 @@ export class RedisService implements IService {
       this.client = createClient({
         url: this.config.REDIS_URL,
         socket: {
-          connectTimeout: 10000,  // 10 секунд таймаут подключения
+          connectTimeout: 10000, // 10 секунд таймаут подключения
           reconnectStrategy: (retries) => {
             if (retries > 3) {
               this.logger.e("Redis: Maximum reconnection attempts reached")
               return false
             }
             return Math.min(retries * 1000, 5000) // Экспоненциальная задержка до 5 сек
-          }
+          },
         },
         database: 0, // База по умолчанию
       })
 
       // Обработчики событий
-      this.client.on('error', (error) => {
+      this.client.on("error", (error) => {
         this.logger.e("Redis error:", error)
         this.isConnected = false
       })
 
-      this.client.on('connect', () => {
+      this.client.on("connect", () => {
         this.logger.d("Redis client connected")
       })
 
-      this.client.on('ready', () => {
+      this.client.on("ready", () => {
         this.logger.d("Redis client ready")
         this.isConnected = true
       })
 
-      this.client.on('end', () => {
+      this.client.on("end", () => {
         this.logger.d("Redis client disconnected")
         this.isConnected = false
       })
 
-      this.client.on('reconnecting', () => {
+      this.client.on("reconnecting", () => {
         this.logger.d("Redis client reconnecting...")
       })
 
@@ -95,13 +96,12 @@ export class RedisService implements IService {
 
       // Тестируем подключение
       await this.client.ping()
-      
+
       this.logger.i("✅ Redis service started successfully")
 
       // Логируем информацию о подключении
       const info = await this.getConnectionInfo()
       this.logger.i(`📊 Redis info: ${JSON.stringify(info)}`)
-
     } catch (error) {
       this.logger.e("❌ Failed to start Redis service:", error)
       this.isConnected = false
@@ -149,20 +149,20 @@ export class RedisService implements IService {
    */
   async getConnectionInfo(): Promise<object> {
     if (!this.client || !this.isConnected) {
-      return { 
-        isConnected: false, 
-        status: this.client ? "disconnected" : "not_configured" 
+      return {
+        isConnected: false,
+        status: this.client ? "disconnected" : "not_configured",
       }
     }
 
     try {
       const info = await this.client.info()
-      const lines = info.split('\r\n')
+      const lines = info.split("\r\n")
       const parsed: Record<string, string> = {}
-      
+
       for (const line of lines) {
-        if (line.includes(':')) {
-          const [key, value] = line.split(':')
+        if (line.includes(":")) {
+          const [key, value] = line.split(":")
           if (key && value !== undefined) {
             parsed[key] = value
           }
@@ -177,14 +177,14 @@ export class RedisService implements IService {
         connectedClients: parsed.connected_clients,
         usedMemory: parsed.used_memory_human,
         totalConnectionsReceived: parsed.total_connections_received,
-        totalCommandsProcessed: parsed.total_commands_processed
+        totalCommandsProcessed: parsed.total_commands_processed,
       }
     } catch (error) {
       this.logger.e("Error getting Redis connection info:", error)
       return {
         isConnected: this.isConnected,
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -192,7 +192,7 @@ export class RedisService implements IService {
   /**
    * Проверка здоровья Redis
    */
-  async healthCheck(): Promise<{ healthy: boolean; latency?: number; error?: string }> {
+  async healthCheck(): Promise<{ healthy: boolean, latency?: number, error?: string }> {
     if (!this.client || !this.isConnected) {
       return { healthy: false, error: "Redis not available" }
     }
@@ -206,7 +206,7 @@ export class RedisService implements IService {
     } catch (error) {
       return {
         healthy: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -217,17 +217,18 @@ export class RedisService implements IService {
    * Установка значения с TTL
    */
   async set(key: string, value: any, ttlSeconds?: number): Promise<boolean> {
-    if (!this.client || !this.isConnected) return false
+    if (!this.client || !this.isConnected)
+      return false
 
     try {
       const serialized = JSON.stringify(value)
-      
+
       if (ttlSeconds) {
         await this.client.setEx(key, ttlSeconds, serialized)
       } else {
         await this.client.set(key, serialized)
       }
-      
+
       return true
     } catch (error) {
       this.logger.e(`Redis SET error for key ${key}:`, error)
@@ -239,7 +240,8 @@ export class RedisService implements IService {
    * Получение значения
    */
   async get<T = any>(key: string): Promise<T | null> {
-    if (!this.client || !this.isConnected) return null
+    if (!this.client || !this.isConnected)
+      return null
 
     try {
       const value = await this.client.get(key)
@@ -254,7 +256,8 @@ export class RedisService implements IService {
    * Удаление ключа
    */
   async del(key: string): Promise<boolean> {
-    if (!this.client || !this.isConnected) return false
+    if (!this.client || !this.isConnected)
+      return false
 
     try {
       const result = await this.client.del(key)
@@ -269,7 +272,8 @@ export class RedisService implements IService {
    * Проверка существования ключа
    */
   async exists(key: string): Promise<boolean> {
-    if (!this.client || !this.isConnected) return false
+    if (!this.client || !this.isConnected)
+      return false
 
     try {
       const result = await this.client.exists(key)
@@ -284,16 +288,17 @@ export class RedisService implements IService {
    * Увеличение счетчика
    */
   async incr(key: string, ttlSeconds?: number): Promise<number> {
-    if (!this.client || !this.isConnected) return 0
+    if (!this.client || !this.isConnected)
+      return 0
 
     try {
       const result = await this.client.incr(key)
-      
+
       // Устанавливаем TTL только при первом создании ключа
       if (result === 1 && ttlSeconds) {
         await this.client.expire(key, ttlSeconds)
       }
-      
+
       return result
     } catch (error) {
       this.logger.e(`Redis INCR error for key ${key}:`, error)
@@ -305,7 +310,8 @@ export class RedisService implements IService {
    * Установка TTL для существующего ключа
    */
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
-    if (!this.client || !this.isConnected) return false
+    if (!this.client || !this.isConnected)
+      return false
 
     try {
       const result = await this.client.expire(key, ttlSeconds)
@@ -362,11 +368,11 @@ export class RedisService implements IService {
    * AI лимиты
    */
   async incrementAILimit(chatId: number): Promise<number> {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split("T")[0]
     const key = `ai:limit:${chatId}:${today}`
-    
+
     const count = await this.incr(key)
-    
+
     // Устанавливаем TTL до конца дня
     if (count === 1) {
       const tomorrow = new Date()
@@ -375,12 +381,12 @@ export class RedisService implements IService {
       const ttl = Math.floor((tomorrow.getTime() - Date.now()) / 1000)
       await this.expire(key, ttl)
     }
-    
+
     return count
   }
 
   async getAILimit(chatId: number): Promise<number> {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split("T")[0]
     const count = await this.get<number>(`ai:limit:${chatId}:${today}`)
     return count || 0
   }
@@ -395,21 +401,21 @@ export class RedisService implements IService {
 
     try {
       const info = await this.client.info()
-      const memory = await this.client.info('memory')
-      const stats = await this.client.info('stats')
-      
+      const memory = await this.client.info("memory")
+      const stats = await this.client.info("stats")
+
       return {
         available: true,
         isConnected: this.isConnected,
         info: this.parseRedisInfo(info),
         memory: this.parseRedisInfo(memory),
-        stats: this.parseRedisInfo(stats)
+        stats: this.parseRedisInfo(stats),
       }
     } catch (error) {
       this.logger.e("Error getting Redis stats:", error)
       return {
         available: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -419,17 +425,17 @@ export class RedisService implements IService {
    */
   private parseRedisInfo(info: string): Record<string, string> {
     const result: Record<string, string> = {}
-    const lines = info.split('\r\n')
-    
+    const lines = info.split("\r\n")
+
     for (const line of lines) {
-      if (line.includes(':')) {
-        const [key, value] = line.split(':')
+      if (line.includes(":")) {
+        const [key, value] = line.split(":")
         if (key && value !== undefined) {
           result[key] = value
         }
       }
     }
-    
+
     return result
   }
-} 
+}

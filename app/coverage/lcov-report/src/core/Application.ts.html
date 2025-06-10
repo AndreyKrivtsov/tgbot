@@ -278,7 +278,8 @@
 <a name='L213'></a><a href='#L213'>213</a>
 <a name='L214'></a><a href='#L214'>214</a>
 <a name='L215'></a><a href='#L215'>215</a>
-<a name='L216'></a><a href='#L216'>216</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L216'></a><a href='#L216'>216</a>
+<a name='L217'></a><a href='#L217'>217</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -492,6 +493,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Container } from "./Container.js"
 import type { Logger } from "../helpers/Logger.js"
@@ -574,7 +576,7 @@ export class Application {
 <span class="cstat-no" title="statement not covered" >      return new DatabaseService(this.config, this.logger)</span>
     })
 &nbsp;
-    // Cache Service  
+    // Cache Service
 <span class="cstat-no" title="statement not covered" >    this.container.register("cache", <span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
       const { CacheService } = <span class="cstat-no" title="statement not covered" >await import("../services/CacheService/index.js")</span>
 <span class="cstat-no" title="statement not covered" >      return new CacheService(this.config, this.logger)</span>
@@ -608,32 +610,32 @@ export class Application {
 <span class="cstat-no" title="statement not covered" >    this.container.register("captcha", <span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
       const { CaptchaService } = <span class="cstat-no" title="statement not covered" >await import("../services/CaptchaService/index.js")</span>
       const repository = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("repository")</span>
-      
+&nbsp;
       // Настройки капчи (можно перенести в БД позже)
       const captchaSettings = <span class="cstat-no" title="statement not covered" >{</span>
-        timeoutMs: 60000,        // 60 секунд
-        checkIntervalMs: 5000    // 5 секунд
+        timeoutMs: 60000, // 60 секунд
+        checkIntervalMs: 5000, // 5 секунд
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return new CaptchaService(this.config, this.logger, {</span>
-        repository
+        repository,
       }, captchaSettings)
     })
 &nbsp;
     // Anti-Spam Service
 <span class="cstat-no" title="statement not covered" >    this.container.register("antiSpam", <span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
       const { AntiSpamService } = <span class="cstat-no" title="statement not covered" >await import("../services/AntiSpamService/index.js")</span>
-      
+&nbsp;
       // Настройки антиспама (можно перенести в БД позже)
       const antiSpamSettings = <span class="cstat-no" title="statement not covered" >{</span>
-        timeoutMs: 5000,        // 5 секунд
-        maxRetries: 2,          // 2 попытки
-        retryDelayMs: 1000      // 1 секунда
+        timeoutMs: 5000, // 5 секунд
+        maxRetries: 2, // 2 попытки
+        retryDelayMs: 1000, // 1 секунда
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("🛡️ [ANTISPAM DEBUG] Registering AntiSpamService with settings:", JSON.stringify(antiSpamSettings, null, 2))</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.i("🛡️ [ANTISPAM DEBUG] ANTISPAM_URL from config:", this.config.ANTISPAM_URL)</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return new AntiSpamService(this.config, this.logger, {}, antiSpamSettings)</span>
     })
 &nbsp;
@@ -642,10 +644,10 @@ export class Application {
       const { AIChatService } = <span class="cstat-no" title="statement not covered" >await import("../services/AIChatService/index.js")</span>
       const aiService = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("aiService")</span>
       const database = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("database") as any</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return new AIChatService(this.config, this.logger, {</span>
         aiService,
-        database
+        database,
       })
     })
 &nbsp;
@@ -665,37 +667,37 @@ export class Application {
       const captchaService = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("captcha")</span>
       const antiSpamService = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("antiSpam")</span>
       const aiChatService = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("aiChat")</span>
-      
+&nbsp;
       // Настройки Telegram бота (можно перенести в БД позже)
       const botSettings = <span class="cstat-no" title="statement not covered" >{</span>
-        captchaTimeoutMs: 60000,              // 60 секунд
-        captchaCheckIntervalMs: 5000,         // 5 секунд  
-        errorMessageDeleteTimeoutMs: 60000,   // 60 секунд
-        deleteSystemMessages: true,           // Удалять системные сообщения
-        temporaryBanDurationSec: 40,          // 40 секунд
-        autoUnbanDelayMs: 5000,               // 5 секунд
-        maxMessagesForSpamCheck: 5            // Проверять антиспамом первые 5 сообщений
+        captchaTimeoutMs: 60000, // 60 секунд
+        captchaCheckIntervalMs: 5000, // 5 секунд
+        errorMessageDeleteTimeoutMs: 60000, // 60 секунд
+        deleteSystemMessages: true, // Удалять системные сообщения
+        temporaryBanDurationSec: 40, // 40 секунд
+        autoUnbanDelayMs: 5000, // 5 секунд
+        maxMessagesForSpamCheck: 5, // Проверять антиспамом первые 5 сообщений
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return new TelegramBotService(this.config, this.logger, {</span>
         repository,
         captchaService: captchaService as any,
         antiSpamService: antiSpamService as any,
-        aiChatService: aiChatService as any
+        aiChatService: aiChatService as any,
       }, botSettings)
     })
 &nbsp;
-    // Web Server Service
-<span class="cstat-no" title="statement not covered" >    this.container.register("webServer", <span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
-      const { WebServerService } = <span class="cstat-no" title="statement not covered" >await import("../services/WebServerService/index.js")</span>
+    // API Server Service
+<span class="cstat-no" title="statement not covered" >    this.container.register("apiServer", <span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
+      const { ApiServerService } = <span class="cstat-no" title="statement not covered" >await import("../services/ApiServerService/index.js")</span>
       const database = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("database")</span>
       const repository = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("repository")</span>
       const telegramBot = <span class="cstat-no" title="statement not covered" >await this.container.getAsync("telegramBot")</span>
-      
-<span class="cstat-no" title="statement not covered" >      return new WebServerService(this.config, this.logger, {</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >      return new ApiServerService(this.config, this.logger, {</span>
         database,
         repository,
-        telegramBot
+        telegramBot,
       })
     })
 &nbsp;
@@ -708,14 +710,15 @@ export class Application {
 <span class="fstat-no" title="function not covered" >  getContainer(</span>): Container {
 <span class="cstat-no" title="statement not covered" >    return this.container</span>
   }
-} </pre></td></tr></table></pre>
+}
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-10T10:32:55.164Z
+                at 2025-06-10T14:33:22.346Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

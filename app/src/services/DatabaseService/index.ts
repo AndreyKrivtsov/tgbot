@@ -25,7 +25,7 @@ export class DatabaseService implements IService {
    */
   async initialize(): Promise<void> {
     this.logger.i("🗄️ Initializing database service...")
-    
+
     try {
       // Проверяем наличие DATABASE_URL
       if (!this.config.DATABASE_URL) {
@@ -35,19 +35,19 @@ export class DatabaseService implements IService {
 
       // Создаем подключение к PostgreSQL
       this.sql = postgres(this.config.DATABASE_URL, {
-        max: 20,          // Максимум соединений в пуле
+        max: 20, // Максимум соединений в пуле
         idle_timeout: 20, // Таймаут неактивных соединений (секунды)
         connect_timeout: 10, // Таймаут подключения (секунды)
-        prepare: true,    // Подготовленные запросы для производительности
+        prepare: true, // Подготовленные запросы для производительности
         transform: {
-          undefined: null // Преобразование undefined в NULL
-        }
+          undefined: null, // Преобразование undefined в NULL
+        },
       })
 
       // Создаем Drizzle ORM экземпляр
-      this.db = drizzle(this.sql, { 
+      this.db = drizzle(this.sql, {
         schema,
-        logger: this.config.NODE_ENV === 'development'
+        logger: this.config.NODE_ENV === "development",
       })
 
       this.logger.i("✅ Database service initialized")
@@ -62,7 +62,7 @@ export class DatabaseService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting database service...")
-    
+
     if (!this.sql || !this.db) {
       this.logger.w("🚫 Database not configured, skipping connection test")
       return
@@ -72,13 +72,12 @@ export class DatabaseService implements IService {
       // Тестируем подключение
       await this.sql`SELECT 1 as test`
       this.isConnected = true
-      
+
       this.logger.i("✅ Database service started - connection successful")
-      
+
       // Логируем информацию о подключении
       const connectionInfo = await this.getConnectionInfo()
       this.logger.i(`📊 Database info: ${JSON.stringify(connectionInfo)}`)
-      
     } catch (error) {
       this.logger.e("❌ Failed to start database service:", error)
       throw error
@@ -90,7 +89,7 @@ export class DatabaseService implements IService {
    */
   async stop(): Promise<void> {
     this.logger.i("🛑 Stopping database service...")
-    
+
     try {
       if (this.sql) {
         await this.sql.end()
@@ -98,7 +97,7 @@ export class DatabaseService implements IService {
         this.db = null
         this.isConnected = false
       }
-      
+
       this.logger.i("✅ Database service stopped")
     } catch (error) {
       this.logger.e("Error stopping database service:", error)
@@ -148,32 +147,32 @@ export class DatabaseService implements IService {
           inet_server_addr() as server_addr,
           inet_server_port() as server_port
       `
-      
+
       if (!result || result.length === 0) {
         return {
           isConnected: this.isConnected,
           status: "error",
-          error: "No connection info available"
+          error: "No connection info available",
         }
       }
 
       const info = result[0] as any
-      const versionParts = info.version?.split(' ') || []
-      
+      const versionParts = info.version?.split(" ") || []
+
       return {
         isConnected: this.isConnected,
         status: "connected",
         database: info.database || "unknown",
         user: info.user || "unknown",
         version: versionParts.length >= 2 ? `${versionParts[0]} ${versionParts[1]}` : (info.version || "unknown"),
-        server: `${info.server_addr || 'localhost'}:${info.server_port || 5432}`
+        server: `${info.server_addr || "localhost"}:${info.server_port || 5432}`,
       }
     } catch (error) {
       this.logger.e("Error getting connection info:", error)
       return {
         isConnected: this.isConnected,
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -181,7 +180,7 @@ export class DatabaseService implements IService {
   /**
    * Выполнение здоровья БД
    */
-  async healthCheck(): Promise<{ healthy: boolean; latency?: number; error?: string }> {
+  async healthCheck(): Promise<{ healthy: boolean, latency?: number, error?: string }> {
     if (!this.sql) {
       return { healthy: false, error: "Database not initialized" }
     }
@@ -190,12 +189,12 @@ export class DatabaseService implements IService {
       const start = Date.now()
       await this.sql`SELECT 1 as ping`
       const latency = Date.now() - start
-      
+
       return { healthy: true, latency }
     } catch (error) {
-      return { 
-        healthy: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+      return {
+        healthy: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -233,15 +232,15 @@ export class DatabaseService implements IService {
         size: size[0],
         pool: {
           max: 20,
-          available: this.sql.options.max
-        }
+          available: this.sql.options.max,
+        },
       }
     } catch (error) {
       this.logger.e("Error getting database stats:", error)
       return {
         available: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
-} 
+}

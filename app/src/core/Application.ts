@@ -79,7 +79,7 @@ export class Application {
       return new DatabaseService(this.config, this.logger)
     })
 
-    // Cache Service  
+    // Cache Service
     this.container.register("cache", async () => {
       const { CacheService } = await import("../services/CacheService/index.js")
       return new CacheService(this.config, this.logger)
@@ -113,32 +113,32 @@ export class Application {
     this.container.register("captcha", async () => {
       const { CaptchaService } = await import("../services/CaptchaService/index.js")
       const repository = await this.container.getAsync("repository")
-      
+
       // Настройки капчи (можно перенести в БД позже)
       const captchaSettings = {
-        timeoutMs: 60000,        // 60 секунд
-        checkIntervalMs: 5000    // 5 секунд
+        timeoutMs: 60000, // 60 секунд
+        checkIntervalMs: 5000, // 5 секунд
       }
-      
+
       return new CaptchaService(this.config, this.logger, {
-        repository
+        repository,
       }, captchaSettings)
     })
 
     // Anti-Spam Service
     this.container.register("antiSpam", async () => {
       const { AntiSpamService } = await import("../services/AntiSpamService/index.js")
-      
+
       // Настройки антиспама (можно перенести в БД позже)
       const antiSpamSettings = {
-        timeoutMs: 5000,        // 5 секунд
-        maxRetries: 2,          // 2 попытки
-        retryDelayMs: 1000      // 1 секунда
+        timeoutMs: 5000, // 5 секунд
+        maxRetries: 2, // 2 попытки
+        retryDelayMs: 1000, // 1 секунда
       }
-      
+
       this.logger.i("🛡️ [ANTISPAM DEBUG] Registering AntiSpamService with settings:", JSON.stringify(antiSpamSettings, null, 2))
       this.logger.i("🛡️ [ANTISPAM DEBUG] ANTISPAM_URL from config:", this.config.ANTISPAM_URL)
-      
+
       return new AntiSpamService(this.config, this.logger, {}, antiSpamSettings)
     })
 
@@ -147,10 +147,10 @@ export class Application {
       const { AIChatService } = await import("../services/AIChatService/index.js")
       const aiService = await this.container.getAsync("aiService")
       const database = await this.container.getAsync("database") as any
-      
+
       return new AIChatService(this.config, this.logger, {
         aiService,
-        database
+        database,
       })
     })
 
@@ -170,23 +170,23 @@ export class Application {
       const captchaService = await this.container.getAsync("captcha")
       const antiSpamService = await this.container.getAsync("antiSpam")
       const aiChatService = await this.container.getAsync("aiChat")
-      
+
       // Настройки Telegram бота (можно перенести в БД позже)
       const botSettings = {
-        captchaTimeoutMs: 60000,              // 60 секунд
-        captchaCheckIntervalMs: 5000,         // 5 секунд  
-        errorMessageDeleteTimeoutMs: 60000,   // 60 секунд
-        deleteSystemMessages: true,           // Удалять системные сообщения
-        temporaryBanDurationSec: 40,          // 40 секунд
-        autoUnbanDelayMs: 5000,               // 5 секунд
-        maxMessagesForSpamCheck: 5            // Проверять антиспамом первые 5 сообщений
+        captchaTimeoutMs: 60000, // 60 секунд
+        captchaCheckIntervalMs: 5000, // 5 секунд
+        errorMessageDeleteTimeoutMs: 60000, // 60 секунд
+        deleteSystemMessages: true, // Удалять системные сообщения
+        temporaryBanDurationSec: 40, // 40 секунд
+        autoUnbanDelayMs: 5000, // 5 секунд
+        maxMessagesForSpamCheck: 5, // Проверять антиспамом первые 5 сообщений
       }
-      
+
       return new TelegramBotService(this.config, this.logger, {
         repository,
         captchaService: captchaService as any,
         antiSpamService: antiSpamService as any,
-        aiChatService: aiChatService as any
+        aiChatService: aiChatService as any,
       }, botSettings)
     })
 
@@ -196,11 +196,11 @@ export class Application {
       const database = await this.container.getAsync("database")
       const repository = await this.container.getAsync("repository")
       const telegramBot = await this.container.getAsync("telegramBot")
-      
+
       return new ApiServerService(this.config, this.logger, {
         database,
         repository,
-        telegramBot
+        telegramBot,
       })
     })
 
@@ -213,4 +213,4 @@ export class Application {
   getContainer(): Container {
     return this.container
   }
-} 
+}

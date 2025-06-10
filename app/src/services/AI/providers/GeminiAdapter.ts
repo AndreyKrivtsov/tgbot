@@ -1,5 +1,5 @@
 export interface GeminiMessage {
-  role: 'user' | 'model'
+  role: "user" | "model"
   parts: Array<{
     text: string
   }>
@@ -31,14 +31,14 @@ interface GeminiResponse {
 }
 
 export class GeminiAdapter {
-  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models'
-  private model = 'gemini-2.0-flash'
+  private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
+  private model = "gemini-2.0-flash"
   private defaultConfig = {
     temperature: 1.0,
     maxOutputTokens: 800,
     topP: 0.8,
     topK: 10,
-    stopSequences: ["Title"]
+    stopSequences: ["Title"],
   }
 
   constructor() {
@@ -50,10 +50,10 @@ export class GeminiAdapter {
    */
   async generateContent(
     apiKey: string,
-    prompt: string, 
+    prompt: string,
     conversationHistory?: GeminiMessage[],
     systemPrompt?: string,
-    customConfig?: Partial<typeof this.defaultConfig>
+    customConfig?: Partial<typeof this.defaultConfig>,
   ): Promise<string> {
     try {
       // Подготавливаем содержимое запроса
@@ -62,8 +62,8 @@ export class GeminiAdapter {
       // Добавляем системный промпт если есть (как первое user сообщение)
       if (systemPrompt) {
         contents.push({
-          role: 'user',
-          parts: [{ text: systemPrompt }]
+          role: "user",
+          parts: [{ text: systemPrompt }],
         })
       }
 
@@ -74,24 +74,24 @@ export class GeminiAdapter {
 
       // Добавляем новый промпт пользователя
       contents.push({
-        role: 'user',
-        parts: [{ text: prompt }]
+        role: "user",
+        parts: [{ text: prompt }],
       })
 
       // Объединяем конфигурацию по умолчанию с пользовательской
       const generationConfig = {
         ...this.defaultConfig,
-        ...customConfig
+        ...customConfig,
       }
 
       const requestBody: GeminiRequest = {
         contents,
-        generationConfig
+        generationConfig,
       }
 
       // Валидация API ключа
       if (!apiKey) {
-        throw new Error('Gemini API key is required')
+        throw new Error("Gemini API key is required")
       }
 
       // Формируем URL с API ключом
@@ -99,11 +99,11 @@ export class GeminiAdapter {
 
       // Выполняем запрос
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -129,10 +129,9 @@ export class GeminiAdapter {
         }
       }
 
-      throw new Error('No valid response from Gemini API')
-
+      throw new Error("No valid response from Gemini API")
     } catch (error) {
-      console.error('Gemini API request failed:', error)
+      console.error("Gemini API request failed:", error)
       throw error
     }
   }
@@ -142,10 +141,10 @@ export class GeminiAdapter {
    */
   async testConnection(apiKey: string): Promise<boolean> {
     try {
-      const response = await this.generateContent(apiKey, 'Hello')
+      const response = await this.generateContent(apiKey, "Hello")
       return response.length > 0
     } catch (error) {
-      console.error('Gemini API connection test failed:', error)
+      console.error("Gemini API connection test failed:", error)
       return false
     }
   }
@@ -169,7 +168,7 @@ export class GeminiAdapter {
   }>): void {
     this.defaultConfig = {
       ...this.defaultConfig,
-      ...config
+      ...config,
     }
   }
 
@@ -187,7 +186,7 @@ export class GeminiAdapter {
     return {
       model: this.model,
       baseUrl: this.baseUrl,
-      config: this.getDefaultConfig()
+      config: this.getDefaultConfig(),
     }
   }
-} 
+}

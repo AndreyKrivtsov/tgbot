@@ -52,10 +52,10 @@ class TelegramBotService {
 Каждый сервис реализует интерфейс `IService`:
 ```typescript
 interface IService {
-  initialize?(): Promise<void>  // Инициализация ресурсов
-  start?(): Promise<void>       // Запуск сервиса
-  stop?(): Promise<void>        // Остановка сервиса
-  dispose?(): Promise<void>     // Освобождение ресурсов
+  initialize?: () => Promise<void> // Инициализация ресурсов
+  start?: () => Promise<void> // Запуск сервиса
+  stop?: () => Promise<void> // Остановка сервиса
+  dispose?: () => Promise<void> // Освобождение ресурсов
 }
 ```
 
@@ -128,9 +128,9 @@ const service = await container.getAsync<ServiceType>("serviceName")
 
 // Жизненный цикл
 await container.initialize() // Создание всех экземпляров + initialize()
-await container.start()      // Запуск всех сервисов (start())
-await container.stop()       // Остановка всех сервисов (stop())
-await container.dispose()    // Освобождение ресурсов (dispose())
+await container.start() // Запуск всех сервисов (start())
+await container.stop() // Остановка всех сервисов (stop())
+await container.dispose() // Освобождение ресурсов (dispose())
 ```
 
 ### 🎯 Application (Оркестратор)
@@ -156,20 +156,20 @@ await container.dispose()    // Освобождение ресурсов (dispo
 **Логика работы**:
 ```typescript
 interface CaptchaChallenge {
-  question: number[]  // [5, 3] для "5 + 3 = ?"
-  answer: number      // 8
-  options: number[]   // [6, 8, 9, 11] - 4 варианта ответа
+  question: number[] // [5, 3] для "5 + 3 = ?"
+  answer: number // 8
+  options: number[] // [6, 8, 9, 11] - 4 варианта ответа
 }
 
 interface RestrictedUser {
   userId: number
   chatId: number
-  questionId: number      // ID сообщения с капчей
-  answer: number          // Правильный ответ
+  questionId: number // ID сообщения с капчей
+  answer: number // Правильный ответ
   username?: string
   firstname: string
-  timestamp: number       // Время создания капчи
-  isAnswered: boolean     // Флаг ответа
+  timestamp: number // Время создания капчи
+  isAnswered: boolean // Флаг ответа
 }
 ```
 
@@ -193,9 +193,9 @@ interface RestrictedUser {
 ```typescript
 interface UserSpamCheck {
   userId: number
-  messageCount: number    // Счетчик сообщений (макс 5)
-  isChecking: boolean     // Флаг активной AI проверки
-  lastCheckTime: number   // Время последней проверки
+  messageCount: number // Счетчик сообщений (макс 5)
+  isChecking: boolean // Флаг активной AI проверки
+  lastCheckTime: number // Время последней проверки
 }
 ```
 
@@ -223,11 +223,11 @@ interface UserSpamCheck {
 ```typescript
 interface ChatContext {
   chatId: string
-  messages: ChatMessage[]     // История сообщений (макс 20)
+  messages: ChatMessage[] // История сообщений (макс 20)
   lastActivity: number
-  requestCount: number        // Общий счетчик запросов
-  dailyRequestCount: number   // Дневной счетчик (лимит 1500)
-  lastDailyReset: number     // Время последнего сброса
+  requestCount: number // Общий счетчик запросов
+  dailyRequestCount: number // Дневной счетчик (лимит 1500)
+  lastDailyReset: number // Время последнего сброса
 }
 
 interface MessageQueue {
@@ -235,7 +235,7 @@ interface MessageQueue {
   message: string
   contextId: string
   timestamp: number
-  retryCount: number         // Попытки повтора (макс 3)
+  retryCount: number // Попытки повтора (макс 3)
 }
 ```
 
@@ -294,18 +294,18 @@ bot.on("callback_query", handleCallbackQuery)
 1. **Событие**: `chat_member` с переходом `left -> member`
 2. **Генерация капчи**:
    ```typescript
-   const question = [randomNumber(1,10), randomNumber(1,10)]
+   const question = [randomNumber(1, 10), randomNumber(1, 10)]
    const answer = question[0] + question[1]
    const options = [wrongAnswer1, wrongAnswer2, wrongAnswer3, answer] // перемешаны
    ```
 3. **Отправка сообщения**:
    ```
    "@username, добро пожаловать! 🎉
-   
+
    Для получения доступа к чату решите простой пример:
-   
+
    5 + 3 = ?
-   
+
    [6] [8] [9] [11]  // InlineKeyboard
    ```
 4. **Ограничение прав**:
@@ -329,11 +329,11 @@ bot.on("callback_query", handleCallbackQuery)
 
 2. **AI проверка**:
    ```typescript
-   const prompt = `Проанализируй это сообщение и определи, является ли оно спамом. 
+   const prompt = `Проанализируй это сообщение и определи, является ли оно спамом.
    Отвечай только "СПАМ" или "НЕ СПАМ":
-   
+
    Сообщение: "${message}"
-   
+
    Критерии спама:
    - Реклама товаров/услуг
    - Призывы к переходам по ссылкам
@@ -352,12 +352,12 @@ bot.on("callback_query", handleCallbackQuery)
 
 **Подготовка сообщения для AI**:
 ```typescript
-const prepareContextualMessage = (message, username, firstName) => {
+function prepareContextualMessage(message, username, firstName) {
   const date = new Date().toISOString().replace(/:\d+\.\d+Z/gi, "").replace("T", " ")
-  const userInfo = firstName ? 
-    (username ? `@${username}][${firstName}` : `${firstName}`) :
-    (username ? `@${username}` : "пользователь")
-  
+  const userInfo = firstName
+    ? (username ? `@${username}][${firstName}` : `${firstName}`)
+    : (username ? `@${username}` : "пользователь")
+
   return `[${date}][${userInfo}] пользователь спрашивает тебя: ${message}`
 }
 // Результат: "[2025-06-05 20:30][[@john][John Doe] пользователь спрашивает тебя: Привет, как дела?"
@@ -383,11 +383,11 @@ const prepareContextualMessage = (message, username, firstName) => {
 
 **Endpoints**:
 ```typescript
-GET  /api/health           // Статус приложения
-GET  /api/config           // Конфигурация бота (только для создателя)
-POST /api/config           // Обновление конфигурации
-GET  /api/stats            // Статистика сервисов
-GET  /admin                // Telegram WebApp интерфейс
+GET / api / health // Статус приложения
+GET / api / config // Конфигурация бота (только для создателя)
+POST / api / config // Обновление конфигурации
+GET / api / stats // Статистика сервисов
+GET / admin // Telegram WebApp интерфейс
 ```
 
 ### Telegram WebApp
@@ -413,22 +413,22 @@ export const config = {
   // Основные настройки
   NODE_ENV: process.env.NODE_ENV || "development",
   BOT_TOKEN: process.env.BOT_TOKEN!,
-  
+
   // Веб-сервер
-  WEB_PORT: parseInt(process.env.WEB_PORT || "3000"),
+  WEB_PORT: Number.parseInt(process.env.WEB_PORT || "3000"),
   WEB_HOST: process.env.WEB_HOST || "0.0.0.0",
-  
+
   // База данных
   DATABASE_URL: process.env.DATABASE_URL || "postgresql://...",
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
-  
+
   // AI API
   AI_API_KEY: process.env.AI_API_KEY || "",
-  AI_API_THROTTLE: parseInt(process.env.AI_API_THROTTLE || "3000"),
-  
+  AI_API_THROTTLE: Number.parseInt(process.env.AI_API_THROTTLE || "3000"),
+
   // Чат по умолчанию
-  DEFAULT_CHAT_ID: parseInt(process.env.DEFAULT_CHAT_ID || "0"),
-  
+  DEFAULT_CHAT_ID: Number.parseInt(process.env.DEFAULT_CHAT_ID || "0"),
+
   // Админ
   ADMIN_USERNAME: process.env.ADMIN_USERNAME || "",
 }
@@ -528,10 +528,10 @@ this.bot.command("newcommand", (context) => {
 
 **Логирование**:
 ```typescript
-this.logger.d("Debug message")     // DEBUG
-this.logger.i("Info message")      // INFO  
-this.logger.w("Warning message")   // WARN
-this.logger.e("Error message")     // ERROR
+this.logger.d("Debug message") // DEBUG
+this.logger.i("Info message") // INFO
+this.logger.w("Warning message") // WARN
+this.logger.e("Error message") // ERROR
 ```
 
 **Статистика сервисов**:
@@ -562,7 +562,7 @@ describe("CaptchaService", () => {
   it("should generate valid captcha", () => {
     const captchaService = new CaptchaService(config, logger)
     const captcha = captchaService.generateCaptcha()
-    
+
     expect(captcha.question).toHaveLength(2)
     expect(captcha.options).toHaveLength(4)
     expect(captcha.options).toContain(captcha.answer)
@@ -584,7 +584,7 @@ CMD ["npm", "start"]
 
 **Docker Compose**:
 ```yaml
-version: '3.8'
+version: "3.8"
 services:
   bot:
     build: .
@@ -594,14 +594,14 @@ services:
     depends_on:
       - postgres
       - redis
-  
+
   postgres:
     image: postgres:15
     environment:
       POSTGRES_DB: botdb
       POSTGRES_USER: botuser
       POSTGRES_PASSWORD: botpass
-  
+
   redis:
     image: redis:7-alpine
 ```
@@ -669,7 +669,7 @@ npm run lint       # Линтинг кода
 - [ ] Веб-интерфейс администратора
 - [ ] Расширенная аналитика
 
-### Долгосрочные планы  
+### Долгосрочные планы
 - [ ] Мультигрупповая поддержка
 - [ ] Дополнительные AI провайдеры
 - [ ] Кастомизируемые правила антиспама
@@ -678,6 +678,6 @@ npm run lint       # Линтинг кода
 
 ---
 
-*Документация обновлена: 05.06.2025*  
-*Версия архитектуры: 2.0*  
+*Документация обновлена: 05.06.2025*
+*Версия архитектуры: 2.0*
 *Автор: AI Assistant + Development Team*

@@ -57,4 +57,4 @@ npm run build
 
 # Копирование в static папку
 npm run deploy
-``` 
+```

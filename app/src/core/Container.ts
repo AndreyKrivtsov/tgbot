@@ -4,10 +4,10 @@ export type ServiceFactory<T = any> = () => T | Promise<T>
 export type ServiceInstance<T = any> = T
 
 export interface IService {
-  initialize?(): Promise<void>
-  start?(): Promise<void>
-  stop?(): Promise<void>
-  dispose?(): Promise<void>
+  initialize?: () => Promise<void>
+  start?: () => Promise<void>
+  stop?: () => Promise<void>
+  dispose?: () => Promise<void>
 }
 
 /**
@@ -54,7 +54,7 @@ export class Container {
 
       // Если фабрика возвращает Promise, выбрасываем ошибку
       if (instance instanceof Promise) {
-        throw new Error(`Service "${name}" factory returns Promise. Use getAsync() instead.`)
+        throw new TypeError(`Service "${name}" factory returns Promise. Use getAsync() instead.`)
       }
 
       this.services.set(name, instance)
@@ -215,4 +215,4 @@ export class Container {
   private isService(obj: any): obj is IService {
     return obj != null && typeof obj === "object"
   }
-} 
+}

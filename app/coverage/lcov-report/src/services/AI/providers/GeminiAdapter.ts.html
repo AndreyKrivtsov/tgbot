@@ -388,7 +388,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -442,13 +441,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export interface GeminiMessage {
-  role: 'user' | 'model'
+  role: "user" | "model"
   parts: Array&lt;{
     text: string
   }&gt;
@@ -480,14 +480,14 @@ interface GeminiResponse {
 }
 &nbsp;
 export class GeminiAdapter {
-  private baseUrl = <span class="cstat-no" title="statement not covered" >'https://generativelanguage.googleapis.com/v1beta/models'</span>
-  private model = <span class="cstat-no" title="statement not covered" >'gemini-2.0-flash'</span>
+  private baseUrl = <span class="cstat-no" title="statement not covered" >"https://generativelanguage.googleapis.com/v1beta/models"</span>
+  private model = <span class="cstat-no" title="statement not covered" >"gemini-2.0-flash"</span>
   private defaultConfig = <span class="cstat-no" title="statement not covered" >{</span>
     temperature: 1.0,
     maxOutputTokens: 800,
     topP: 0.8,
     topK: 10,
-    stopSequences: ["Title"]
+    stopSequences: ["Title"],
   }
 &nbsp;
 <span class="fstat-no" title="function not covered" >  constructor() {</span>
@@ -499,10 +499,10 @@ export class GeminiAdapter {
    */
 <span class="fstat-no" title="function not covered" >  async </span>generateContent(
     apiKey: string,
-    prompt: string, 
+    prompt: string,
     conversationHistory?: GeminiMessage[],
     systemPrompt?: string,
-    customConfig?: Partial&lt;typeof this.defaultConfig&gt;
+    customConfig?: Partial&lt;typeof this.defaultConfig&gt;,
   ): Promise&lt;string&gt; {
 <span class="cstat-no" title="statement not covered" >    try {</span>
       // Подготавливаем содержимое запроса
@@ -511,8 +511,8 @@ export class GeminiAdapter {
       // Добавляем системный промпт если есть (как первое user сообщение)
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (systemPrompt) {</span>
 <span class="cstat-no" title="statement not covered" >        contents.push({</span>
-          role: 'user',
-          parts: [{ text: systemPrompt }]
+          role: "user",
+          parts: [{ text: systemPrompt }],
         })
       }
 &nbsp;
@@ -523,24 +523,24 @@ export class GeminiAdapter {
 &nbsp;
       // Добавляем новый промпт пользователя
 <span class="cstat-no" title="statement not covered" >      contents.push({</span>
-        role: 'user',
-        parts: [{ text: prompt }]
+        role: "user",
+        parts: [{ text: prompt }],
       })
 &nbsp;
       // Объединяем конфигурацию по умолчанию с пользовательской
       const generationConfig = <span class="cstat-no" title="statement not covered" >{</span>
         ...this.defaultConfig,
-        ...customConfig
+        ...customConfig,
       }
 &nbsp;
       const requestBody: GeminiRequest = <span class="cstat-no" title="statement not covered" >{</span>
         contents,
-        generationConfig
+        generationConfig,
       }
 &nbsp;
       // Валидация API ключа
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (!apiKey) {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error('Gemini API key is required')</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error("Gemini API key is required")</span>
       }
 &nbsp;
       // Формируем URL с API ключом
@@ -548,11 +548,11 @@ export class GeminiAdapter {
 &nbsp;
       // Выполняем запрос
       const response = <span class="cstat-no" title="statement not covered" >await fetch(url, {</span>
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       })
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (!response.ok) {</span>
@@ -578,10 +578,9 @@ export class GeminiAdapter {
         }
       }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      throw new Error('No valid response from Gemini API')</span>
-&nbsp;
+<span class="cstat-no" title="statement not covered" >      throw new Error("No valid response from Gemini API")</span>
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Gemini API request failed:', error)</span>
+<span class="cstat-no" title="statement not covered" >      console.error("Gemini API request failed:", error)</span>
 <span class="cstat-no" title="statement not covered" >      throw error</span>
     }
   }
@@ -591,10 +590,10 @@ export class GeminiAdapter {
    */
 <span class="fstat-no" title="function not covered" >  async </span>testConnection(apiKey: string): Promise&lt;boolean&gt; {
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      const response = <span class="cstat-no" title="statement not covered" >await this.generateContent(apiKey, 'Hello')</span>
+      const response = <span class="cstat-no" title="statement not covered" >await this.generateContent(apiKey, "Hello")</span>
 <span class="cstat-no" title="statement not covered" >      return response.length &gt; 0</span>
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Gemini API connection test failed:', error)</span>
+<span class="cstat-no" title="statement not covered" >      console.error("Gemini API connection test failed:", error)</span>
 <span class="cstat-no" title="statement not covered" >      return false</span>
     }
   }
@@ -618,7 +617,7 @@ export class GeminiAdapter {
   }&gt;): void {
 <span class="cstat-no" title="statement not covered" >    this.defaultConfig = {</span>
       ...this.defaultConfig,
-      ...config
+      ...config,
     }
   }
 &nbsp;
@@ -636,17 +635,18 @@ export class GeminiAdapter {
 <span class="cstat-no" title="statement not covered" >    return {</span>
       model: this.model,
       baseUrl: this.baseUrl,
-      config: this.getDefaultConfig()
+      config: this.getDefaultConfig(),
     }
   }
-} </pre></td></tr></table></pre>
+}
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-10T10:32:55.164Z
+                at 2025-06-10T14:33:22.346Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

@@ -56,13 +56,13 @@
 if (isBotMention(message)) {
   // Получение настроек чата
   const chatSettings = await getChatSettings(chatId)
-  
+
   // Использование индивидуального или глобального API ключа
   const apiKey = chatSettings.geminiApiKey || config.AI_API_KEY
-  
+
   // Проверка лимитов
   const limits = await getChatLimits(chatId)
-  
+
   // Обработка с учетом настроек группы
   await processWithCustomSettings(message, chatSettings)
 }
@@ -79,7 +79,7 @@ async trimContextByCharacters(context, maxCharacters) {
   const messagesText = context.messages
     .map(m => `${m.role}: ${m.content}`)
     .join('\n')
-    
+
   if (messagesText.length > maxCharacters) {
     // Оставляем последние maxCharacters символов
     const trimmed = messagesText.slice(-maxCharacters)
@@ -117,12 +117,12 @@ setSystemPrompt(chatId: number, prompt: string | null): Promise<boolean>
 
 ```typescript
 const defaultSettings = {
-  isAiEnabled: true,           // ИИ включен
-  dailyLimit: 1500,           // 1500 запросов в день
-  throttleDelay: 3000,        // 3 секунды между запросами
-  maxContextCharacters: 600,   // 600 символов контекста
-  geminiApiKey: null,         // Использовать глобальный ключ
-  systemPrompt: null          // Без специального промпта
+  isAiEnabled: true, // ИИ включен
+  dailyLimit: 1500, // 1500 запросов в день
+  throttleDelay: 3000, // 3 секунды между запросами
+  maxContextCharacters: 600, // 600 символов контекста
+  geminiApiKey: null, // Использовать глобальный ключ
+  systemPrompt: null // Без специального промпта
 }
 ```
 
@@ -156,7 +156,7 @@ const defaultSettings = {
 await updateChatSettings(chatId, adminUserId, {
   geminiApiKey: "your-custom-api-key",
   systemPrompt: "Ты помощник в группе разработчиков. Отвечай кратко и по делу.",
-  dailyLimit: 500  // Ограничение для экономии
+  dailyLimit: 500 // Ограничение для экономии
 })
 ```
 
@@ -166,4 +166,4 @@ await updateChatSettings(chatId, adminUserId, {
 await toggleAi(chatId, false)
 ```
 
-Такая архитектура обеспечивает максимальную гибкость для каждой группы при минимальной сложности схемы данных. 
+Такая архитектура обеспечивает максимальную гибкость для каждой группы при минимальной сложности схемы данных.

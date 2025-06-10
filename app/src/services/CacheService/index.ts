@@ -29,7 +29,7 @@ export class CacheService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting cache service...")
-    
+
     try {
       // TODO: Подключение к Redis если нужно
       this.isConnected = true
@@ -72,7 +72,7 @@ export class CacheService implements IService {
   set(key: string, value: any, ttl?: number): void {
     this.cache.set(key, {
       value,
-      expires: ttl ? Date.now() + ttl * 1000 : null
+      expires: ttl ? Date.now() + ttl * 1000 : null,
     })
   }
 
@@ -81,7 +81,8 @@ export class CacheService implements IService {
    */
   get(key: string): any {
     const item = this.cache.get(key)
-    if (!item) return null
+    if (!item)
+      return null
 
     if (item.expires && Date.now() > item.expires) {
       this.cache.delete(key)
@@ -112,7 +113,7 @@ export class CacheService implements IService {
     return {
       size: this.cache.size,
       isConnected: this.isConnected,
-      status: this.isConnected ? "active" : "inactive"
+      status: this.isConnected ? "active" : "inactive",
     }
   }
-} 
+}

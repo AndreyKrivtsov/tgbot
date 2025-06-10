@@ -5,27 +5,27 @@ export interface AppConfig {
   NODE_ENV: string
   BOT_TOKEN: string
   DATABASE_URL: string
-  
+
   // Сервисы
   ANTISPAM_URL: string
   LLAMA_URL: string
   AI_API_KEY: string
   AI_API_THROTTLE: number
-  
+
   // Опциональные сервисы
   REDIS_URL?: string
-  
+
   // Веб-сервер
   WEB_PORT: number
   WEB_HOST: string
-  
+
   // Админ
   ADMIN_USERNAME?: string
-  
+
   // Блокировки
   LOCK_STORE: string
   DEFAULT_CHAT_ID: number
-  
+
   // Логирование
   LOG_LEVEL: number
   LOG_USE_FILE: boolean

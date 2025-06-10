@@ -5,7 +5,7 @@
 ```
 app/src/web/
 ├── static/           # Статические файлы (будущий билд React)
-├── frontend/         # Исходники React приложения  
+├── frontend/         # Исходники React приложения
 ├── SETUP.md         # Эта инструкция
 └── README.md        # Документация архитектуры
 ```
@@ -46,7 +46,7 @@ npm install fastify @fastify/cors @fastify/static
 {
   "dependencies": {
     "fastify": "^5.2.0",
-    "@fastify/cors": "^10.0.1", 
+    "@fastify/cors": "^10.0.1",
     "@fastify/static": "^8.0.2"
   }
 }
@@ -67,7 +67,7 @@ npm run dev
 ### Настройка бота
 
 1. Откройте [@BotFather](https://t.me/BotFather)
-2. Выберите вашего бота  
+2. Выберите вашего бота
 3. Команда `/setmenubutton`
 4. Текст: "Админ панель"
 5. URL: `https://yourdomain.com/admin`
@@ -80,7 +80,7 @@ npm run dev
 # Глобальная установка
 npm install -g ngrok
 
-# Создание туннеля  
+# Создание туннеля
 ngrok http 3000
 
 # Пример URL: https://abc123.ngrok.io/admin
@@ -157,20 +157,20 @@ ApiServerService предоставляет:
 
 - `GET /api/health` - Состояние сервисов
 - `GET /api/config` - Конфигурация бота
-- `POST /api/config` - Обновление конфигурации  
+- `POST /api/config` - Обновление конфигурации
 - `GET /api/stats` - Статистика
 
 ### Пример использования:
 
 ```typescript
 // Получение конфигурации
-const response = await fetch('/api/config')
+const response = await fetch("/api/config")
 const { config } = await response.json()
 
 // Обновление настроек
-await fetch('/api/config', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+await fetch("/api/config", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     captchaEnabled: true,
     aiDailyLimit: 2000
@@ -186,7 +186,7 @@ await fetch('/api/config', {
 // Проверка пользователя
 function validateTelegramUser(initData: string) {
   // Проверка подписи Telegram
-  // Проверка временной метки  
+  // Проверка временной метки
   // Проверка прав администратора
 }
 ```
@@ -197,8 +197,8 @@ function validateTelegramUser(initData: string) {
 
 ```typescript
 await fastify.register(corsModule.default, {
-  origin: ['https://yourdomain.com'],
-  methods: ['GET', 'POST'],
+  origin: ["https://yourdomain.com"],
+  methods: ["GET", "POST"],
   credentials: true
 })
 ```
@@ -302,4 +302,4 @@ CMD ["npm", "start"]
 ---
 
 **Статус проекта:** ⚡ Готов к разработке веб-интерфейса
-**Следующий шаг:** Обновление Node.js и установка Fastify 
+**Следующий шаг:** Обновление Node.js и установка Fastify

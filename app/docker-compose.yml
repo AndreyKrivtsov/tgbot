@@ -1,33 +1,33 @@
 services:
-    bot:
-        container_name: bot
-        restart: unless-stopped
-        build:
-            context: .
-            dockerfile: Dockerfile
-        environment:
-        - NODE_ENV=production
-        volumes:
-            - bot_logs:/app/logs/bot_logs
-        networks:
-            - local-net
-    postgres:
-            container_name: postgres
-            image: postgres:latest
-            restart: unless-stopped
-            environment:
-                - POSTGRES_USER=bot
-                - POSTGRES_PASSWORD=5gj3gjk6gk3hb6kb3
-                - POSTGRES_DB=bot
-            volumes:
-                - postgres_data:/var/lib/postgresql/data
-            networks:
-                - local-net
-    
+  bot:
+    container_name: bot
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - bot_logs:/app/logs/bot_logs
+    networks:
+      - local-net
+  postgres:
+    container_name: postgres
+    image: postgres:latest
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=bot
+      - POSTGRES_PASSWORD=5gj3gjk6gk3hb6kb3
+      - POSTGRES_DB=bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - local-net
+
 volumes:
-    postgres_data:
-    bot_logs:
-    
+  postgres_data:
+  bot_logs:
+
 networks:
   local-net:
     name: local-net

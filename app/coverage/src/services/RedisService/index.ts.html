@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/155</span>
+                <span class='fraction'>0/161</span>
             </div>
         
             
@@ -497,7 +497,14 @@
 <a name='L432'></a><a href='#L432'>432</a>
 <a name='L433'></a><a href='#L433'>433</a>
 <a name='L434'></a><a href='#L434'>434</a>
-<a name='L435'></a><a href='#L435'>435</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a>
+<a name='L441'></a><a href='#L441'>441</a>
+<a name='L442'></a><a href='#L442'>442</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -508,6 +515,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -600,7 +608,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -717,6 +724,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -738,6 +746,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -754,6 +763,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -768,6 +778,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -784,6 +795,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -805,6 +817,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -930,11 +943,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
-import { createClient, type RedisClientType } from "redis"
+import { createClient } from "redis"
+import type { RedisClientType } from "redis"
 &nbsp;
 /**
  * Сервис Redis для высокопроизводительного кэширования
@@ -968,39 +983,39 @@ export class RedisService implements IService {
 <span class="cstat-no" title="statement not covered" >      this.client = createClient({</span>
         url: this.config.REDIS_URL,
         socket: {
-          connectTimeout: 10000,  // 10 секунд таймаут подключения
+          connectTimeout: 10000, // 10 секунд таймаут подключения
           reconnectStrategy: <span class="fstat-no" title="function not covered" >(r</span>etries) =&gt; {
 <span class="cstat-no" title="statement not covered" >            <span class="missing-if-branch" title="if path not taken" >I</span>if (retries &gt; 3) {</span>
 <span class="cstat-no" title="statement not covered" >              this.logger.e("Redis: Maximum reconnection attempts reached")</span>
 <span class="cstat-no" title="statement not covered" >              return false</span>
             }
 <span class="cstat-no" title="statement not covered" >            return Math.min(retries * 1000, 5000) /</span>/ Экспоненциальная задержка до 5 сек
-          }
+          },
         },
         database: 0, // База по умолчанию
       })
 &nbsp;
       // Обработчики событий
-<span class="cstat-no" title="statement not covered" >      this.client.on('error', <span class="fstat-no" title="function not covered" >(e</span>rror) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      this.client.on("error", <span class="fstat-no" title="function not covered" >(e</span>rror) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.e("Redis error:", error)</span>
 <span class="cstat-no" title="statement not covered" >        this.isConnected = false</span>
       })
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      this.client.on('connect', <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      this.client.on("connect", <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.d("Redis client connected")</span>
       })
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      this.client.on('ready', <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      this.client.on("ready", <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.d("Redis client ready")</span>
 <span class="cstat-no" title="statement not covered" >        this.isConnected = true</span>
       })
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      this.client.on('end', <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      this.client.on("end", <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.d("Redis client disconnected")</span>
 <span class="cstat-no" title="statement not covered" >        this.isConnected = false</span>
       })
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      this.client.on('reconnecting', <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      this.client.on("reconnecting", <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.d("Redis client reconnecting...")</span>
       })
 &nbsp;
@@ -1028,13 +1043,12 @@ export class RedisService implements IService {
 &nbsp;
       // Тестируем подключение
 <span class="cstat-no" title="statement not covered" >      await this.client.ping()</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("✅ Redis service started successfully")</span>
 &nbsp;
       // Логируем информацию о подключении
       const info = <span class="cstat-no" title="statement not covered" >await this.getConnectionInfo()</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.i(`📊 Redis info: ${JSON.stringify(info)}`)</span>
-&nbsp;
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("❌ Failed to start Redis service:", error)</span>
 <span class="cstat-no" title="statement not covered" >      this.isConnected = false</span>
@@ -1082,20 +1096,20 @@ export class RedisService implements IService {
    */
 <span class="fstat-no" title="function not covered" >  async </span>getConnectionInfo(): Promise&lt;object&gt; {
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) {</span>
-<span class="cstat-no" title="statement not covered" >      return { </span>
-        isConnected: false, 
-        status: this.client ? "disconnected" : "not_configured" 
+<span class="cstat-no" title="statement not covered" >      return {</span>
+        isConnected: false,
+        status: this.client ? "disconnected" : "not_configured",
       }
     }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const info = <span class="cstat-no" title="statement not covered" >await this.client.info()</span>
-      const lines = <span class="cstat-no" title="statement not covered" >info.split('\r\n')</span>
+      const lines = <span class="cstat-no" title="statement not covered" >info.split("\r\n")</span>
       const parsed: Record&lt;string, string&gt; = <span class="cstat-no" title="statement not covered" >{}</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      for (const line of lines) {</span>
-<span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (line.includes(':')) {</span>
-          const [key, value] = <span class="cstat-no" title="statement not covered" >line.split(':')</span>
+<span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (line.includes(":")) {</span>
+          const [key, value] = <span class="cstat-no" title="statement not covered" >line.split(":")</span>
 <span class="cstat-no" title="statement not covered" >          <span class="missing-if-branch" title="if path not taken" >I</span>if (key &amp;&amp; value !== undefined) {</span>
 <span class="cstat-no" title="statement not covered" >            parsed[key] = value</span>
           }
@@ -1110,14 +1124,14 @@ export class RedisService implements IService {
         connectedClients: parsed.connected_clients,
         usedMemory: parsed.used_memory_human,
         totalConnectionsReceived: parsed.total_connections_received,
-        totalCommandsProcessed: parsed.total_commands_processed
+        totalCommandsProcessed: parsed.total_commands_processed,
       }
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("Error getting Redis connection info:", error)</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         isConnected: this.isConnected,
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -1125,7 +1139,7 @@ export class RedisService implements IService {
   /**
    * Проверка здоровья Redis
    */
-<span class="fstat-no" title="function not covered" >  async </span>healthCheck(): Promise&lt;{ healthy: boolean; latency?: number; error?: string }&gt; {
+<span class="fstat-no" title="function not covered" >  async </span>healthCheck(): Promise&lt;{ healthy: boolean, latency?: number, error?: string }&gt; {
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) {</span>
 <span class="cstat-no" title="statement not covered" >      return { healthy: false, error: "Redis not available" }</span>
     }
@@ -1139,7 +1153,7 @@ export class RedisService implements IService {
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      return {</span>
         healthy: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -1150,17 +1164,18 @@ export class RedisService implements IService {
    * Установка значения с TTL
    */
 <span class="fstat-no" title="function not covered" >  async </span>set(key: string, value: any, ttlSeconds?: number): Promise&lt;boolean&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return false</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return false</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const serialized = <span class="cstat-no" title="statement not covered" >JSON.stringify(value)</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (ttlSeconds) {</span>
 <span class="cstat-no" title="statement not covered" >        await this.client.setEx(key, ttlSeconds, serialized)</span>
       } else {
 <span class="cstat-no" title="statement not covered" >        await this.client.set(key, serialized)</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return true</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e(`Redis SET error for key ${key}:`, error)</span>
@@ -1172,7 +1187,8 @@ export class RedisService implements IService {
    * Получение значения
    */
 <span class="fstat-no" title="function not covered" >  async </span>get&lt;T = any&gt;(key: string): Promise&lt;T | null&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return null</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return null</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const value = <span class="cstat-no" title="statement not covered" >await this.client.get(key)</span>
@@ -1187,7 +1203,8 @@ export class RedisService implements IService {
    * Удаление ключа
    */
 <span class="fstat-no" title="function not covered" >  async </span>del(key: string): Promise&lt;boolean&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return false</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return false</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const result = <span class="cstat-no" title="statement not covered" >await this.client.del(key)</span>
@@ -1202,7 +1219,8 @@ export class RedisService implements IService {
    * Проверка существования ключа
    */
 <span class="fstat-no" title="function not covered" >  async </span>exists(key: string): Promise&lt;boolean&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return false</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return false</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const result = <span class="cstat-no" title="statement not covered" >await this.client.exists(key)</span>
@@ -1217,16 +1235,17 @@ export class RedisService implements IService {
    * Увеличение счетчика
    */
 <span class="fstat-no" title="function not covered" >  async </span>incr(key: string, ttlSeconds?: number): Promise&lt;number&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return 0</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return 0</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const result = <span class="cstat-no" title="statement not covered" >await this.client.incr(key)</span>
-      
+&nbsp;
       // Устанавливаем TTL только при первом создании ключа
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (result === 1 &amp;&amp; ttlSeconds) {</span>
 <span class="cstat-no" title="statement not covered" >        await this.client.expire(key, ttlSeconds)</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return result</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e(`Redis INCR error for key ${key}:`, error)</span>
@@ -1238,7 +1257,8 @@ export class RedisService implements IService {
    * Установка TTL для существующего ключа
    */
 <span class="fstat-no" title="function not covered" >  async </span>expire(key: string, ttlSeconds: number): Promise&lt;boolean&gt; {
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected) <span class="cstat-no" title="statement not covered" >return false</span></span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.client || !this.isConnected)</span>
+<span class="cstat-no" title="statement not covered" >      return false</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const result = <span class="cstat-no" title="statement not covered" >await this.client.expire(key, ttlSeconds)</span>
@@ -1295,11 +1315,11 @@ export class RedisService implements IService {
    * AI лимиты
    */
 <span class="fstat-no" title="function not covered" >  async </span>incrementAILimit(chatId: number): Promise&lt;number&gt; {
-    const today = <span class="cstat-no" title="statement not covered" >new Date().toISOString().split('T')[0]</span>
+    const today = <span class="cstat-no" title="statement not covered" >new Date().toISOString().split("T")[0]</span>
     const key = <span class="cstat-no" title="statement not covered" >`ai:limit:${chatId}:${today}`</span>
-    
+&nbsp;
     const count = <span class="cstat-no" title="statement not covered" >await this.incr(key)</span>
-    
+&nbsp;
     // Устанавливаем TTL до конца дня
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (count === 1) {</span>
       const tomorrow = <span class="cstat-no" title="statement not covered" >new Date()</span>
@@ -1308,12 +1328,12 @@ export class RedisService implements IService {
       const ttl = <span class="cstat-no" title="statement not covered" >Math.floor((tomorrow.getTime() - Date.now()) / 1000)</span>
 <span class="cstat-no" title="statement not covered" >      await this.expire(key, ttl)</span>
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return count</span>
   }
 &nbsp;
 <span class="fstat-no" title="function not covered" >  async </span>getAILimit(chatId: number): Promise&lt;number&gt; {
-    const today = <span class="cstat-no" title="statement not covered" >new Date().toISOString().split('T')[0]</span>
+    const today = <span class="cstat-no" title="statement not covered" >new Date().toISOString().split("T")[0]</span>
     const count = <span class="cstat-no" title="statement not covered" >await this.get&lt;number&gt;(`ai:limit:${chatId}:${today}`)</span>
 <span class="cstat-no" title="statement not covered" >    return count || 0</span>
   }
@@ -1328,21 +1348,21 @@ export class RedisService implements IService {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const info = <span class="cstat-no" title="statement not covered" >await this.client.info()</span>
-      const memory = <span class="cstat-no" title="statement not covered" >await this.client.info('memory')</span>
-      const stats = <span class="cstat-no" title="statement not covered" >await this.client.info('stats')</span>
-      
+      const memory = <span class="cstat-no" title="statement not covered" >await this.client.info("memory")</span>
+      const stats = <span class="cstat-no" title="statement not covered" >await this.client.info("stats")</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return {</span>
         available: true,
         isConnected: this.isConnected,
         info: this.parseRedisInfo(info),
         memory: this.parseRedisInfo(memory),
-        stats: this.parseRedisInfo(stats)
+        stats: this.parseRedisInfo(stats),
       }
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("Error getting Redis stats:", error)</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         available: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -1352,27 +1372,28 @@ export class RedisService implements IService {
    */
   private <span class="fstat-no" title="function not covered" >parseRedisInfo(</span>info: string): Record&lt;string, string&gt; {
     const result: Record&lt;string, string&gt; = <span class="cstat-no" title="statement not covered" >{}</span>
-    const lines = <span class="cstat-no" title="statement not covered" >info.split('\r\n')</span>
-    
+    const lines = <span class="cstat-no" title="statement not covered" >info.split("\r\n")</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    for (const line of lines) {</span>
-<span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (line.includes(':')) {</span>
-        const [key, value] = <span class="cstat-no" title="statement not covered" >line.split(':')</span>
+<span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (line.includes(":")) {</span>
+        const [key, value] = <span class="cstat-no" title="statement not covered" >line.split(":")</span>
 <span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (key &amp;&amp; value !== undefined) {</span>
 <span class="cstat-no" title="statement not covered" >          result[key] = value</span>
         }
       }
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return result</span>
   }
-} </pre></td></tr></table></pre>
+}
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-10T10:32:55.580Z
+                at 2025-06-10T14:33:22.743Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

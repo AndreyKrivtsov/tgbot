@@ -98,7 +98,7 @@ export class Logger {
       const filepath = path.join(this.filePath, this.filename)
       appendFile(filepath, `${this.getPrefix(level)} ${text}\n`)
         .catch(e => this.writeFileError(e))
-    } 
+    }
     catch (e) {
       this.writeFileError(e)
     }

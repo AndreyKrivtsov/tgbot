@@ -28,7 +28,7 @@ export class AIService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting AI service...")
-    
+
     try {
       // TODO: Инициализация Gemini API
       this.isConnected = true
@@ -75,10 +75,10 @@ export class AIService implements IService {
     try {
       // TODO: Реализация запроса к Gemini API
       this.logger.d(`AI request from context ${contextId}: ${message.substring(0, 50)}...`)
-      
+
       // Симуляция ответа
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       return "Это тестовый ответ от AI сервиса. Здесь будет реальный ответ от Gemini."
     } catch (error) {
       this.logger.e("AI request failed:", error)
@@ -97,10 +97,10 @@ export class AIService implements IService {
     try {
       // TODO: Реализация проверки спама через AI
       this.logger.d(`Spam check request: ${prompt.substring(0, 50)}...`)
-      
+
       // Симуляция проверки
       await new Promise(resolve => setTimeout(resolve, 500))
-      
+
       return "НЕ СПАМ"
     } catch (error) {
       this.logger.e("Spam check failed:", error)
@@ -114,7 +114,7 @@ export class AIService implements IService {
   getStats(): object {
     return {
       isConnected: this.isConnected,
-      status: this.isConnected ? "active" : "inactive"
+      status: this.isConnected ? "active" : "inactive",
     }
   }
-} 
+}

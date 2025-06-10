@@ -390,7 +390,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -550,6 +549,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -582,7 +582,7 @@ export class DatabaseService implements IService {
    */
 <span class="fstat-no" title="function not covered" >  async </span>initialize(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🗄️ Initializing database service...")</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       // Проверяем наличие DATABASE_URL
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.config.DATABASE_URL) {</span>
@@ -592,19 +592,19 @@ export class DatabaseService implements IService {
 &nbsp;
       // Создаем подключение к PostgreSQL
 <span class="cstat-no" title="statement not covered" >      this.sql = postgres(this.config.DATABASE_URL, {</span>
-        max: 20,          // Максимум соединений в пуле
+        max: 20, // Максимум соединений в пуле
         idle_timeout: 20, // Таймаут неактивных соединений (секунды)
         connect_timeout: 10, // Таймаут подключения (секунды)
-        prepare: true,    // Подготовленные запросы для производительности
+        prepare: true, // Подготовленные запросы для производительности
         transform: {
-          undefined: null // Преобразование undefined в NULL
-        }
+          undefined: null, // Преобразование undefined в NULL
+        },
       })
 &nbsp;
       // Создаем Drizzle ORM экземпляр
-<span class="cstat-no" title="statement not covered" >      this.db = drizzle(this.sql, { </span>
+<span class="cstat-no" title="statement not covered" >      this.db = drizzle(this.sql, {</span>
         schema,
-        logger: this.config.NODE_ENV === 'development'
+        logger: this.config.NODE_ENV === "development",
       })
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("✅ Database service initialized")</span>
@@ -619,7 +619,7 @@ export class DatabaseService implements IService {
    */
 <span class="fstat-no" title="function not covered" >  async </span>start(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🚀 Starting database service...")</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.sql || !this.db) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.w("🚫 Database not configured, skipping connection test")</span>
 <span class="cstat-no" title="statement not covered" >      return</span>
@@ -629,13 +629,12 @@ export class DatabaseService implements IService {
       // Тестируем подключение
 <span class="cstat-no" title="statement not covered" >      await this.sql`SELECT 1 as test`</span>
 <span class="cstat-no" title="statement not covered" >      this.isConnected = true</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("✅ Database service started - connection successful")</span>
-      
+&nbsp;
       // Логируем информацию о подключении
       const connectionInfo = <span class="cstat-no" title="statement not covered" >await this.getConnectionInfo()</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.i(`📊 Database info: ${JSON.stringify(connectionInfo)}`)</span>
-      
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("❌ Failed to start database service:", error)</span>
 <span class="cstat-no" title="statement not covered" >      throw error</span>
@@ -647,7 +646,7 @@ export class DatabaseService implements IService {
    */
 <span class="fstat-no" title="function not covered" >  async </span>stop(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🛑 Stopping database service...")</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (this.sql) {</span>
 <span class="cstat-no" title="statement not covered" >        await this.sql.end()</span>
@@ -655,7 +654,7 @@ export class DatabaseService implements IService {
 <span class="cstat-no" title="statement not covered" >        this.db = null</span>
 <span class="cstat-no" title="statement not covered" >        this.isConnected = false</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("✅ Database service stopped")</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("Error stopping database service:", error)</span>
@@ -705,32 +704,32 @@ export class DatabaseService implements IService {
           inet_server_addr() as server_addr,
           inet_server_port() as server_port
       `
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (!result || result.length === 0) {</span>
 <span class="cstat-no" title="statement not covered" >        return {</span>
           isConnected: this.isConnected,
           status: "error",
-          error: "No connection info available"
+          error: "No connection info available",
         }
       }
 &nbsp;
       const info = <span class="cstat-no" title="statement not covered" >result[0] as any</span>
-      const versionParts = <span class="cstat-no" title="statement not covered" >info.version?.split(' ') || []</span>
-      
+      const versionParts = <span class="cstat-no" title="statement not covered" >info.version?.split(" ") || []</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return {</span>
         isConnected: this.isConnected,
         status: "connected",
         database: info.database || "unknown",
         user: info.user || "unknown",
         version: versionParts.length &gt;= 2 ? `${versionParts[0]} ${versionParts[1]}` : (info.version || "unknown"),
-        server: `${info.server_addr || 'localhost'}:${info.server_port || 5432}`
+        server: `${info.server_addr || "localhost"}:${info.server_port || 5432}`,
       }
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("Error getting connection info:", error)</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         isConnected: this.isConnected,
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -738,7 +737,7 @@ export class DatabaseService implements IService {
   /**
    * Выполнение здоровья БД
    */
-<span class="fstat-no" title="function not covered" >  async </span>healthCheck(): Promise&lt;{ healthy: boolean; latency?: number; error?: string }&gt; {
+<span class="fstat-no" title="function not covered" >  async </span>healthCheck(): Promise&lt;{ healthy: boolean, latency?: number, error?: string }&gt; {
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.sql) {</span>
 <span class="cstat-no" title="statement not covered" >      return { healthy: false, error: "Database not initialized" }</span>
     }
@@ -747,12 +746,12 @@ export class DatabaseService implements IService {
       const start = <span class="cstat-no" title="statement not covered" >Date.now()</span>
 <span class="cstat-no" title="statement not covered" >      await this.sql`SELECT 1 as ping`</span>
       const latency = <span class="cstat-no" title="statement not covered" >Date.now() - start</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return { healthy: true, latency }</span>
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      return { </span>
-        healthy: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+<span class="cstat-no" title="statement not covered" >      return {</span>
+        healthy: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -790,25 +789,26 @@ export class DatabaseService implements IService {
         size: size[0],
         pool: {
           max: 20,
-          available: this.sql.options.max
-        }
+          available: this.sql.options.max,
+        },
       }
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("Error getting database stats:", error)</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         available: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
-} </pre></td></tr></table></pre>
+}
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-10T10:32:55.580Z
+                at 2025-06-10T14:33:22.743Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

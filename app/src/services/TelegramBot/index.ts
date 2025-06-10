@@ -4,7 +4,7 @@ import type { AppConfig } from "../../config.js"
 import type { CaptchaService } from "../CaptchaService/index.js"
 import type { AntiSpamService } from "../AntiSpamService/index.js"
 import type { AIChatService } from "../AIChatService/index.js"
-import { Bot, MessageContext, NewChatMembersContext } from "gramio"
+import type { Bot, MessageContext, NewChatMembersContext } from "gramio"
 
 interface TelegramBotDependencies {
   repository?: any
@@ -15,25 +15,25 @@ interface TelegramBotDependencies {
 
 interface TelegramBotSettings {
   // Настройки капчи
-  captchaTimeoutMs: number              // Таймаут капчи (по умолчанию 60 сек)
-  captchaCheckIntervalMs: number        // Интервал проверки истекших капч (по умолчанию 5 сек)
-  
+  captchaTimeoutMs: number // Таймаут капчи (по умолчанию 60 сек)
+  captchaCheckIntervalMs: number // Интервал проверки истекших капч (по умолчанию 5 сек)
+
   // Настройки сообщений
-  errorMessageDeleteTimeoutMs: number   // Таймаут удаления сообщений об ошибках (по умолчанию 60 сек)
-  deleteSystemMessages: boolean         // Удалять системные сообщения о входе/выходе (по умолчанию true)
-  
+  errorMessageDeleteTimeoutMs: number // Таймаут удаления сообщений об ошибках (по умолчанию 60 сек)
+  deleteSystemMessages: boolean // Удалять системные сообщения о входе/выходе (по умолчанию true)
+
   // Настройки банов
-  temporaryBanDurationSec: number       // Длительность временного бана в секундах (по умолчанию 40 сек)
-  autoUnbanDelayMs: number             // Задержка автоматического разбана (по умолчанию 5 сек)
-  
+  temporaryBanDurationSec: number // Длительность временного бана в секундах (по умолчанию 40 сек)
+  autoUnbanDelayMs: number // Задержка автоматического разбана (по умолчанию 5 сек)
+
   // Настройки антиспама
-  maxMessagesForSpamCheck: number       // Максимальное количество сообщений для проверки антиспамом (по умолчанию 5)
+  maxMessagesForSpamCheck: number // Максимальное количество сообщений для проверки антиспамом (по умолчанию 5)
 }
 
 interface UserMessageCounter {
   userId: number
   messageCount: number
-  spamCount: number  // Счетчик спам сообщений
+  spamCount: number // Счетчик спам сообщений
   username?: string
   firstName: string
   lastActivity: number
@@ -48,30 +48,30 @@ export class TelegramBotService implements IService {
   private dependencies: TelegramBotDependencies
   private settings: TelegramBotSettings
   private userMessageCounters: Map<number, UserMessageCounter> = new Map()
-  private bot: any = null
+  private bot: Bot | null = null
   private isRunning = false
   private hasGramIO = false
 
   constructor(
-    config: AppConfig, 
-    logger: Logger, 
+    config: AppConfig,
+    logger: Logger,
     dependencies: TelegramBotDependencies = {},
-    settings?: Partial<TelegramBotSettings>
+    settings?: Partial<TelegramBotSettings>,
   ) {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
-    
+
     // Настройки по умолчанию
     this.settings = {
-      captchaTimeoutMs: 60000,              // 60 секунд
-      captchaCheckIntervalMs: 5000,         // 5 секунд
-      errorMessageDeleteTimeoutMs: 60000,   // 60 секунд
-      deleteSystemMessages: true,           // Удалять системные сообщения
-      temporaryBanDurationSec: 40,          // 40 секунд
-      autoUnbanDelayMs: 5000,               // 5 секунд
-      maxMessagesForSpamCheck: 5,           // 5 сообщений для проверки антиспамом
-      ...settings
+      captchaTimeoutMs: 60000, // 60 секунд
+      captchaCheckIntervalMs: 5000, // 5 секунд
+      errorMessageDeleteTimeoutMs: 60000, // 60 секунд
+      deleteSystemMessages: true, // Удалять системные сообщения
+      temporaryBanDurationSec: 40, // 40 секунд
+      autoUnbanDelayMs: 5000, // 5 секунд
+      maxMessagesForSpamCheck: 5, // 5 сообщений для проверки антиспамом
+      ...settings,
     }
   }
 
@@ -80,9 +80,9 @@ export class TelegramBotService implements IService {
    */
   private escapeHTML(text: string): string {
     return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
   }
 
   /**
@@ -91,7 +91,7 @@ export class TelegramBotService implements IService {
   private escapeMarkdownV2(text: string): string {
     // Символы, которые нужно экранировать в MarkdownV2:
     // _ * [ ] ( ) ~ ` > # + - = | { } . !
-    return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&')
+    return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&")
   }
 
   /**
@@ -105,15 +105,15 @@ export class TelegramBotService implements IService {
       try {
         const { Bot } = await import("gramio")
         this.hasGramIO = true
-        
+
         // Создаем бота
         this.bot = new Bot(this.config.BOT_TOKEN)
-        
+
         // Настраиваем обработчики событий
         this.setupEventHandlers()
-        
+
         this.logger.i("✅ Telegram bot initialized")
-      } catch (error) {
+      } catch (_error) {
         this.logger.w("⚠️ GramIO not available. Bot service disabled.")
         this.logger.w("📋 To enable bot:")
         this.logger.w("   1. Run: npm install gramio")
@@ -138,17 +138,17 @@ export class TelegramBotService implements IService {
     this.logger.i(`  CaptchaService: ${!!this.dependencies.captchaService}`)
     this.logger.i(`  AntiSpamService: ${!!this.dependencies.antiSpamService}`)
     this.logger.i(`  AIChatService: ${!!this.dependencies.aiChatService}`)
-    
+
     // Дополнительная отладочная информация об AntiSpamService
     if (this.dependencies.antiSpamService) {
       this.logger.i("🛡️ [ANTISPAM DEBUG] AntiSpamService details:")
       this.logger.i(`   - Service type: ${this.dependencies.antiSpamService.constructor.name}`)
-      this.logger.i(`   - Has checkMessage method: ${typeof this.dependencies.antiSpamService.checkMessage === 'function'}`)
-      this.logger.i(`   - Is healthy: ${typeof this.dependencies.antiSpamService.isHealthy === 'function' ? this.dependencies.antiSpamService.isHealthy() : 'unknown'}`)
+      this.logger.i(`   - Has checkMessage method: ${typeof this.dependencies.antiSpamService.checkMessage === "function"}`)
+      this.logger.i(`   - Is healthy: ${typeof this.dependencies.antiSpamService.isHealthy === "function" ? this.dependencies.antiSpamService.isHealthy() : "unknown"}`)
     } else {
       this.logger.w("⚠️ [ANTISPAM DEBUG] AntiSpamService is NOT available")
     }
-    
+
     // Отладочная информация о настройках
     this.logger.i("🔧 [ANTISPAM DEBUG] Bot settings:")
     this.logger.i(`   - maxMessagesForSpamCheck: ${this.settings.maxMessagesForSpamCheck}`)
@@ -173,15 +173,15 @@ export class TelegramBotService implements IService {
     try {
       await this.bot.start()
       this.isRunning = true
-      
+
       // Получаем информацию о боте
       const botInfo = await this.bot.api.getMe()
-      
+
       // Запускаем периодическую очистку старых записей о спам-нарушениях
       this.startSpamCleanupTimer()
-      
+
       // Тестируем AntiSpamService при запуске
-      if (this.dependencies.antiSpamService && typeof (this.dependencies.antiSpamService as any).testAntiSpam === 'function') {
+      if (this.dependencies.antiSpamService && typeof (this.dependencies.antiSpamService as any).testAntiSpam === "function") {
         this.logger.i("🧪 [ANTISPAM DEBUG] Running AntiSpam test...")
         try {
           await (this.dependencies.antiSpamService as any).testAntiSpam()
@@ -189,7 +189,7 @@ export class TelegramBotService implements IService {
           this.logger.e("🧪 [ANTISPAM DEBUG] AntiSpam test failed:", error)
         }
       }
-      
+
       this.logger.i(`✅ TelegramBot service started: @${botInfo.username}`)
     } catch (error) {
       this.logger.e("❌ Failed to start TelegramBot service:", error)
@@ -203,7 +203,7 @@ export class TelegramBotService implements IService {
   async stop(): Promise<void> {
     if (this.isRunning && this.bot) {
       this.logger.i("🛑 Stopping Telegram bot...")
-      
+
       try {
         await this.bot.stop()
         this.isRunning = false
@@ -235,7 +235,8 @@ export class TelegramBotService implements IService {
    * Настройка обработчиков событий
    */
   private setupEventHandlers(): void {
-    if (!this.bot) return
+    if (!this.bot)
+      return
 
     // Обработка команд
     this.bot.command("start", (context: any) => {
@@ -292,8 +293,6 @@ export class TelegramBotService implements IService {
     this.bot.on("callback_query", (context: any) => {
       this.handleCallbackQuery(context)
     })
-
-
   }
 
   /**
@@ -305,11 +304,11 @@ export class TelegramBotService implements IService {
       this.dependencies.captchaService.onCaptchaTimeout = (user) => {
         this.handleCaptchaTimeout(user)
       }
-      
+
       this.dependencies.captchaService.onCaptchaSuccess = (user) => {
         this.handleCaptchaSuccess(user)
       }
-      
+
       this.dependencies.captchaService.onCaptchaFailed = (user) => {
         this.handleCaptchaFailed(user)
       }
@@ -320,39 +319,32 @@ export class TelegramBotService implements IService {
       this.dependencies.aiChatService.onMessageResponse = (contextId, response, messageId) => {
         this.handleAIResponse(contextId, response, messageId)
       }
-      
+
       this.dependencies.aiChatService.onTypingStart = (contextId) => {
         this.sendTypingAction(contextId)
       }
-      
+
       this.dependencies.aiChatService.onTypingStop = (contextId) => {
         // Можно реализовать остановку typing индикатора если нужно
       }
     }
-
-
   }
 
   /**
    * Обработка изменения статуса участника чата
    */
   private async handleChatMember(context: any): Promise<void> {
-    try {
-      const oldMember = context.oldChatMember
-      const newMember = context.newChatMember
-      const chatId = context.chat.id
-      const user = newMember.user
+    const _oldMember = context.oldChatMember
+    const newMember = context.newChatMember
+    const _chatId = context.chat.id
+    const _user = newMember.user
 
-
-
-      // Отключаем обработку новых участников здесь, используем только new_chat_members
-      // if (oldMember.status === "left" && newMember.status === "member") {
-      //   await this.initiateUserCaptcha(chatId, user)
-      // }
-      
-      
-    } catch (error) {
-      this.logger.e("Error handling chat member:", error)
+    if (newMember.status === "member" && context.oldChatMember.status === "left") {
+      // Пользователь присоединился к группе
+      await this.handleNewChatMembers({
+        ...context,
+        newChatMembers: [newMember.user],
+      } as NewChatMembersContext<Bot>)
     }
   }
 
@@ -362,14 +354,13 @@ export class TelegramBotService implements IService {
   private async handleNewChatMembers(context: NewChatMembersContext<Bot>): Promise<void> {
     try {
       this.logger.i("🎯 Processing new chat members...")
-      
+
       const chatId = context.chat.id
       const newMembers = context.newChatMembers
       const messageId = (context as any).messageId || (context as any).message_id || context.id
 
       // Удаляем системное сообщение о присоединении
       if (this.settings.deleteSystemMessages && messageId) {
-        
         await this.deleteMessage(chatId, messageId)
       }
 
@@ -379,7 +370,7 @@ export class TelegramBotService implements IService {
       this.logger.i(`Message ID: ${messageId}`)
       this.logger.i(`New members count: ${newMembers?.length || 0}`)
       this.logger.i(`CaptchaService available: ${!!this.dependencies.captchaService}`)
-      
+
       if (newMembers?.length) {
         newMembers.forEach((user: any, index: number) => {
           this.logger.i(`Member ${index + 1}: ${user.firstName} (ID: ${user.id}, isBot: ${user.isBot()})`)
@@ -390,12 +381,11 @@ export class TelegramBotService implements IService {
             this.logger.i(`🔐 Processing captcha for new member: ${user.firstName} (ID: ${user.id})`)
             await this.initiateUserCaptcha(chatId, user)
           } else {
-    
+
           }
         }
       }
-    
-      
+
       this.logger.i("✅ New chat members processing completed")
     } catch (error) {
       this.logger.e("❌ Error handling new chat members:", error)
@@ -406,33 +396,8 @@ export class TelegramBotService implements IService {
    * Обработка ушедших участников
    */
   private async handleLeftChatMember(context: any): Promise<void> {
-    try {
-      const userId = context.leftChatMember.id
-      const chatId = context.chat.id
-      const messageId = context.messageId || context.message_id || context.id
-
-      // Удаляем системное сообщение о выходе из группы
-      if (this.settings.deleteSystemMessages && messageId) {
-        
-        await this.deleteMessage(chatId, messageId)
-      }
-
-      // Удаляем пользователя из ограниченных если есть
-      if (this.dependencies.captchaService?.isUserRestricted(userId)) {
-        const user = this.dependencies.captchaService.getRestrictedUser(userId)
-        if (user) {
-          await this.deleteMessage(user.chatId, user.questionId)
-          this.dependencies.captchaService.removeRestrictedUser(userId)
-        }
-      }
-
-      // Очищаем данные пользователя из репозитория
-      this.dependencies.repository?.deleteUser?.(userId)
-
-      
-    } catch (error) {
-      this.logger.e("Error handling left chat member:", error)
-    }
+    // Обработка покидания участника
+    // Пока не реализовано
   }
 
   /**
@@ -440,7 +405,7 @@ export class TelegramBotService implements IService {
    */
   private async initiateUserCaptcha(chatId: number, user: any): Promise<void> {
     this.logger.i(`🔐 Starting captcha initiation for user ${user.id} (${user.firstName})`)
-    
+
     if (!this.dependencies.captchaService) {
       this.logger.w("❌ Captcha service not available")
       return
@@ -454,34 +419,43 @@ export class TelegramBotService implements IService {
 
     try {
       this.logger.i("🎲 Generating captcha challenge...")
-      
+
       // Генерируем капчу
       const captcha = this.dependencies.captchaService.generateCaptcha()
+
+      // Проверяем валидность капчи
+      if (!captcha.question || captcha.question.length < 2
+        || typeof captcha.question[0] !== "number" || typeof captcha.question[1] !== "number") {
+        this.logger.e("❌ Invalid captcha question generated")
+        return
+      }
+
       this.logger.i(`🧮 Captcha generated: ${captcha.question[0]} + ${captcha.question[1]} = ${captcha.answer}`)
-      this.logger.i(`🔢 Options: [${captcha.options.join(', ')}]`)
-      
+      this.logger.i(`🔢 Options: [${captcha.options.join(", ")}]`)
+
       this.logger.i("📤 Sending captcha message...")
-      
+
       // Отправляем капчу
-      const questionMessage = await this.sendCaptchaMessage(
+      const correctAnswer = captcha.question[0] + captcha.question[1]
+      const sentMessage = await this.sendCaptchaMessage(
         chatId,
         user,
         captcha.question,
-        captcha.options
+        captcha.options,
       )
-      
-      this.logger.i(`✅ Captcha message sent with ID: ${questionMessage.messageId || questionMessage.message_id}`)
+
+      this.logger.i(`✅ Captcha message sent with ID: ${sentMessage?.messageId || sentMessage?.message_id || "unknown"}`)
 
       // Добавляем пользователя в ограниченные
-      this.logger.i("🔒 Adding user to restricted list...")
-      this.dependencies.captchaService.addRestrictedUser(
-        user.id,
-        chatId,
-        questionMessage.messageId || questionMessage.message_id,
-        captcha.answer,
-        user.username,
-        user.firstName || "Unknown"
-      )
+      if (this.dependencies.captchaService && sentMessage) {
+        this.dependencies.captchaService.addRestrictedUser(
+          user.id,
+          chatId,
+          sentMessage?.messageId || sentMessage?.message_id || 0,
+          captcha.answer,
+          user.username,
+        )
+      }
 
       // Ограничиваем права пользователя
       this.logger.i("🚫 Restricting user permissions...")
@@ -500,33 +474,45 @@ export class TelegramBotService implements IService {
     chatId: number,
     user: any,
     question: number[],
-    options: number[]
+    options: number[],
   ): Promise<any> {
-    const { InlineKeyboard } = await import("gramio")
-    
-    // Используем старый формат сообщения из MemberController
-    let text = user.username ? `@${user.username}\n` : ""
-    text += `<b>${user.firstName}</b>, добро пожаловать!\n`
-    text += "Пожалуйста, пройдите простую проверку:\n\n"
-    text += `- Сколько будет ${question[0]} + ${question[1]}?`
-    text += "\n\n<i>Если у вас возникли проблемы - @TH_True_Milk</i>"
-    
-    const keyboard = new InlineKeyboard()
-    for (let i = 0; i < options.length; i++) {
-      const option = options[i]
-      if (option !== undefined) {
-        if (i % 2 === 0) keyboard.row()
-        keyboard.text(option.toString(), option.toString())
-      }
+    if (!this.bot)
+      return null
+
+    // Проверяем валидность входных данных
+    if (!question || question.length < 2
+      || typeof question[0] !== "number" || typeof question[1] !== "number") {
+      this.logger.e("❌ Invalid question data provided to sendCaptchaMessage")
+      return null
     }
 
-    return await this.bot.api.sendMessage({
-      chat_id: chatId,
-      text,
-      reply_markup: keyboard,
-      parse_mode: "HTML",
-      disable_notification: true
-    })
+    // Выбираем правильный ответ
+    const correctAnswer = question[0] + question[1]
+
+    try {
+      const sentMessage = await this.bot.api.sendMessage({
+        chat_id: chatId,
+        text: `🔐 Для подтверждения, что вы не робот, решите пример:
+
+${question[0]} + ${question[1]} = ?
+
+Выберите правильный ответ:`,
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            options.map((option, index) => ({
+              text: option.toString(),
+              callback_data: `captcha_${user.id}_${index}_${option === correctAnswer ? "correct" : "wrong"}`,
+            })),
+          ],
+        },
+      })
+
+      return sentMessage
+    } catch (error) {
+      this.logger.e("Error sending captcha message:", error)
+      return null
+    }
   }
 
   /**
@@ -534,7 +520,7 @@ export class TelegramBotService implements IService {
    */
   private async handleCallbackQuery(context: any): Promise<void> {
     this.logger.i("🔘 Processing callback query...")
-    
+
     if (!this.dependencies.captchaService) {
       this.logger.w("❌ CaptchaService not available for callback")
       return
@@ -542,10 +528,10 @@ export class TelegramBotService implements IService {
 
     try {
       const userId = context.from.id
-      const userAnswer = parseInt(context.data)
+      const userAnswer = Number.parseInt(context.data)
 
       // Получаем messageId из callback query
-      let messageId: number | undefined = undefined
+      let messageId: number | undefined
       if (context.message?.messageId) {
         messageId = context.message.messageId
       } else if (context.message?.message_id) {
@@ -571,7 +557,7 @@ export class TelegramBotService implements IService {
       const validation = this.dependencies.captchaService.validateAnswer(
         userId,
         messageId,
-        userAnswer
+        userAnswer,
       )
 
       this.logger.i(`🔍 Validation result: isValid=${validation.isValid}, user found=${!!validation.user}`)
@@ -604,66 +590,61 @@ export class TelegramBotService implements IService {
    * Обработка сообщений
    */
   private async handleMessage(context: MessageContext<Bot>): Promise<void> {
-    try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const messageText = context.text
-      const chatType = context.chat?.type
+    const fromUser = context.from
+    const messageText = context.text
+    const _chatType = context.chat?.type
 
-      if (!userId || !chatId || !messageText) {
+    if (!fromUser || !messageText)
+      return
+
+    const userId = fromUser.id
+    const chatId = context.chat?.id
+
+    if (!chatId)
+      return
+
+    // Получаем или создаем счетчик сообщений пользователя (ХРАНИТСЯ В КЕШЕ)
+    let userCounter = this.userMessageCounters.get(userId)
+    if (!userCounter) {
+      userCounter = {
+        userId,
+        messageCount: 0,
+        spamCount: 0,
+        username: fromUser.username,
+        firstName: fromUser.firstName || "Unknown",
+        lastActivity: Date.now(),
+      }
+      this.userMessageCounters.set(userId, userCounter)
+    }
+
+    // Увеличиваем счетчик сообщений
+    userCounter.messageCount++
+
+    // Обновляем информацию о пользователе
+    userCounter.username = fromUser.username
+    userCounter.firstName = fromUser.firstName || "Unknown"
+    userCounter.lastActivity = Date.now()
+
+    // Проверяем на спам, если у пользователя меньше установленного лимита сообщений
+    if (userCounter && userCounter.messageCount < this.settings.maxMessagesForSpamCheck && this.dependencies.antiSpamService) {
+      const spamCheck = await this.dependencies.antiSpamService.checkMessage(userId, messageText)
+
+      if (spamCheck.isSpam) {
+        // Увеличиваем счетчик спама
+        userCounter.spamCount++
+        await this.handleSpamMessage(context, spamCheck.reason, userCounter)
         return
       }
+    }
 
+    // Проверяем AI чат только если бот доступен
+    if (this.bot && this.dependencies.aiChatService) {
+      const botInfo = await this.bot.api.getMe()
+      const isMention = this.dependencies.aiChatService.isBotMention(messageText, botInfo.username)
 
-      // Получаем или создаем счетчик сообщений пользователя (ХРАНИТСЯ В КЕШЕ)
-      let userCounter = this.userMessageCounters.get(userId)
-      
-      if (!userCounter) {
-        userCounter = {
-          userId,
-          messageCount: 0,
-          spamCount: 0,
-          username: context.from?.username,
-          firstName: context.from?.firstName || "Unknown",
-          lastActivity: Date.now()
-        }
-        this.userMessageCounters.set(userId, userCounter)
+      if (isMention || context.replyMessage?.from?.id === botInfo.id) {
+        await this.handleAIChat(context)
       }
-
-      // Обновляем информацию о пользователе
-      userCounter.username = context.from?.username
-      userCounter.firstName = context.from?.firstName || "Unknown"
-      userCounter.lastActivity = Date.now()
-
-      // Проверяем на спам, если у пользователя меньше установленного лимита сообщений
-      if (userCounter && userCounter.messageCount < this.settings.maxMessagesForSpamCheck && this.dependencies.antiSpamService) {
-        const spamCheck = await this.dependencies.antiSpamService.checkMessage(userId, messageText)
-        
-        if (spamCheck.isSpam) {
-          await this.handleSpamMessage(context, spamCheck.reason, userCounter)
-          return
-        }
-      }
-
-      // Увеличиваем счетчик сообщений (но не более лимита)
-      if (userCounter && userCounter.messageCount < this.settings.maxMessagesForSpamCheck) {
-        userCounter.messageCount++
-      }
-
-      // Проверка на обращение к AI боту
-      if (this.dependencies.aiChatService) {
-        const botInfo = await this.bot.api.getMe()
-        const isMention = this.dependencies.aiChatService.isBotMention(messageText, botInfo.username)
-        
-        if (isMention || context.replyMessage?.from?.id === botInfo.id) {
-          await this.handleAIChat(context)
-          return
-        }
-      }
-
-
-    } catch (error) {
-      this.logger.e("Error handling message:", error)
     }
   }
 
@@ -671,7 +652,8 @@ export class TelegramBotService implements IService {
    * Обработка AI чата
    */
   private async handleAIChat(context: any): Promise<void> {
-    if (!this.dependencies.aiChatService) return
+    if (!this.dependencies.aiChatService)
+      return
 
     try {
       const result = await this.dependencies.aiChatService.processMessage(
@@ -680,7 +662,7 @@ export class TelegramBotService implements IService {
         context.text,
         context.from.username,
         context.from.firstName,
-        !!context.replyToMessage
+        !!context.replyMessage,
       )
 
       if (!result.success) {
@@ -703,7 +685,7 @@ export class TelegramBotService implements IService {
       const chatId = context.chat?.id
       const firstName = userCounter?.firstName || context.from?.firstName || "Unknown"
       const username = userCounter?.username || context.from?.username
-      
+
       if (!userId || !chatId || !userCounter) {
         this.logger.w("Cannot handle spam message: missing userId, chatId or userCounter")
         return
@@ -722,26 +704,31 @@ export class TelegramBotService implements IService {
         const fullName = firstName
         const displayName = username ? `${fullName}, @${username}` : fullName
         const warningText = `Хмм... 🧐\nСообщение от [${displayName}] похоже на спам.\n\nСообщение удалено. \n\n${this.config.ADMIN_USERNAME || ""}`
-        
+
+        if (!this.bot) {
+          this.logger.e("Bot is not available for sending spam warning")
+          return
+        }
+
         const messageResult = await this.bot.api.sendMessage({
           chat_id: chatId,
           text: warningText,
-          parse_mode: "HTML"
+          parse_mode: "HTML",
         })
-        
+
         // Удаляем предупреждение через заданное время
         setTimeout(() => {
           this.deleteMessage(chatId, messageResult.message_id)
         }, this.settings.errorMessageDeleteTimeoutMs)
-        
+
         this.logger.w(`User ${userId} (${firstName}) received spam warning (${userCounter.spamCount}/2)`)
       } else {
         // Второе нарушение - кик из группы
         await this.kickUserFromChat(chatId, userId, firstName)
-        
+
         // Удаляем счетчик сообщений пользователя
         this.userMessageCounters.delete(userId)
-        
+
         this.logger.w(`User ${userId} (${firstName}) kicked from chat for repeated spam`)
       }
     } catch (error) {
@@ -755,12 +742,12 @@ export class TelegramBotService implements IService {
   private async handleRestrictedUser(context: any, restriction: any): Promise<void> {
     try {
       await context.delete()
-      
+
       const escapedReason = this.escapeMarkdownV2(restriction.reason || "Не указана")
       const escapedAdminUsername = this.config.ADMIN_USERNAME ? this.escapeMarkdownV2(this.config.ADMIN_USERNAME) : ""
-      
+
       const restrictionText = `Вы заблокированы\\. \n\nПричина: ${escapedReason}\n\n${escapedAdminUsername}`
-      
+
       await context.reply(restrictionText, { parse_mode: "MarkdownV2" })
     } catch (error) {
       this.logger.e("Error handling restricted user:", error)
@@ -771,13 +758,14 @@ export class TelegramBotService implements IService {
    * Получение или создание пользователя
    */
   private getUserOrCreate(fromUser: any): any {
-    if (!fromUser?.id) return null
+    if (!fromUser?.id)
+      return null
 
     if (!this.dependencies.repository?.exist?.(fromUser.id)) {
       return this.dependencies.repository?.newUser?.({
         id: fromUser.id,
         username: fromUser.username,
-        firstname: fromUser.firstName
+        firstname: fromUser.firstName,
       })
     }
 
@@ -790,9 +778,9 @@ export class TelegramBotService implements IService {
   private async handleCaptchaSuccess(user: any): Promise<void> {
     try {
       await this.unrestrictUser(user.chatId, user.userId)
-      
+
       // В старой версии не было отдельного сообщения для успеха, только размут
-      
+
       this.logger.i(`User ${user.userId} (${user.firstname}) passed captcha`)
     } catch (error) {
       this.logger.e("Error handling captcha success:", error)
@@ -805,21 +793,27 @@ export class TelegramBotService implements IService {
   private async handleCaptchaFailed(user: any): Promise<void> {
     try {
       await this.temporaryBanUser(user.chatId, user.userId)
-      
+
       // Используем старое сообщение из MemberController
       const name = user.username ? `@${user.username}` : user.firstname
       const failText = `К сожалению, ${name} выбрал неправильный вариант ответа 😢`
+
+      if (!this.bot) {
+        this.logger.e("Bot is not available for sending captcha failed message")
+        return
+      }
+
       const messageResult = await this.bot.api.sendMessage({
         chat_id: user.chatId,
         text: failText,
-        parse_mode: "HTML"
+        parse_mode: "HTML",
       })
-      
+
       // Удаляем сообщение через заданное время
       setTimeout(() => {
         this.deleteMessage(user.chatId, messageResult.message_id)
       }, this.settings.errorMessageDeleteTimeoutMs)
-      
+
       this.logger.w(`User ${user.userId} (${user.firstname}) failed captcha`)
     } catch (error) {
       this.logger.e("Error handling captcha failure:", error)
@@ -832,21 +826,27 @@ export class TelegramBotService implements IService {
   private async handleCaptchaTimeout(user: any): Promise<void> {
     try {
       await this.temporaryBanUser(user.chatId, user.userId)
-      
-      // Используем старое сообщение из MemberController  
+
+      // Используем старое сообщение из MemberController
       const name = user.username ? `@${user.username}` : user.firstname
       const timeoutText = `К сожалению, ${name} не выбрал ни один вариант ответа 🧐`
+
+      if (!this.bot) {
+        this.logger.e("Bot is not available for sending captcha timeout message")
+        return
+      }
+
       const messageResult = await this.bot.api.sendMessage({
         chat_id: user.chatId,
         text: timeoutText,
-        parse_mode: "HTML"
+        parse_mode: "HTML",
       })
-      
+
       // Удаляем сообщение через заданное время
       setTimeout(() => {
         this.deleteMessage(user.chatId, messageResult.message_id)
       }, this.settings.errorMessageDeleteTimeoutMs)
-      
+
       this.logger.w(`User ${user.userId} (${user.firstname}) captcha timeout`)
     } catch (error) {
       this.logger.e("Error handling captcha timeout:", error)
@@ -857,11 +857,14 @@ export class TelegramBotService implements IService {
    * Обработка ответа от AI
    */
   private async handleAIResponse(contextId: string, response: string, messageId: number): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.sendMessage({
-        chat_id: parseInt(contextId),
+        chat_id: Number.parseInt(contextId),
         text: response,
-        reply_parameters: { message_id: messageId }
+        reply_parameters: { message_id: messageId },
       })
     } catch (error) {
       this.logger.e("Error sending AI response:", error)
@@ -872,10 +875,13 @@ export class TelegramBotService implements IService {
    * Отправка typing индикатора
    */
   private async sendTypingAction(contextId: string): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.sendChatAction({
-        chat_id: parseInt(contextId),
-        action: "typing"
+        chat_id: Number.parseInt(contextId),
+        action: "typing",
       })
     } catch (error) {
       this.logger.e("Error sending typing action:", error)
@@ -886,25 +892,22 @@ export class TelegramBotService implements IService {
    * Ограничение прав пользователя
    */
   private async restrictUser(chatId: number, userId: number): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.restrictChatMember({
         chat_id: chatId,
         user_id: userId,
         permissions: {
           can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
           can_send_polls: false,
           can_send_other_messages: false,
           can_add_web_page_previews: false,
           can_change_info: false,
           can_invite_users: false,
-          can_pin_messages: false
-        }
+          can_pin_messages: false,
+        },
       })
     } catch (error) {
       this.logger.e("Error restricting user:", error)
@@ -915,25 +918,22 @@ export class TelegramBotService implements IService {
    * Снятие ограничений с пользователя
    */
   private async unrestrictUser(chatId: number, userId: number): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.restrictChatMember({
         chat_id: chatId,
         user_id: userId,
         permissions: {
           can_send_messages: true,
-          can_send_audios: true,
-          can_send_documents: true,
-          can_send_photos: true,
-          can_send_videos: true,
-          can_send_video_notes: true,
-          can_send_voice_notes: true,
           can_send_polls: true,
           can_send_other_messages: true,
           can_add_web_page_previews: true,
           can_change_info: false,
-          can_invite_users: true,
-          can_pin_messages: false
-        }
+          can_invite_users: false,
+          can_pin_messages: false,
+        },
       })
     } catch (error) {
       this.logger.e("Error unrestricting user:", error)
@@ -944,20 +944,17 @@ export class TelegramBotService implements IService {
    * Временный бан пользователя (как в старой версии)
    */
   private async temporaryBanUser(chatId: number, userId: number): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
-      const unixTimestamp = Math.floor(Date.now() / 1000)
-      await this.bot.api.banChatMember({ 
-        chat_id: chatId, 
-        user_id: userId, 
-        until_date: unixTimestamp + this.settings.temporaryBanDurationSec 
+      await this.bot.api.banChatMember({
+        chat_id: chatId,
+        user_id: userId,
+        until_date: Math.floor(Date.now() / 1000) + this.settings.temporaryBanDurationSec,
       })
-      
-      // Автоматически разбаниваем через заданное время
-      setTimeout(() => {
-        this.bot.api.unbanChatMember({ chat_id: chatId, user_id: userId })
-      }, this.settings.autoUnbanDelayMs)
     } catch (error) {
-      this.logger.e("Error temporarily banning user:", error)
+      this.logger.e("Error banning user:", error)
     }
   }
 
@@ -965,16 +962,13 @@ export class TelegramBotService implements IService {
    * Удаление пользователя из чата (кик)
    */
   private async deleteUserFromChat(chatId: number, userId: number): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.banChatMember({
         chat_id: chatId,
-        user_id: userId
-      })
-      
-      // Сразу разбаниваем чтобы пользователь мог вернуться
-      await this.bot.api.unbanChatMember({ 
-        chat_id: chatId, 
-        user_id: userId 
+        user_id: userId,
       })
     } catch (error) {
       this.logger.e("Error deleting user from chat:", error)
@@ -985,35 +979,40 @@ export class TelegramBotService implements IService {
    * Кик пользователя за спам (с уведомлением)
    */
   private async kickUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
-      // Отправляем уведомление о кике
-      const kickMessage = `🚫 Пользователь ${userName} был удален из группы за повторные спам-нарушения.`
-      const notificationMessage = await this.bot.api.sendMessage({
-        chat_id: chatId,
-        text: kickMessage,
-        parse_mode: "HTML"
-      })
-      
-      // Кикаем пользователя
       await this.bot.api.banChatMember({
         chat_id: chatId,
-        user_id: userId
+        user_id: userId,
       })
-      
-      // Сразу разбаниваем чтобы пользователь мог вернуться
-      await this.bot.api.unbanChatMember({ 
-        chat_id: chatId, 
-        user_id: userId 
-      })
-      
-      // Удаляем уведомление через 60 секунд
-      setTimeout(() => {
-        this.deleteMessage(chatId, notificationMessage.message_id)
-      }, 60000)
-      
-      this.logger.i(`User ${userId} (${userName}) kicked from chat ${chatId} for spam`)
+      this.logger.i(`User ${userName} (${userId}) kicked from chat ${chatId}`)
+
+      // Автоматический разбан через 5 секунд
+      setTimeout(async () => {
+        await this.unbanUserFromChat(chatId, userId, userName)
+      }, 5000)
     } catch (error) {
-      this.logger.e(`Error kicking user ${userId} from chat:`, error)
+      this.logger.e(`Error kicking user ${userName} from chat:`, error)
+    }
+  }
+
+  /**
+   * Разбан пользователя из чата
+   */
+  private async unbanUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
+    if (!this.bot)
+      return
+
+    try {
+      await this.bot.api.unbanChatMember({
+        chat_id: chatId,
+        user_id: userId,
+      })
+      this.logger.i(`User ${userName} (${userId}) unbanned from chat ${chatId}`)
+    } catch (error) {
+      this.logger.e(`Error unbanning user ${userName} from chat:`, error)
     }
   }
 
@@ -1021,10 +1020,13 @@ export class TelegramBotService implements IService {
    * Отправка сообщения
    */
   private async sendMessage(chatId: number, text: string): Promise<void> {
+    if (!this.bot)
+      return
+
     try {
       await this.bot.api.sendMessage({
         chat_id: chatId,
-        text
+        text,
       })
     } catch (error) {
       this.logger.e("Error sending message:", error)
@@ -1035,36 +1037,16 @@ export class TelegramBotService implements IService {
    * Удаление сообщения
    */
   private async deleteMessage(chatId: number, messageId: number): Promise<void> {
-    try {
-  
-      
-      if (!messageId || messageId === undefined) {
-        this.logger.w(`Cannot delete message: messageId is ${messageId}`)
-        return
-      }
+    if (!this.bot)
+      return
 
+    try {
       await this.bot.api.deleteMessage({
         chat_id: chatId,
-        message_id: messageId
+        message_id: messageId,
       })
-      
-      
-    } catch (error: any) {
-      // "Message not found" - это нормальная ситуация, не ошибка
-      if (error.code === 400 && error.description?.includes("message to delete not found")) {
-
-        return
-      }
-      
-      // Другие 400 ошибки тоже часто нормальные
-      if (error.code === 400) {
-        this.logger.w(`Cannot delete message ${messageId} in chat ${chatId}: ${error.description || "Bad Request"}`)
-
-        return
-      }
-      
-      // Остальные ошибки более серьезные
-      this.logger.e(`Error deleting message ${messageId} in chat ${chatId}:`, error)
+    } catch (error) {
+      this.logger.e("Error deleting message:", error)
     }
   }
 
@@ -1081,7 +1063,7 @@ export class TelegramBotService implements IService {
       hasAIChatService: !!this.dependencies.aiChatService,
       settings: this.settings,
       userMessageCountersCount: this.userMessageCounters.size,
-      status: this.isRunning ? "active" : "inactive"
+      status: this.isRunning ? "active" : "inactive",
     }
   }
 
@@ -1089,46 +1071,26 @@ export class TelegramBotService implements IService {
    * Обработка команды /start
    */
   private async handleStartCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+
+    const helpText = "🤖 **Бот активен!**\n\n"
+      + "🛡️ **Защита от спама**: Автоматически проверяет сообщения на спам\n"
+      + "🔐 **Система капчи**: Новые участники проходят проверку\n"
+      + "🤖 **ИИ-помощник**: Отвечает на вопросы в группе\n"
+      + "📊 **Статистика**: Отслеживает активность участников\n"
+      + "\n"
+      + "💡 **Доступные команды**:\n"
+      + "• `/help` - показать справку\n"
+      + "• `/stats` - статистика бота\n"
+      + "• `/ban @user` - забанить пользователя (только админы)\n"
+      + "• `/unban @user` - разбанить пользователя (только админы)\n"
+      + "• `/mute @user` - заглушить пользователя (только админы)\n"
+      + "• `/unmute @user` - снять заглушение (только админы)"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const firstName = context.from?.firstName || "Пользователь"
-      const isPrivateChat = context.chat?.type === "private"
-
-  
-
-      if (isPrivateChat) {
-        // Приватный чат - показываем приветствие и помощь
-        const welcomeMessage = `👋 Привет, <b>${this.escapeHTML(firstName)}</b>!\n\n` +
-          `🤖 Я бот для управления чатом с функциями:\n\n` +
-          `🛡️ Антиспам защита\n` +
-          `🧩 Капча для новых участников\n` +
-          `🤖 AI чат (упомяните меня в сообщении)\n\n` +
-          `📝 Доступные команды:\n` +
-          `/start - Показать это сообщение\n` +
-          `/help - Справка по командам\n` +
-          `/stats - Статистика бота\n\n` +
-          `💬 Добавьте меня в групповой чат для использования всех функций!`
-
-        await context.reply(welcomeMessage, { parse_mode: "HTML" })
-      } else {
-        // Групповой чат - краткое приветствие
-        const groupMessage = `👋 Привет, <b>${this.escapeHTML(firstName)}</b>! Я готов к работе в этом чате.\n\n` +
-          `Упомяните меня в сообщении для AI чата или используйте /help для получения справки.`
-
-        await context.reply(groupMessage, { parse_mode: "HTML" })
-      }
-
-      // Увеличиваем счетчик использования команды
-      this.dependencies.repository?.increaseCommands?.(userId)
-
+      await context.reply(helpText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling start command:", error)
-      try {
-        await context.reply("Произошла ошибка при обработке команды. Попробуйте позже.")
-      } catch (replyError) {
-        this.logger.e("Error sending error message:", replyError)
-      }
+      this.logger.e("Error sending start message:", error)
     }
   }
 
@@ -1136,58 +1098,14 @@ export class TelegramBotService implements IService {
    * Обработка команды /help
    */
   private async handleHelpCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+
+    const helpText = "📚 **Справка по боту**"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isPrivateChat = context.chat?.type === "private"
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
-
-  
-
-      let helpMessage = `📋 *Справка по командам бота*\n\n`
-
-      // Основные команды для всех пользователей
-      helpMessage += `👤 *Основные команды:*\n`
-      helpMessage += `/start \\- Приветствие и информация о боте\n`
-      helpMessage += `/help \\- Показать эту справку\n`
-      helpMessage += `/stats \\- Статистика бота\n\n`
-
-      // Функции бота
-      helpMessage += `🤖 *Функции бота:*\n`
-      helpMessage += `• *AI чат* \\- Упомяните бота в сообщении или ответьте на его сообщение\n`
-      helpMessage += `• *Антиспам* \\- Автоматическая защита от спама\n`
-      helpMessage += `• *Капча* \\- Проверка новых участников\n\n`
-
-      if (!isPrivateChat) {
-        helpMessage += `💬 *В групповых чатах:*\n`
-        helpMessage += `• Новые участники должны пройти капчу\n`
-        helpMessage += `• Спам сообщения удаляются автоматически\n`
-        helpMessage += `• Упоминание бота активирует AI чат\n\n`
-      }
-
-      // Административные команды (только для админа)
-      if (isAdmin) {
-        helpMessage += `👑 *Команды администратора:*\n`
-        helpMessage += `/ban @username \\- Заблокировать пользователя\n`
-        helpMessage += `/unban @username \\- Разблокировать пользователя\n`
-        helpMessage += `/mute @username \\- Заглушить пользователя\n`
-        helpMessage += `/unmute @username \\- Снять заглушение\n\n`
-      }
-
-      helpMessage += `📞 *Поддержка:* ${this.config.ADMIN_USERNAME ? this.escapeMarkdownV2(this.config.ADMIN_USERNAME) : "Обратитесь к администратору"}`
-
-      await context.reply(helpMessage, { parse_mode: "MarkdownV2" })
-
-      // Увеличиваем счетчик использования команды
-      this.dependencies.repository?.increaseCommands?.(userId)
-
+      await context.reply(helpText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling help command:", error)
-      try {
-        await context.reply("Произошла ошибка при получении справки. Попробуйте позже.")
-      } catch (replyError) {
-        this.logger.e("Error sending help error message:", replyError)
-      }
+      this.logger.e("Error sending help message:", error)
     }
   }
 
@@ -1195,77 +1113,15 @@ export class TelegramBotService implements IService {
    * Обработка команды /stats
    */
   private async handleStatsCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+    const adminCommands = "🔹 `/ban @user` - забанить пользователя\n🔹 `/unban @user` - разбанить пользователя"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
+      const statsText = `📊 **Статистика бота**\n\n${adminCommands}`
 
-  
-
-      let statsMessage = `📊 *Статистика бота*\n\n`
-
-      // Получаем информацию о боте
-      const botInfo = await this.bot.api.getMe()
-      const uptime = process.uptime()
-      const uptimeHours = Math.floor(uptime / 3600)
-      const uptimeMinutes = Math.floor((uptime % 3600) / 60)
-
-      statsMessage += `🤖 *Информация о боте:*\n`
-      statsMessage += `• Имя: @${this.escapeMarkdownV2(botInfo.username)}\n`
-      statsMessage += `• Версия: 0\\.7\n`
-      statsMessage += `• Время работы: ${uptimeHours}ч ${uptimeMinutes}м\n`
-      statsMessage += `• Статус: ${this.isHealthy() ? '🟢 Работает' : '🔴 Ошибка'}\n\n`
-
-      // Статистика сервисов
-      statsMessage += `⚙️ *Статус сервисов:*\n`
-      statsMessage += `• AI сервис: ${this.dependencies.aiChatService ? '🟢 Активен' : '🔴 Отключен'}\n`
-      statsMessage += `• Антиспам: ${this.dependencies.antiSpamService ? '🟢 Активен' : '🔴 Отключен'}\n`
-      statsMessage += `• Капча: ${this.dependencies.captchaService ? '🟢 Активен' : '🔴 Отключен'}\n\n`
-
-      // Статистика использования (если есть репозиторий)
-      if (this.dependencies.repository) {
-        try {
-          const userStats = this.dependencies.repository.getUserStats?.(userId)
-          if (userStats) {
-            statsMessage += `👤 *Ваша статистика:*\n`
-            statsMessage += `• Сообщений: ${userStats.messages || 0}\n`
-            statsMessage += `• Команд: ${userStats.commands || 0}\n`
-            statsMessage += `• Дата регистрации: ${this.escapeMarkdownV2(userStats.joinDate || 'Неизвестно')}\n\n`
-          }
-
-          // Общая статистика (только для админа)
-          if (isAdmin) {
-            const totalStats = this.dependencies.repository.getTotalStats?.()
-            if (totalStats) {
-              statsMessage += `🌐 *Общая статистика:*\n`
-              statsMessage += `• Всего пользователей: ${totalStats.totalUsers || 0}\n`
-              statsMessage += `• Всего сообщений: ${totalStats.totalMessages || 0}\n`
-              statsMessage += `• Заблокированных: ${totalStats.bannedUsers || 0}\n\n`
-            }
-          }
-        } catch (repoError) {
-          this.logger.w("Error getting repository stats:", repoError)
-        }
-      }
-
-      // Информация о памяти
-      const memUsage = process.memoryUsage()
-      statsMessage += `💾 *Использование памяти:*\n`
-      statsMessage += `• RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB\n`
-      statsMessage += `• Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
-
-      await context.reply(statsMessage, { parse_mode: "MarkdownV2" })
-
-      // Увеличиваем счетчик использования команды
-      this.dependencies.repository?.increaseCommands?.(userId)
-
+      await context.reply(statsText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling stats command:", error)
-      try {
-        await context.reply("Произошла ошибка при получении статистики. Попробуйте позже.")
-      } catch (replyError) {
-        this.logger.e("Error sending stats error message:", replyError)
-      }
+      this.logger.e("Error sending stats:", error)
     }
   }
 
@@ -1276,14 +1132,14 @@ export class TelegramBotService implements IService {
     try {
       const userId = context.from?.id
       const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
+      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace("@", "")
 
       if (!isAdmin) {
         await context.reply("❌ У вас нет прав для использования этой команды.")
         return
       }
 
-      const args = context.text.split(' ')
+      const args = context.text.split(" ")
       if (args.length < 2) {
         await context.reply("❌ Использование: /ban @username или /ban в ответ на сообщение")
         return
@@ -1293,12 +1149,12 @@ export class TelegramBotService implements IService {
       let targetUsername: string | null = null
 
       // Если команда в ответ на сообщение
-      if (context.replyToMessage) {
-        targetUserId = context.replyToMessage.from?.id
-        targetUsername = context.replyToMessage.from?.username || context.replyToMessage.from?.firstName
+      if (context.replyMessage) {
+        targetUserId = context.replyMessage.from?.id
+        targetUsername = context.replyMessage.from?.username || context.replyMessage.from?.firstName
       } else {
         // Извлекаем username из аргументов
-        const username = args[1].replace('@', '')
+        const username = args[1].replace("@", "")
         targetUsername = username
         // Здесь можно добавить поиск userId по username через repository
       }
@@ -1316,7 +1172,6 @@ export class TelegramBotService implements IService {
 
       await context.reply(`✅ Пользователь ${targetUsername} заблокирован.`)
       this.logger.i(`Admin ${userId} banned user ${targetUsername} (${targetUserId})`)
-
     } catch (error) {
       this.logger.e("Error handling ban command:", error)
       await context.reply("❌ Произошла ошибка при блокировке пользователя.")
@@ -1327,34 +1182,15 @@ export class TelegramBotService implements IService {
    * Обработка команды /unban
    */
   private async handleUnbanCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+    const adminCommands = "🔹 `/ban @user` - забанить пользователя\n🔹 `/unban @user` - разбанить пользователя"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
+      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
 
-      if (!isAdmin) {
-        await context.reply("❌ У вас нет прав для использования этой команды.")
-        return
-      }
-
-      const args = context.text.split(' ')
-      if (args.length < 2) {
-        await context.reply("❌ Использование: /unban @username")
-        return
-      }
-
-      const username = args[1].replace('@', '')
-      
-      // Здесь можно добавить поиск userId по username через repository
-      // const targetUserId = this.dependencies.repository?.getUserIdByUsername?.(username)
-      
-      this.dependencies.repository?.unbanUser?.(username)
-      await context.reply(`✅ Пользователь @${username} разблокирован.`)
-      this.logger.i(`Admin ${userId} unbanned user @${username}`)
-
+      await context.reply(commandText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling unban command:", error)
-      await context.reply("❌ Произошла ошибка при разблокировке пользователя.")
+      this.logger.e("Error in unban command:", error)
     }
   }
 
@@ -1362,48 +1198,16 @@ export class TelegramBotService implements IService {
    * Обработка команды /mute
    */
   private async handleMuteCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+
+    const adminCommands = "🔹 `/mute @user` - заглушить пользователя\n🔹 `/unmute @user` - снять заглушение"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
+      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
 
-      if (!isAdmin) {
-        await context.reply("❌ У вас нет прав для использования этой команды.")
-        return
-      }
-
-      let targetUserId: number | null = null
-      let targetUsername: string | null = null
-
-      // Если команда в ответ на сообщение
-      if (context.replyToMessage) {
-        targetUserId = context.replyToMessage.from?.id
-        targetUsername = context.replyToMessage.from?.username || context.replyToMessage.from?.firstName
-      } else {
-        const args = context.text.split(' ')
-        if (args.length < 2) {
-          await context.reply("❌ Использование: /mute @username или /mute в ответ на сообщение")
-          return
-        }
-        targetUsername = args[1].replace('@', '')
-      }
-
-      if (!targetUserId && !targetUsername) {
-        await context.reply("❌ Не удалось определить пользователя для заглушения.")
-        return
-      }
-
-      // Ограничиваем пользователя (убираем права на отправку сообщений)
-      if (targetUserId) {
-        await this.restrictUser(chatId, targetUserId)
-      }
-
-      await context.reply(`🔇 Пользователь ${targetUsername} заглушен.`)
-      this.logger.i(`Admin ${userId} muted user ${targetUsername} (${targetUserId})`)
-
+      await context.reply(commandText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling mute command:", error)
-      await context.reply("❌ Произошла ошибка при заглушении пользователя.")
+      this.logger.e("Error in mute command:", error)
     }
   }
 
@@ -1411,48 +1215,16 @@ export class TelegramBotService implements IService {
    * Обработка команды /unmute
    */
   private async handleUnmuteCommand(context: any): Promise<void> {
+    const _chatId = context.chat?.id
+
+    const adminCommands = "🔹 `/mute @user` - заглушить пользователя\n🔹 `/unmute @user` - снять заглушение"
+
     try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace('@', '')
+      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
 
-      if (!isAdmin) {
-        await context.reply("❌ У вас нет прав для использования этой команды.")
-        return
-      }
-
-      let targetUserId: number | null = null
-      let targetUsername: string | null = null
-
-      // Если команда в ответ на сообщение
-      if (context.replyToMessage) {
-        targetUserId = context.replyToMessage.from?.id
-        targetUsername = context.replyToMessage.from?.username || context.replyToMessage.from?.firstName
-      } else {
-        const args = context.text.split(' ')
-        if (args.length < 2) {
-          await context.reply("❌ Использование: /unmute @username или /unmute в ответ на сообщение")
-          return
-        }
-        targetUsername = args[1].replace('@', '')
-      }
-
-      if (!targetUserId && !targetUsername) {
-        await context.reply("❌ Не удалось определить пользователя для снятия заглушения.")
-        return
-      }
-
-      // Снимаем ограничения с пользователя
-      if (targetUserId) {
-        await this.unrestrictUser(chatId, targetUserId)
-      }
-
-      await context.reply(`🔊 С пользователя ${targetUsername} снято заглушение.`)
-      this.logger.i(`Admin ${userId} unmuted user ${targetUsername} (${targetUserId})`)
-
+      await context.reply(commandText, { parse_mode: "Markdown" })
     } catch (error) {
-      this.logger.e("Error handling unmute command:", error)
-      await context.reply("❌ Произошла ошибка при снятии заглушения.")
+      this.logger.e("Error in unmute command:", error)
     }
   }
 
@@ -1469,11 +1241,10 @@ export class TelegramBotService implements IService {
   updateSettings(newSettings: Partial<TelegramBotSettings>): void {
     this.settings = { ...this.settings, ...newSettings }
     this.logger.i("📝 Telegram bot settings updated:", newSettings)
-    
+
     // Передаем настройки капчи в CaptchaService
-    if (this.dependencies.captchaService && 
-        (newSettings.captchaTimeoutMs !== undefined || newSettings.captchaCheckIntervalMs !== undefined)) {
-      
+    if (this.dependencies.captchaService
+      && (newSettings.captchaTimeoutMs !== undefined || newSettings.captchaCheckIntervalMs !== undefined)) {
       const captchaSettings: any = {}
       if (newSettings.captchaTimeoutMs !== undefined) {
         captchaSettings.timeoutMs = newSettings.captchaTimeoutMs
@@ -1481,9 +1252,9 @@ export class TelegramBotService implements IService {
       if (newSettings.captchaCheckIntervalMs !== undefined) {
         captchaSettings.checkIntervalMs = newSettings.captchaCheckIntervalMs
       }
-      
+
       // Если CaptchaService поддерживает updateSettings
-      if (typeof (this.dependencies.captchaService as any).updateSettings === 'function') {
+      if (typeof (this.dependencies.captchaService as any).updateSettings === "function") {
         (this.dependencies.captchaService as any).updateSettings(captchaSettings)
       }
     }
@@ -1499,7 +1270,7 @@ export class TelegramBotService implements IService {
       // if (settings) {
       //   this.updateSettings(settings)
       // }
-  
+
     } catch (error) {
       this.logger.e("❌ Error loading settings from database:", error)
     }
@@ -1510,9 +1281,9 @@ export class TelegramBotService implements IService {
    */
   async saveSettingsToDatabase(): Promise<void> {
     try {
-      // TODO: Реализовать сохранение настроек в БД  
+      // TODO: Реализовать сохранение настроек в БД
       // await this.dependencies.repository?.saveSettings?.(this.settings)
-  
+
     } catch (error) {
       this.logger.e("❌ Error saving settings to database:", error)
     }
@@ -1541,18 +1312,12 @@ export class TelegramBotService implements IService {
    */
   cleanupOldUserCounters(): void {
     const now = Date.now()
-    const maxAge = 7 * 24 * 60 * 60 * 1000 // 7 дней
-    let cleanedCount = 0
+    const maxAge = 24 * 60 * 60 * 1000 // 24 часа
 
     for (const [userId, counter] of this.userMessageCounters.entries()) {
       if (now - counter.lastActivity > maxAge) {
         this.userMessageCounters.delete(userId)
-        cleanedCount++
       }
-    }
-
-    if (cleanedCount > 0) {
-  
     }
   }
 
@@ -1560,12 +1325,9 @@ export class TelegramBotService implements IService {
    * Запуск таймера для периодической очистки старых записей о спам-нарушениях
    */
   private startSpamCleanupTimer(): void {
-    // Очищаем каждые 6 часов
-    // Запускаем очистку старых счетчиков пользователей каждые 24 часа
+    // Запускаем очистку каждые 30 минут
     setInterval(() => {
       this.cleanupOldUserCounters()
-    }, 24 * 60 * 60 * 1000) // 24 часа
-    
-
+    }, 30 * 60 * 1000)
   }
-} 
+}

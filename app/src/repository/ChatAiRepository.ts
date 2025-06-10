@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
-import { chats, groupAdmins, aiContexts, type Chat, type NewChat, type GroupAdmin } from "../db/schema.js"
+import { aiContexts, chats, groupAdmins } from "../db/schema.js"
+import type { Chat, GroupAdmin, NewChat } from "../db/schema.js"
 
 export class ChatAiRepository {
   constructor(private db: NodePgDatabase<any>) {}
@@ -18,7 +19,7 @@ export class ChatAiRepository {
 
       return result[0] || null
     } catch (error) {
-      console.error('Error getting chat:', error)
+      console.error("Error getting chat:", error)
       return null
     }
   }
@@ -26,7 +27,7 @@ export class ChatAiRepository {
   /**
    * Создать чат с настройками ИИ по умолчанию
    */
-  async createChat(chatId: number, title?: string, type: string = 'group'): Promise<Chat | null> {
+  async createChat(chatId: number, title?: string, type: string = "group"): Promise<Chat | null> {
     try {
       const result = await this.db
         .insert(chats)
@@ -37,13 +38,13 @@ export class ChatAiRepository {
           isAiEnabled: true,
           dailyLimit: 1500,
           throttleDelay: 3000,
-          maxContextCharacters: 600
+          maxContextCharacters: 600,
         })
         .returning()
 
       return result[0] || null
     } catch (error) {
-      console.error('Error creating chat:', error)
+      console.error("Error creating chat:", error)
       return null
     }
   }
@@ -51,9 +52,9 @@ export class ChatAiRepository {
   /**
    * Получить чат или создать с настройками по умолчанию
    */
-  async getOrCreateChat(chatId: number, title?: string, type: string = 'group'): Promise<Chat | null> {
+  async getOrCreateChat(chatId: number, title?: string, type: string = "group"): Promise<Chat | null> {
     let chat = await this.getChat(chatId)
-    
+
     if (!chat) {
       chat = await this.createChat(chatId, title, type)
     }
@@ -64,19 +65,19 @@ export class ChatAiRepository {
   /**
    * Обновить настройки чата
    */
-  async updateChat(chatId: number, updates: Partial<Omit<NewChat, 'id'>>): Promise<boolean> {
+  async updateChat(chatId: number, updates: Partial<Omit<NewChat, "id">>): Promise<boolean> {
     try {
       const result = await this.db
         .update(chats)
         .set({
           ...updates,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         })
         .where(eq(chats.id, chatId))
 
       return (result.rowCount || 0) > 0
     } catch (error) {
-      console.error('Error updating chat:', error)
+      console.error("Error updating chat:", error)
       return false
     }
   }
@@ -119,7 +120,7 @@ export class ChatAiRepository {
         .from(groupAdmins)
         .where(eq(groupAdmins.groupId, chatId))
     } catch (error) {
-      console.error('Error getting chat admins:', error)
+      console.error("Error getting chat admins:", error)
       return []
     }
   }
@@ -127,23 +128,23 @@ export class ChatAiRepository {
   /**
    * Добавить администратора чата
    */
-  async addAdmin(chatId: number, userId: number, role: string = 'admin'): Promise<boolean> {
+  async addAdmin(chatId: number, userId: number, role: string = "admin"): Promise<boolean> {
     try {
       await this.db
         .insert(groupAdmins)
         .values({
           groupId: chatId,
           userId,
-          role
+          role,
         })
         .onConflictDoUpdate({
           target: [groupAdmins.groupId, groupAdmins.userId],
-          set: { role }
+          set: { role },
         })
 
       return true
     } catch (error) {
-      console.error('Error adding admin:', error)
+      console.error("Error adding admin:", error)
       return false
     }
   }
@@ -156,12 +157,12 @@ export class ChatAiRepository {
       const result = await this.db
         .delete(groupAdmins)
         .where(
-          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`
+          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
         )
 
       return (result.rowCount || 0) > 0
     } catch (error) {
-      console.error('Error removing admin:', error)
+      console.error("Error removing admin:", error)
       return false
     }
   }
@@ -175,13 +176,13 @@ export class ChatAiRepository {
         .select({ id: groupAdmins.userId })
         .from(groupAdmins)
         .where(
-          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`
+          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
         )
         .limit(1)
 
       return result.length > 0
     } catch (error) {
-      console.error('Error checking admin status:', error)
+      console.error("Error checking admin status:", error)
       return false
     }
   }
@@ -196,7 +197,7 @@ export class ChatAiRepository {
         .from(chats)
         .where(eq(chats.isAiEnabled, true))
     } catch (error) {
-      console.error('Error getting active AI chats:', error)
+      console.error("Error getting active AI chats:", error)
       return []
     }
   }
@@ -222,13 +223,13 @@ export class ChatAiRepository {
           messages: result[0].messages || "",
           totalRequestCount: result[0].totalRequestCount || 0,
           dailyRequestCount: result[0].dailyRequestCount || 0,
-          contextLength: result[0].contextLength || 0
+          contextLength: result[0].contextLength || 0,
         }
       }
 
       return null
     } catch (error) {
-      console.error('Error getting context:', error)
+      console.error("Error getting context:", error)
       return null
     }
   }
@@ -246,7 +247,7 @@ export class ChatAiRepository {
           totalRequestCount: totalRequests,
           dailyRequestCount: dailyRequests,
           contextLength: messages.length,
-          lastActivity: new Date()
+          lastActivity: new Date(),
         })
         .onConflictDoUpdate({
           target: aiContexts.chatId,
@@ -255,13 +256,13 @@ export class ChatAiRepository {
             totalRequestCount: totalRequests,
             dailyRequestCount: dailyRequests,
             contextLength: messages.length,
-            lastActivity: new Date()
-          }
+            lastActivity: new Date(),
+          },
         })
 
       return true
     } catch (error) {
-      console.error('Error saving context:', error)
+      console.error("Error saving context:", error)
       return false
     }
   }
@@ -276,13 +277,13 @@ export class ChatAiRepository {
 
     // Оставляем последние maxLength символов, пытаясь сохранить целостность сообщений
     const trimmed = context.slice(-maxLength)
-    
+
     // Найдем первый перенос строки, чтобы не обрезать посередине сообщения
-    const firstNewLine = trimmed.indexOf('\n')
+    const firstNewLine = trimmed.indexOf("\n")
     if (firstNewLine > 0 && firstNewLine < maxLength * 0.1) {
       return trimmed.slice(firstNewLine + 1)
     }
 
     return trimmed
   }
-} 
+}

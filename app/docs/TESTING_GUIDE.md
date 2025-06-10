@@ -47,19 +47,19 @@
 
 ```javascript
 export default {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
+  preset: "ts-jest",
+  testEnvironment: "node",
   testMatch: [
-    '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.js'
+    "**/__tests__/**/*.test.ts",
+    "**/__tests__/**/*.test.js"
   ],
   collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/index.ts',
-    '!src/**/__tests__/**'
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/index.ts",
+    "!src/**/__tests__/**"
   ]
-};
+}
 ```
 
 ## 🚀 Запуск тестов
@@ -73,7 +73,7 @@ npm test
 # Только юнит-тесты
 npm run test:unit
 
-# Только интеграционные тесты  
+# Только интеграционные тесты
 npm run test:integration
 
 # Режим наблюдения
@@ -110,13 +110,13 @@ npm test -- --testNamePattern="генерация"
 
 **Пример теста**:
 ```javascript
-test('должен генерировать корректную математическую задачу', () => {
-  const captcha = generateCaptcha();
-  
-  expect(captcha.question).toHaveLength(2);
-  expect(captcha.answer).toBe(captcha.question[0] + captcha.question[1]);
-  expect(captcha.options).toContain(captcha.answer);
-});
+test("должен генерировать корректную математическую задачу", () => {
+  const captcha = generateCaptcha()
+
+  expect(captcha.question).toHaveLength(2)
+  expect(captcha.answer).toBe(captcha.question[0] + captcha.question[1])
+  expect(captcha.options).toContain(captcha.answer)
+})
 ```
 
 ### AntiSpamService Tests
@@ -136,11 +136,11 @@ test('должен генерировать корректную математ�
 const mockResponse = {
   isSpam: true,
   confidence: 0.95,
-  reason: 'Содержит спам слова'
-};
+  reason: "Содержит спам слова"
+}
 
-const result = checkMessageForSpam(message, mockResponse);
-expect(result.action).toBe('block');
+const result = checkMessageForSpam(message, mockResponse)
+expect(result.action).toBe("block")
 ```
 
 ### 🔄 Интеграционные тесты
@@ -162,27 +162,27 @@ expect(result.action).toBe('block');
 **Основные сценарии:**
 ```javascript
 // Полный флоу: нормальное сообщение
-test('должен обрабатывать нормальное сообщение', async () => {
-  const message = createMockMessage('Привет всем! Как дела?');
-  const result = await botService.handleNewMessage(message);
-  
-  expect(result.action).toBe('allow');
-  expect(result.isSpam).toBe(false);
-  expect(botService.deletedMessages).toHaveLength(0);
-});
+test("должен обрабатывать нормальное сообщение", async () => {
+  const message = createMockMessage("Привет всем! Как дела?")
+  const result = await botService.handleNewMessage(message)
+
+  expect(result.action).toBe("allow")
+  expect(result.isSpam).toBe(false)
+  expect(botService.deletedMessages).toHaveLength(0)
+})
 
 // Полный флоу: спам с мок API
-test('должен обнаруживать спам с мок API', async () => {
+test("должен обнаруживать спам с мок API", async () => {
   const mockResponse = {
     isSpam: true,
     confidence: 0.85,
-    reason: 'Обнаружены подозрительные паттерны'
-  };
-  
-  const result = await antiSpamService.checkMessage(message, mockResponse);
-  expect(result.isSpam).toBe(true);
-  expect(result.action).toBe('delete');
-});
+    reason: "Обнаружены подозрительные паттерны"
+  }
+
+  const result = await antiSpamService.checkMessage(message, mockResponse)
+  expect(result.isSpam).toBe(true)
+  expect(result.action).toBe("delete")
+})
 ```
 
 #### Captcha Flow Test (10 тестов)
@@ -203,38 +203,38 @@ test('должен обнаруживать спам с мок API', async () =>
 **Основные сценарии:**
 ```javascript
 // Полный флоу: новый пользователь
-test('должен обрабатывать вход нового пользователя', async () => {
-  const joinEvent = createMockJoinEvent();
-  const result = await botService.handleNewMember(joinEvent);
+test("должен обрабатывать вход нового пользователя", async () => {
+  const joinEvent = createMockJoinEvent()
+  const result = await botService.handleNewMember(joinEvent)
 
-  expect(result.action).toBe('captcha_generated');
-  expect(result.captcha.question).toMatch(/\d+ \+ \d+ = \?/);
-  expect(result.captcha.options).toHaveLength(4);
-  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(true);
-});
+  expect(result.action).toBe("captcha_generated")
+  expect(result.captcha.question).toMatch(/\d+ \+ \d+ = \?/)
+  expect(result.captcha.options).toHaveLength(4)
+  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(true)
+})
 
 // Полный флоу: правильный ответ
-test('должен обрабатывать правильный ответ на капчу', async () => {
+test("должен обрабатывать правильный ответ на капчу", async () => {
   const callbackQuery = createMockCallbackQuery(
     mockNewUser.id,
     `captcha_answer_${mockNewUser.id}_${captcha.correctIndex}`,
     messageId
-  );
+  )
 
-  const result = await botService.handleCallbackQuery(callbackQuery);
-  
-  expect(result.success).toBe(true);
-  expect(result.action).toBe('allow');
-  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(false);
-});
+  const result = await botService.handleCallbackQuery(callbackQuery)
+
+  expect(result.success).toBe(true)
+  expect(result.action).toBe("allow")
+  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(false)
+})
 
 // Полный флоу: превышение лимита попыток
-test('должен кикать пользователя после 3 неправильных ответов', async () => {
+test("должен кикать пользователя после 3 неправильных ответов", async () => {
   // ... 3 неправильных ответа подряд
-  
-  expect(botService.kickedUsers).toHaveLength(1);
-  expect(botService.kickedUsers[0].reason).toContain('Превышено количество попыток');
-});
+
+  expect(botService.kickedUsers).toHaveLength(1)
+  expect(botService.kickedUsers[0].reason).toContain("Превышено количество попыток")
+})
 ```
 
 **Мок-компоненты:**
@@ -247,20 +247,20 @@ test('должен кикать пользователя после 3 непра
 ### Структура теста
 
 ```javascript
-describe('ServiceName', () => {
-  describe('Группа тестов', () => {
-    test('должен выполнять определенное действие', () => {
+describe("ServiceName", () => {
+  describe("Группа тестов", () => {
+    test("должен выполнять определенное действие", () => {
       // Arrange - подготовка данных
-      const input = 'test data';
-      
+      const input = "test data"
+
       // Act - выполнение действия
-      const result = serviceFunction(input);
-      
+      const result = serviceFunction(input)
+
       // Assert - проверка результата
-      expect(result).toBe('expected');
-    });
-  });
-});
+      expect(result).toBe("expected")
+    })
+  })
+})
 ```
 
 ### Рекомендации
@@ -278,17 +278,17 @@ describe('ServiceName', () => {
 function serviceFunction(input, mockApiResponse) {
   // Базовая валидация
   if (!input) {
-    return { error: 'Нет входных данных' };
+    return { error: "Нет входных данных" }
   }
 
   // Использование мока или дефолтного значения
-  const response = mockApiResponse || { success: true };
-  
+  const response = mockApiResponse || { success: true }
+
   return {
     input,
     processed: true,
     response
-  };
+  }
 }
 ```
 
@@ -296,65 +296,65 @@ function serviceFunction(input, mockApiResponse) {
 
 ```javascript
 // src/__tests__/integration/NewFlow.test.js
-describe('New Integration Flow', () => {
+describe("New Integration Flow", () => {
   // Мок классы для симуляции сервисов
   class MockService1 {
     constructor() {
-      this.events = [];
-      this.onEventProcessed = null;
+      this.events = []
+      this.onEventProcessed = null
     }
 
     async processEvent(eventData) {
-      this.events.push(eventData);
-      const result = { processed: true, eventData };
-      
+      this.events.push(eventData)
+      const result = { processed: true, eventData }
+
       if (this.onEventProcessed) {
-        this.onEventProcessed(result);
+        this.onEventProcessed(result)
       }
-      
-      return result;
+
+      return result
     }
   }
 
   class MockService2 {
     constructor(service1) {
-      this.service1 = service1;
-      this.processedResults = [];
+      this.service1 = service1
+      this.processedResults = []
 
       // Подписываемся на события первого сервиса
       this.service1.onEventProcessed = (result) => {
-        this.handleProcessedEvent(result);
-      };
+        this.handleProcessedEvent(result)
+      }
     }
 
     handleProcessedEvent(result) {
-      console.log(`📨 Получен результат: ${result.eventData.name}`);
-      this.processedResults.push(result);
+      console.log(`📨 Получен результат: ${result.eventData.name}`)
+      this.processedResults.push(result)
     }
   }
 
-  describe('Полный флоу обработки', () => {
-    let service1, service2;
+  describe("Полный флоу обработки", () => {
+    let service1, service2
 
     beforeEach(() => {
-      service1 = new MockService1();
-      service2 = new MockService2(service1);
-    });
+      service1 = new MockService1()
+      service2 = new MockService2(service1)
+    })
 
-    test('должен обрабатывать полный флоу', async () => {
+    test("должен обрабатывать полный флоу", async () => {
       // Arrange - подготовка данных
-      const eventData = { name: 'test-event', data: 'test-data' };
+      const eventData = { name: "test-event", data: "test-data" }
 
       // Act - выполнение действия
-      const result = await service1.processEvent(eventData);
+      const result = await service1.processEvent(eventData)
 
       // Assert - проверка результата
-      expect(result.processed).toBe(true);
-      expect(service2.processedResults).toHaveLength(1);
-      expect(service2.processedResults[0].eventData).toEqual(eventData);
-    });
-  });
-});
+      expect(result.processed).toBe(true)
+      expect(service2.processedResults).toHaveLength(1)
+      expect(service2.processedResults[0].eventData).toEqual(eventData)
+    })
+  })
+})
 ```
 
 ## 🏗️ Архитектура тестирования
@@ -411,7 +411,7 @@ Coverage:    AntiSpam Flow ✅ + Captcha Flow ✅
 ### Цели покрытия
 
 - **Statements**: > 80%
-- **Branches**: > 75%  
+- **Branches**: > 75%
 - **Functions**: > 85%
 - **Lines**: > 80%
 
@@ -479,4 +479,4 @@ npm test -- --detectOpenHandles
 
 ---
 
-> 💡 **Совет**: Начинайте с простых тестов и постепенно добавляйте сложность. Хорошие тесты - это инвестиция в стабильность проекта! 
+> 💡 **Совет**: Начинайте с простых тестов и постепенно добавляйте сложность. Хорошие тесты - это инвестиция в стабильность проекта!

@@ -599,7 +599,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -719,6 +718,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { AppConfig } from "../../config.js"
@@ -737,9 +737,9 @@ interface AntiSpamResult {
 }
 &nbsp;
 interface AntiSpamSettings {
-  timeoutMs: number          // Таймаут запроса (по умолчанию 5 секунд)
-  maxRetries: number         // Максимальное количество попыток (по умолчанию 2)
-  retryDelayMs: number       // Задержка между попытками (по умолчанию 1 секунда)
+  timeoutMs: number // Таймаут запроса (по умолчанию 5 секунд)
+  maxRetries: number // Максимальное количество попыток (по умолчанию 2)
+  retryDelayMs: number // Задержка между попытками (по умолчанию 1 секунда)
 }
 &nbsp;
 interface AntiSpamAPIResponse {
@@ -759,21 +759,21 @@ export class AntiSpamService implements IService {
   private isRunning = <span class="cstat-no" title="statement not covered" >false</span>
 &nbsp;
 <span class="fstat-no" title="function not covered" >  constructor(</span>
-    config: AppConfig, 
-    logger: Logger, 
+    config: AppConfig,
+    logger: Logger,
     dependencies: AntiSpamDependencies = <span class="branch-0 cbranch-no" title="branch not covered" >{},</span>
-    settings?: Partial&lt;AntiSpamSettings&gt;
+    settings?: Partial&lt;AntiSpamSettings&gt;,
   ) {
 <span class="cstat-no" title="statement not covered" >    this.config = config</span>
 <span class="cstat-no" title="statement not covered" >    this.logger = logger</span>
 <span class="cstat-no" title="statement not covered" >    this.dependencies = dependencies</span>
-    
+&nbsp;
     // Настройки по умолчанию
 <span class="cstat-no" title="statement not covered" >    this.settings = {</span>
-      timeoutMs: 5000,      // 5 секунд
-      maxRetries: 2,        // 2 попытки
-      retryDelayMs: 1000,   // 1 секунда
-      ...settings
+      timeoutMs: 5000, // 5 секунд
+      maxRetries: 2, // 2 попытки
+      retryDelayMs: 1000, // 1 секунда
+      ...settings,
     }
   }
 &nbsp;
@@ -783,13 +783,13 @@ export class AntiSpamService implements IService {
 <span class="fstat-no" title="function not covered" >  async </span>initialize(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🛡️ Initializing anti-spam service...")</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d("🔧 AntiSpam settings:", JSON.stringify(this.settings, null, 2))</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.config.ANTISPAM_URL) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.w("⚠️ ANTISPAM_URL not configured, service will be disabled")</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.w("🔧 Current config.ANTISPAM_URL:", this.config.ANTISPAM_URL)</span>
 <span class="cstat-no" title="statement not covered" >      return</span>
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    this.logger.i(`🔗 Anti-spam API URL: ${this.config.ANTISPAM_URL}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d("🔧 AntiSpam initialization complete with settings:", JSON.stringify(this.settings, null, 2))</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.i("✅ Anti-spam service initialized")</span>
@@ -802,11 +802,11 @@ export class AntiSpamService implements IService {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🚀 Starting anti-spam service...")</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d("🔧 Starting with config ANTISPAM_URL:", this.config.ANTISPAM_URL)</span>
 <span class="cstat-no" title="statement not covered" >    this.isRunning = true</span>
-    
+&nbsp;
     // Проверяем доступность API
 <span class="cstat-no" title="statement not covered" >    this.logger.d("🏥 Performing initial health check...")</span>
 <span class="cstat-no" title="statement not covered" >    await this.healthCheck()</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    this.logger.i("✅ Anti-spam service started")</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d("🔧 Service status - isRunning:", this.isRunning, "isHealthy:", this.isHealthy())</span>
   }
@@ -842,7 +842,7 @@ export class AntiSpamService implements IService {
 <span class="fstat-no" title="function not covered" >  async </span>checkMessage(userId: number, message: string): Promise&lt;AntiSpamResult&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`🔍 [DEBUG] checkMessage called - userId: ${userId}, messageLength: ${message?.length || 0}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`🔍 [DEBUG] Service status - isRunning: ${this.isRunning}, hasURL: ${!!this.config.ANTISPAM_URL}`)</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.isRunning) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.w("❌ [DEBUG] Anti-spam service is not running")</span>
 <span class="cstat-no" title="statement not covered" >      return { isSpam: false, error: "Service not running" }</span>
@@ -859,28 +859,28 @@ export class AntiSpamService implements IService {
     }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    this.logger.i(`🔍 [DEBUG] Checking message from user ${userId} for spam`)</span>
-<span class="cstat-no" title="statement not covered" >    this.logger.d(`📝 [DEBUG] Message content (first 100 chars): "${message.substring(0, 100)}${message.length &gt; 100 ? '...' : ''}"`)</span>
-    
+<span class="cstat-no" title="statement not covered" >    this.logger.d(`📝 [DEBUG] Message content (first 100 chars): "${message.substring(0, 100)}${message.length &gt; 100 ? "..." : ""}"`)</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.d(`📡 [DEBUG] Calling anti-spam API...`)</span>
       const result = <span class="cstat-no" title="statement not covered" >await this.callAntiSpamAPI(message)</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.d(`📋 [DEBUG] API response:`, JSON.stringify(result, null, 2))</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (result.isSpam) {</span>
-<span class="cstat-no" title="statement not covered" >        this.logger.w(`🚨 [DEBUG] Spam detected from user ${userId}: ${result.reason || 'Unknown reason'}`)</span>
-<span class="cstat-no" title="statement not covered" >        this.logger.w(`🚨 [DEBUG] Spam confidence: ${result.confidence || 'Not provided'}`)</span>
+<span class="cstat-no" title="statement not covered" >        this.logger.w(`🚨 [DEBUG] Spam detected from user ${userId}: ${result.reason || "Unknown reason"}`)</span>
+<span class="cstat-no" title="statement not covered" >        this.logger.w(`🚨 [DEBUG] Spam confidence: ${result.confidence || "Not provided"}`)</span>
       } else {
 <span class="cstat-no" title="statement not covered" >        this.logger.i(`✅ [DEBUG] Message from user ${userId} is clean`)</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return result</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("❌ [DEBUG] Error checking message for spam:", error)</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.e("❌ [DEBUG] Error details:", error instanceof Error ? error.stack : String(error))</span>
-<span class="cstat-no" title="statement not covered" >      return { </span>
-        isSpam: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+<span class="cstat-no" title="statement not covered" >      return {</span>
+        isSpam: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
@@ -890,32 +890,32 @@ export class AntiSpamService implements IService {
    */
   private <span class="fstat-no" title="function not covered" >async </span>callAntiSpamAPI(text: string): Promise&lt;AntiSpamResult&gt; {
     let lastError: Error | null = <span class="cstat-no" title="statement not covered" >null</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Starting API call with ${this.settings.maxRetries} max retries`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] API URL: ${this.config.ANTISPAM_URL}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Timeout: ${this.settings.timeoutMs}ms, Retry delay: ${this.settings.retryDelayMs}ms`)</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    for (let attempt = <span class="cstat-no" title="statement not covered" >1;</span> attempt &lt;= this.settings.maxRetries; attempt++) {</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.i(`📡 [DEBUG] Anti-spam API call attempt ${attempt}/${this.settings.maxRetries}`)</span>
-        
+&nbsp;
         const response = <span class="cstat-no" title="statement not covered" >await this.makeHttpRequest(text)</span>
-        
+&nbsp;
 <span class="cstat-no" title="statement not covered" >        this.logger.d(`📡 [DEBUG] HTTP response status: ${response.status} ${response.statusText}`)</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.d(`📡 [DEBUG] Response headers:`, Object.fromEntries(response.headers.entries()))</span>
-        
+&nbsp;
 <span class="cstat-no" title="statement not covered" >        if (response.ok) {</span>
           const responseText = <span class="cstat-no" title="statement not covered" >await response.text()</span>
 <span class="cstat-no" title="statement not covered" >          this.logger.d(`📡 [DEBUG] Raw response body: "${responseText}"`)</span>
-          
+&nbsp;
 <span class="cstat-no" title="statement not covered" >          try {</span>
             const data = <span class="cstat-no" title="statement not covered" >JSON.parse(responseText) as AntiSpamAPIResponse</span>
 <span class="cstat-no" title="statement not covered" >            this.logger.d(`📡 [DEBUG] Parsed response data:`, JSON.stringify(data, null, 2))</span>
-            
+&nbsp;
 <span class="cstat-no" title="statement not covered" >            return {</span>
               isSpam: Boolean(data.is_spam),
               confidence: data.confidence,
-              reason: data.reason
+              reason: data.reason,
             }
           } catch (parseError) {
 <span class="cstat-no" title="statement not covered" >            this.logger.e(`❌ [DEBUG] Failed to parse JSON response: ${parseError}`)</span>
@@ -927,12 +927,11 @@ export class AntiSpamService implements IService {
 <span class="cstat-no" title="statement not covered" >          this.logger.e(`❌ [DEBUG] HTTP error response body: "${errorBody}"`)</span>
 <span class="cstat-no" title="statement not covered" >          throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorBody}`)</span>
         }
-        
       } catch (error) {
 <span class="cstat-no" title="statement not covered" >        lastError = error instanceof Error ? error : new Error(String(error))</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.w(`⚠️ [DEBUG] Anti-spam API attempt ${attempt} failed: ${lastError.message}`)</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.w(`⚠️ [DEBUG] Error stack:`, lastError.stack)</span>
-        
+&nbsp;
         // Если это не последняя попытка, ждем перед следующей
 <span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (attempt &lt; this.settings.maxRetries) {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger.d(`⏳ [DEBUG] Waiting ${this.settings.retryDelayMs}ms before retry...`)</span>
@@ -940,9 +939,9 @@ export class AntiSpamService implements IService {
         }
       }
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    this.logger.e(`❌ [DEBUG] All ${this.settings.maxRetries} attempts failed`)</span>
-<span class="cstat-no" title="statement not covered" >    throw lastError || new Error('All retry attempts failed')</span>
+<span class="cstat-no" title="statement not covered" >    throw lastError || new Error("All retry attempts failed")</span>
   }
 &nbsp;
   /**
@@ -951,30 +950,30 @@ export class AntiSpamService implements IService {
   private <span class="fstat-no" title="function not covered" >async </span>makeHttpRequest(text: string): Promise&lt;Response&gt; {
     const controller = <span class="cstat-no" title="statement not covered" >new AbortController()</span>
     const timeoutId = <span class="cstat-no" title="statement not covered" >setTimeout(<span class="fstat-no" title="function not covered" >() =</span>&gt; <span class="cstat-no" title="statement not covered" >controller.abort(),</span> this.settings.timeoutMs)</span>
-    
+&nbsp;
     const requestBody = <span class="cstat-no" title="statement not covered" >JSON.stringify({ text })</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Making HTTP request to: ${this.config.ANTISPAM_URL}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Request method: POST`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Request headers: {"Content-Type": "application/json"}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Request body: ${requestBody}`)</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.d(`📡 [DEBUG] Request timeout: ${this.settings.timeoutMs}ms`)</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.d(`📡 [DEBUG] Sending fetch request...`)</span>
       const response = <span class="cstat-no" title="statement not covered" >await fetch(this.config.ANTISPAM_URL, {</span>
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
         body: requestBody,
-        signal: controller.signal
+        signal: controller.signal,
       })
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.d(`📡 [DEBUG] Fetch completed successfully`)</span>
 <span class="cstat-no" title="statement not covered" >      return response</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      this.logger.e(`❌ [DEBUG] Fetch failed:`, error)</span>
-<span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (error instanceof Error &amp;&amp; error.name === 'AbortError') {</span>
+<span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (error instanceof Error &amp;&amp; error.name === "AbortError") {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger.e(`❌ [DEBUG] Request was aborted due to timeout (${this.settings.timeoutMs}ms)`)</span>
       }
 <span class="cstat-no" title="statement not covered" >      throw error</span>
@@ -990,10 +989,10 @@ export class AntiSpamService implements IService {
   private <span class="fstat-no" title="function not covered" >async </span>healthCheck(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.d("🏥 Performing anti-spam API health check...")</span>
-      
+&nbsp;
       // Проверяем с простым тестовым сообщением
       const testResult = <span class="cstat-no" title="statement not covered" >await this.callAntiSpamAPI("test message")</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.i("✅ Anti-spam API is healthy")</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.d(`Health check result: isSpam=${testResult.isSpam}`)</span>
     } catch (error) {
@@ -1033,7 +1032,7 @@ export class AntiSpamService implements IService {
       isRunning: this.isRunning,
       isHealthy: this.isHealthy(),
       apiUrl: this.config.ANTISPAM_URL ? "configured" : "not configured",
-      settings: this.settings
+      settings: this.settings,
     }
   }
 &nbsp;
@@ -1042,7 +1041,7 @@ export class AntiSpamService implements IService {
    */
 <span class="fstat-no" title="function not covered" >  async </span>testAntiSpam(): Promise&lt;void&gt; {
 <span class="cstat-no" title="statement not covered" >    this.logger.i("🧪 [DEBUG] Running AntiSpam test...")</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const testResult = <span class="cstat-no" title="statement not covered" >await this.checkMessage(999999, "This is a test message for debugging")</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.i("🧪 [DEBUG] Test result:", JSON.stringify(testResult, null, 2))</span>
@@ -1050,14 +1049,15 @@ export class AntiSpamService implements IService {
 <span class="cstat-no" title="statement not covered" >      this.logger.e("🧪 [DEBUG] Test failed:", error)</span>
     }
   }
-} </pre></td></tr></table></pre>
+}
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-10T10:32:55.580Z
+                at 2025-06-10T14:33:22.743Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

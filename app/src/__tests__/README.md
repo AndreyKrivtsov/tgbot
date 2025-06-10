@@ -82,28 +82,28 @@ npm test src/__tests__/unit/services/
 ### Базовая структура теста
 
 ```typescript
-import { describe, test, expect, beforeEach } from 'jest';
+import { beforeEach, describe, expect, test } from "jest"
 
-describe('Название компонента', () => {
-  let service: MyService;
+describe("Название компонента", () => {
+  let service: MyService
 
   beforeEach(() => {
-    service = new MyService();
-  });
+    service = new MyService()
+  })
 
-  describe('Группа тестов', () => {
-    test('должен выполнять определенное действие', () => {
+  describe("Группа тестов", () => {
+    test("должен выполнять определенное действие", () => {
       // Arrange - подготовка данных
-      const input = 'test input';
-      
+      const input = "test input"
+
       // Act - выполнение действия
-      const result = service.processInput(input);
-      
+      const result = service.processInput(input)
+
       // Assert - проверка результата
-      expect(result).toBe('expected output');
-    });
-  });
-});
+      expect(result).toBe("expected output")
+    })
+  })
+})
 ```
 
 ### Принципы написания тестов
@@ -121,47 +121,47 @@ describe('Название компонента', () => {
 
 ```typescript
 // Мокирование времени
-global.testUtils.mockTime(Date.now());
-global.testUtils.restoreTime();
+global.testUtils.mockTime(Date.now())
+global.testUtils.restoreTime()
 
 // Создание фейковых данных
-const fakeUser = global.testUtils.createFakeUser(123456);
-const fakeChat = global.testUtils.createFakeChat(-1001234567890);
-const fakeMessage = global.testUtils.createFakeMessage('Hello');
+const fakeUser = global.testUtils.createFakeUser(123456)
+const fakeChat = global.testUtils.createFakeChat(-1001234567890)
+const fakeMessage = global.testUtils.createFakeMessage("Hello")
 
 // Асинхронное ожидание
-await global.testUtils.sleep(100);
+await global.testUtils.sleep(100)
 ```
 
 ### Мокирование внешних зависимостей
 
 ```typescript
-import { jest } from '@jest/globals';
+import { jest } from "@jest/globals"
 
 // Мокирование модуля
-jest.mock('../../../services/AIService/index.js', () => ({
+jest.mock("../../../services/AIService/index.js", () => ({
   AIService: jest.fn().mockImplementation(() => ({
-    processMessage: jest.fn().mockResolvedValue('AI response'),
+    processMessage: jest.fn().mockResolvedValue("AI response"),
   })),
-}));
+}))
 
 // Мокирование функций
-const mockFunction = jest.fn();
-mockFunction.mockReturnValue('mocked value');
-mockFunction.mockResolvedValue('async mocked value');
+const mockFunction = jest.fn()
+mockFunction.mockReturnValue("mocked value")
+mockFunction.mockResolvedValue("async mocked value")
 ```
 
 ### Работа с таймерами
 
 ```typescript
 // Мокирование таймеров
-jest.useFakeTimers();
+jest.useFakeTimers()
 
 // Продвижение времени
-jest.advanceTimersByTime(60000); // 60 секунд
+jest.advanceTimersByTime(60000) // 60 секунд
 
 // Восстановление реальных таймеров
-jest.useRealTimers();
+jest.useRealTimers()
 ```
 
 ## 📝 Примеры тестов
@@ -169,45 +169,45 @@ jest.useRealTimers();
 ### Тестирование асинхронных операций
 
 ```typescript
-test('должен обрабатывать асинхронные операции', async () => {
-  const service = new AsyncService();
-  
-  const result = await service.asyncMethod();
-  
-  expect(result).toBe('expected result');
-});
+it("должен обрабатывать асинхронные операции", async () => {
+  const service = new AsyncService()
+
+  const result = await service.asyncMethod()
+
+  expect(result).toBe("expected result")
+})
 ```
 
 ### Тестирование ошибок
 
 ```typescript
-test('должен выбрасывать ошибку при некорректных данных', () => {
-  const service = new Service();
-  
-  expect(() => {
-    service.processInvalidData(null);
-  }).toThrow('Invalid data provided');
-});
+it("должен выбрасывать ошибку при некорректных данных", () => {
+  const service = new Service()
 
-test('должен обрабатывать асинхронные ошибки', async () => {
-  const service = new AsyncService();
-  
-  await expect(service.failingMethod()).rejects.toThrow('Async error');
-});
+  expect(() => {
+    service.processInvalidData(null)
+  }).toThrow("Invalid data provided")
+})
+
+it("должен обрабатывать асинхронные ошибки", async () => {
+  const service = new AsyncService()
+
+  await expect(service.failingMethod()).rejects.toThrow("Async error")
+})
 ```
 
 ### Тестирование колбэков
 
 ```typescript
-test('должен вызывать колбэк при успешном выполнении', () => {
-  const service = new CallbackService();
-  const callback = jest.fn();
-  
-  service.processWithCallback('data', callback);
-  
-  expect(callback).toHaveBeenCalledWith('processed data');
-  expect(callback).toHaveBeenCalledTimes(1);
-});
+it("должен вызывать колбэк при успешном выполнении", () => {
+  const service = new CallbackService()
+  const callback = jest.fn()
+
+  service.processWithCallback("data", callback)
+
+  expect(callback).toHaveBeenCalledWith("processed data")
+  expect(callback).toHaveBeenCalledTimes(1)
+})
 ```
 
 ## 🎯 Рекомендации
@@ -238,14 +238,14 @@ test('должен вызывать колбэк при успешном вып�
 ### Логирование в тестах
 
 ```typescript
-test('отладочный тест', () => {
-  const result = service.method();
-  
+it("отладочный тест", () => {
+  const result = service.method()
+
   // Временное логирование для отладки
-  console.log('Debug result:', result);
-  
-  expect(result).toBeDefined();
-});
+  console.log("Debug result:", result)
+
+  expect(result).toBeDefined()
+})
 ```
 
 ### Запуск одного теста
@@ -270,7 +270,7 @@ test.skip('этот тест будет пропущен', () => {
 
 ```typescript
 // Используйте .js расширения в импортах
-import { Service } from '../../../services/Service/index.js';
+import { Service } from "../../../services/Service/index.js"
 ```
 
 ### Проблемы с таймерами
@@ -278,20 +278,20 @@ import { Service } from '../../../services/Service/index.js';
 ```typescript
 // Всегда очищайте таймеры после тестов
 afterEach(() => {
-  jest.useRealTimers();
-  jest.clearAllTimers();
-});
+  jest.useRealTimers()
+  jest.clearAllTimers()
+})
 ```
 
 ### Проблемы с асинхронностью
 
 ```typescript
 // Используйте async/await или return Promise
-test('async test', async () => {
-  await expect(asyncOperation()).resolves.toBe('result');
-});
+it("async test", async () => {
+  await expect(asyncOperation()).resolves.toBe("result")
+})
 ```
 
 ---
 
-> 💡 **Совет**: Начинайте с простых тестов и постепенно добавляйте сложность. Хорошие тесты - это инвестиция в стабильность вашего кода! 
+> 💡 **Совет**: Начинайте с простых тестов и постепенно добавляйте сложность. Хорошие тесты - это инвестиция в стабильность вашего кода!

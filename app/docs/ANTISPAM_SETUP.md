@@ -17,7 +17,7 @@ docker-compose up -d antispam
 ### Вариант 2: Отдельно (старый способ)
 
 ```bash
-# Из директории antispam  
+# Из директории antispam
 cd antispam
 docker-compose up -d
 ```
@@ -122,4 +122,4 @@ docker-compose restart antispam
 
 Health check endpoint: `http://localhost:6323/docs`
 
-Автоматические проверки каждые 30 секунд через Docker health check. 
+Автоматические проверки каждые 30 секунд через Docker health check.

@@ -12,11 +12,11 @@
 ## 🐘 PostgreSQL Setup (Основная БД)
 
 ### **Зачем PostgreSQL?**
-✅ **Excellent ACID compliance** - надежность данных  
-✅ **JSONB поддержка** - гибкое хранение AI контекстов  
-✅ **Мощные индексы** (включая GIN для JSON)  
-✅ **Производительность** под высокой нагрузкой  
-✅ **Зрелая экосистема** и ORM поддержка  
+✅ **Excellent ACID compliance** - надежность данных
+✅ **JSONB поддержка** - гибкое хранение AI контекстов
+✅ **Мощные индексы** (включая GIN для JSON)
+✅ **Производительность** под высокой нагрузкой
+✅ **Зрелая экосистема** и ORM поддержка
 
 ### **Installation**
 
@@ -94,10 +94,10 @@ log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
 ## 🔄 Redis Setup (Кэш)
 
 ### **Зачем Redis?**
-✅ **Суб-миллисекундная** скорость доступа  
-✅ **Встроенный TTL** для автоочистки  
-✅ **Pub/Sub** для real-time уведомлений  
-✅ **Atomic операции** для счетчиков  
+✅ **Суб-миллисекундная** скорость доступа
+✅ **Встроенный TTL** для автоочистки
+✅ **Pub/Sub** для real-time уведомлений
+✅ **Atomic операции** для счетчиков
 
 ### **Installation**
 
@@ -231,7 +231,7 @@ CREATE INDEX idx_event_logs_created_at ON event_logs(created_at);
 // Пользователи (TTL: 1 час)
 "user:123456" = { id, username, messageCount, ... }
 
-// Капча (TTL: 5 минут)  
+// Капча (TTL: 5 минут)
 "captcha:user:123456" = { chatId, questionId, answer, timestamp }
 
 // Антиспам (TTL: 24 часа)
@@ -249,7 +249,7 @@ CREATE INDEX idx_event_logs_created_at ON event_logs(created_at);
 ## 🐳 Docker Compose Example
 
 ```yaml
-version: '3.8'
+version: "3.8"
 services:
   postgres:
     image: postgres:15-alpine
@@ -262,7 +262,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [CMD-SHELL, pg_isready -U postgres]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -275,7 +275,7 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD, redis-cli, ping]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -291,7 +291,7 @@ volumes:
 
 ### **Database Health Endpoints**
 - `GET /api/health/database` - PostgreSQL статус
-- `GET /api/health/redis` - Redis статус  
+- `GET /api/health/redis` - Redis статус
 - `GET /api/stats/database` - Статистика БД
 
 ### **Key Metrics to Monitor**
@@ -352,7 +352,7 @@ timeout 30            # Redis
 ## 🎯 Production Checklist
 
 - [ ] **PostgreSQL** настроен с production параметрами
-- [ ] **Redis** настроен с LRU eviction policy  
+- [ ] **Redis** настроен с LRU eviction policy
 - [ ] **Connection pooling** настроен (20 для PG, 10 для Redis)
 - [ ] **Backup strategy** настроена для PostgreSQL
 - [ ] **Monitoring** настроен для обеих БД
@@ -360,4 +360,4 @@ timeout 30            # Redis
 - [ ] **Firewall rules** настроены
 - [ ] **Health checks** работают корректно
 
-**Эта архитектура обеспечивает оптимальный баланс производительности, надежности и масштабируемости для Telegram бота! 🚀** 
+**Эта архитектура обеспечивает оптимальный баланс производительности, надежности и масштабируемости для Telegram бота! 🚀**

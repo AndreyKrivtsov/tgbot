@@ -8,19 +8,19 @@ graph TB
         APP[App.ts<br/>Main Application]
         INDEX[index.ts<br/>Entry Point]
     end
-    
+
     subgraph "Core Layer"
         CONTAINER[Container.ts<br/>DI Container]
         APPLICATION[Application.ts<br/>Service Orchestrator]
     end
-    
+
     subgraph "Business Services"
         TELEGRAM[TelegramBot/<br/>Main Bot Logic]
         CAPTCHA[CaptchaService/<br/>User Verification]
         ANTISPAM[AntiSpamService/<br/>Spam Detection]
         AICHAT[AIChatService/<br/>AI Conversations]
     end
-    
+
     subgraph "Infrastructure Services"
         AI[AI/<br/>Gemini API]
         DATABASE[DatabaseService/<br/>PostgreSQL]
@@ -28,24 +28,24 @@ graph TB
         REDIS[RedisService/<br/>Redis Client]
         API[ApiServerService/<br/>Fastify API]
     end
-    
+
     subgraph "Data Layer"
         REPO[Repository<br/>Data Access]
         CONFIG[config.ts<br/>Configuration]
         LOGGER[Logger<br/>Logging]
     end
-    
+
     subgraph "External Systems"
         TELEGRAM_API[Telegram Bot API]
         GEMINI[Google Gemini API]
         POSTGRES[(PostgreSQL)]
         REDIS[(Redis)]
     end
-    
+
     INDEX --> APP
     APP --> APPLICATION
     APPLICATION --> CONTAINER
-    
+
     CONTAINER --> TELEGRAM
     CONTAINER --> CAPTCHA
     CONTAINER --> ANTISPAM
@@ -56,21 +56,21 @@ graph TB
     CONTAINER --> REDIS
           CONTAINER --> API
     CONTAINER --> REPO
-    
+
     TELEGRAM --> CAPTCHA
     TELEGRAM --> ANTISPAM
     TELEGRAM --> AICHAT
     TELEGRAM --> REPO
-    
+
     ANTISPAM --> AI
     AICHAT --> AI
-    
+
     AI --> GEMINI
     DATABASE --> POSTGRES
     CACHE --> REDIS
     REDIS --> REDIS
     TELEGRAM --> TELEGRAM_API
-    
+
     CONTAINER --> CONFIG
     CONTAINER --> LOGGER
 ```
@@ -84,7 +84,7 @@ sequenceDiagram
     participant TBS as TelegramBotService
     participant CS as CaptchaService
     participant REPO as Repository
-    
+
     U->>T: Joins chat
     T->>TBS: chat_member event
     TBS->>CS: generateCaptcha()
@@ -94,12 +94,12 @@ sequenceDiagram
     TBS->>T: restrictChatMember()
     TBS->>CS: addRestrictedUser()
     CS->>CS: Start timeout monitoring
-    
+
     U->>T: Clicks answer
     T->>TBS: callback_query event
     TBS->>CS: validateAnswer()
     CS-->>TBS: {isValid, user}
-    
+
     alt Correct Answer
         TBS->>T: unrestrictChatMember()
         TBS->>T: Send welcome message
@@ -121,12 +121,12 @@ sequenceDiagram
     participant AS as AntiSpamService
     participant AI as AIService
     participant G as Gemini API
-    
+
     U->>T: Sends message
     T->>TBS: message event
     TBS->>AS: checkMessage(userId, message)
     AS->>AS: Check message count (≤5?)
-    
+
     alt First 5 messages
         AS->>AS: performBasicChecks()
         alt Basic spam detected
@@ -139,7 +139,7 @@ sequenceDiagram
             G-->>AI: "СПАМ" or "НЕ СПАМ"
             AI-->>AS: spam result
             AS-->>TBS: {isSpam: boolean, reason}
-            
+
             alt AI detected spam
                 TBS->>T: Delete message
                 TBS->>T: Send warning
@@ -163,13 +163,13 @@ sequenceDiagram
     participant ACS as AIChatService
     participant AI as AIService
     participant G as Gemini API
-    
+
     U->>T: Sends "@bot hello"
     T->>TBS: message event
     TBS->>ACS: isBotMention(message)
     ACS-->>TBS: true
     TBS->>ACS: processMessage()
-    
+
     ACS->>ACS: checkDailyLimit()
     alt Limit exceeded
         ACS-->>TBS: {success: false, reason: "Daily limit"}
@@ -183,7 +183,7 @@ sequenceDiagram
             ACS->>ACS: prepareContextualMessage()
             ACS->>ACS: Add to MessageQueue
             ACS-->>TBS: {success: true, queued: true}
-            
+
             loop Queue Processing
                 ACS->>ACS: processQueuedMessage()
                 ACS->>T: Send typing action
@@ -207,38 +207,38 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Created: new App()
     Created --> Initializing: app.run()
-    
+
     state Initializing {
         [*] --> RegisteringServices: Application.initialize()
         RegisteringServices --> CreatingInstances: Container.initialize()
         CreatingInstances --> InitializingServices: service.initialize()
         InitializingServices --> [*]
     }
-    
+
     Initializing --> Starting: Application.start()
-    
+
     state Starting {
         [*] --> StartingServices: Container.start()
         StartingServices --> ServiceRunning: service.start()
         ServiceRunning --> [*]
     }
-    
+
     Starting --> Running: All services started
-    
+
     state Running {
         [*] --> ProcessingEvents
         ProcessingEvents --> ProcessingEvents: Handle events
         ProcessingEvents --> GracefulShutdown: SIGINT/SIGTERM
     }
-    
+
     Running --> Stopping: app.stop()
-    
+
     state Stopping {
         [*] --> StoppingServices: Container.stop()
         StoppingServices --> DisposingServices: Container.dispose()
         DisposingServices --> [*]
     }
-    
+
     Stopping --> [*]: Process exit
 ```
 
@@ -251,24 +251,24 @@ graph TD
         LOGGER[Logger]
         REPO[Repository]
     end
-    
+
     subgraph "Level 2 - Infrastructure"
         DATABASE[DatabaseService]
         CACHE[CacheService]
         AI[AIService]
     end
-    
+
     subgraph "Level 3 - Business Logic"
         CAPTCHA[CaptchaService]
         ANTISPAM[AntiSpamService]
         AICHAT[AIChatService]
     end
-    
+
     subgraph "Level 4 - Application Services"
         TELEGRAM[TelegramBotService]
         API[ApiServerService]
     end
-    
+
     CONFIG --> DATABASE
     CONFIG --> CACHE
     CONFIG --> AI
@@ -277,7 +277,7 @@ graph TD
     CONFIG --> AICHAT
     CONFIG --> TELEGRAM
     CONFIG --> API
-    
+
     LOGGER --> DATABASE
     LOGGER --> CACHE
     LOGGER --> AI
@@ -286,20 +286,20 @@ graph TD
     LOGGER --> AICHAT
     LOGGER --> TELEGRAM
     LOGGER --> API
-    
+
     REPO --> CAPTCHA
     REPO --> TELEGRAM
     REPO --> API
-    
+
     AI --> ANTISPAM
     AI --> AICHAT
     DATABASE --> AICHAT
     DATABASE --> API
-    
+
     CAPTCHA --> TELEGRAM
     ANTISPAM --> TELEGRAM
     AICHAT --> TELEGRAM
-    
+
     DATABASE --> API
     REPO --> API
     TELEGRAM --> API
@@ -316,7 +316,7 @@ flowchart TD
         E4[message]
         E5[callback_query]
     end
-    
+
     subgraph "TelegramBotService Handlers"
         H1[handleChatMember]
         H2[handleNewChatMembers]
@@ -324,14 +324,14 @@ flowchart TD
         H4[handleMessage]
         H5[handleCallbackQuery]
     end
-    
+
     subgraph "Service Logic"
         S1[initiateUserCaptcha]
         S2[checkMessage - AntiSpam]
         S3[processMessage - AI Chat]
         S4[validateAnswer - Captcha]
     end
-    
+
     subgraph "Bot Actions"
         A1[Send Captcha]
         A2[Restrict User]
@@ -341,19 +341,19 @@ flowchart TD
         A6[Ban User]
         A7[Unrestrict User]
     end
-    
+
     E1 --> H1
     E2 --> H2
     E3 --> H3
     E4 --> H4
     E5 --> H5
-    
+
     H1 --> S1
     H2 --> S1
     H4 --> S2
     H4 --> S3
     H5 --> S4
-    
+
     S1 --> A1
     S1 --> A2
     S2 --> A3
@@ -378,7 +378,7 @@ classDiagram
         +stop()
         +dispose()
     }
-    
+
     class IService {
         <<interface>>
         +initialize() Promise~void~
@@ -386,7 +386,7 @@ classDiagram
         +stop() Promise~void~
         +dispose() Promise~void~
     }
-    
+
     class Application {
         -container: Container
         +initialize()
@@ -396,7 +396,7 @@ classDiagram
         +registerBusinessServices()
         +registerWebServices()
     }
-    
+
     class TelegramBotService {
         -bot: Bot
         -captchaService: CaptchaService
@@ -408,7 +408,7 @@ classDiagram
         +handleMessage()
         +handleCaptcha()
     }
-    
+
     class CaptchaService {
         -restrictedUsers: Map
         +generateCaptcha()
@@ -416,14 +416,14 @@ classDiagram
         +addRestrictedUser()
         +startTimeoutMonitoring()
     }
-    
+
     class AntiSpamService {
         -userChecks: Map
         +checkMessage()
         +performBasicChecks()
         +checkWithAI()
     }
-    
+
     class AIChatService {
         -chatContexts: Map
         -messageQueue: Array
@@ -431,7 +431,7 @@ classDiagram
         +isBotMention()
         +startQueueProcessor()
     }
-    
+
     Container --> Application : uses
     Application --> IService : creates
     TelegramBotService ..|> IService
@@ -445,5 +445,5 @@ classDiagram
 
 ---
 
-*Диаграммы обновлены: 05.06.2025*  
-*Версия: 2.0* 
+*Диаграммы обновлены: 05.06.2025*
+*Версия: 2.0*

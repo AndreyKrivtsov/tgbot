@@ -32,7 +32,7 @@ export class App {
 
       // Создаем Application с config
       this.application = new Application(this.container, this.logger, this.config)
-      
+
       // Регистрируем все сервисы
       await this.application.initialize()
 
@@ -153,4 +153,4 @@ export async function createApp(): Promise<App> {
 }
 
 // Экспорт для использования в index.ts
-export { App as default } 
+export { App as default }

@@ -2,7 +2,8 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import { ChatAiRepository } from "../../repository/ChatAiRepository.js"
-import { GeminiAdapter, type GeminiMessage } from "../ai/providers/GeminiAdapter.js"
+import { GeminiAdapter } from "../ai/providers/GeminiAdapter.js"
+import type { GeminiMessage } from "../ai/providers/GeminiAdapter.js"
 import type { Chat } from "../../db/schema.js"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 
@@ -21,7 +22,7 @@ interface ChatContext {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant'
+  role: "user" | "assistant"
   content: string
   timestamp: number
 }
@@ -54,7 +55,7 @@ export class AIChatService implements IService {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
-    
+
     if (dependencies.database) {
       this.chatAiRepository = new ChatAiRepository(dependencies.database)
     }
@@ -65,10 +66,10 @@ export class AIChatService implements IService {
    */
   async initialize(): Promise<void> {
     this.logger.i("🤖 Initializing AI chat service...")
-    
+
     // Загружаем контексты из БД если есть
     await this.loadChatContexts()
-    
+
     this.logger.i("✅ AI chat service initialized")
   }
 
@@ -77,13 +78,13 @@ export class AIChatService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting AI chat service...")
-    
+
     // Запускаем обработчик очереди
     this.startQueueProcessor()
-    
+
     // Запускаем очистку старых контекстов
     this.startContextCleanup()
-    
+
     this.logger.i("✅ AI chat service started")
   }
 
@@ -93,10 +94,10 @@ export class AIChatService implements IService {
   async stop(): Promise<void> {
     this.logger.i("🛑 Stopping AI chat service...")
     this.isProcessingQueue = false
-    
+
     // Сохраняем контексты в БД
     await this.saveChatContexts()
-    
+
     this.logger.i("✅ AI chat service stopped")
   }
 
@@ -127,7 +128,7 @@ export class AIChatService implements IService {
     }
 
     const text = message.toLowerCase().trim()
-    
+
     // Прямое упоминание через @username
     if (botUsername && text.includes(`@${botUsername.toLowerCase()}`)) {
       return true
@@ -137,7 +138,7 @@ export class AIChatService implements IService {
     const botTriggers = [
       /^эй.{0,3}бот\W?/i,
       /^альтрон/gi,
-      /^бот[,\s]/i
+      /^бот[,\s]/i,
     ]
 
     for (const trigger of botTriggers) {
@@ -157,13 +158,13 @@ export class AIChatService implements IService {
 
     // Убираем @username
     if (botUsername) {
-      cleaned = cleaned.replace(new RegExp(`@${botUsername}`, 'gi'), '').trim()
+      cleaned = cleaned.replace(new RegExp(`@${botUsername}`, "gi"), "").trim()
     }
 
     // Убираем стандартные обращения
-    cleaned = cleaned.replace(/^эй.{0,3}бот\W?/i, '').trim()
-    cleaned = cleaned.replace(/^альтрон\W?/gi, '').trim()
-    cleaned = cleaned.replace(/^бот[,\s]/i, '').trim()
+    cleaned = cleaned.replace(/^эй.{0,3}бот\W?/i, "").trim()
+    cleaned = cleaned.replace(/^альтрон\W?/gi, "").trim()
+    cleaned = cleaned.replace(/^бот[,\s]/i, "").trim()
 
     return cleaned || message
   }
@@ -177,13 +178,13 @@ export class AIChatService implements IService {
     message: string,
     username?: string,
     firstName?: string,
-    isReply?: boolean
+    isReply?: boolean,
   ): Promise<{
-    success: boolean
-    queued: boolean
-    reason?: string
-    queuePosition?: number
-  }> {
+      success: boolean
+      queued: boolean
+      reason?: string
+      queuePosition?: number
+    }> {
     try {
       // Проверяем лимиты
       const limitCheck = await this.checkDailyLimit(chatId.toString())
@@ -191,7 +192,7 @@ export class AIChatService implements IService {
         return {
           success: false,
           queued: false,
-          reason: limitCheck.reason
+          reason: limitCheck.reason,
         }
       }
 
@@ -200,7 +201,7 @@ export class AIChatService implements IService {
         return {
           success: false,
           queued: false,
-          reason: "Слишком много сообщений в очереди. Попробуйте позже."
+          reason: "Слишком много сообщений в очереди. Попробуйте позже.",
         }
       }
 
@@ -209,7 +210,7 @@ export class AIChatService implements IService {
       const contextualMessage = this.prepareContextualMessage(
         cleanedMessage,
         username,
-        firstName
+        firstName,
       )
 
       // Добавляем в очередь
@@ -218,24 +219,24 @@ export class AIChatService implements IService {
         message: contextualMessage,
         contextId: chatId.toString(),
         timestamp: Date.now(),
-        retryCount: 0
+        retryCount: 0,
       }
 
       this.messageQueue.push(queueItem)
-      
+
       this.logger.d(`Added message to queue from ${firstName} (${userId}): ${cleanedMessage}`)
 
       return {
         success: true,
         queued: true,
-        queuePosition: this.messageQueue.length
+        queuePosition: this.messageQueue.length,
       }
     } catch (error) {
       this.logger.e("Error processing message:", error)
       return {
         success: false,
         queued: false,
-        reason: "Ошибка обработки сообщения"
+        reason: "Ошибка обработки сообщения",
       }
     }
   }
@@ -246,15 +247,15 @@ export class AIChatService implements IService {
   private prepareContextualMessage(
     message: string,
     username?: string,
-    firstName?: string
+    firstName?: string,
   ): string {
     const date = new Date()
     const messageDate = date.toISOString().replace(/:\d+\.\d+Z/gi, "").replace("T", " ")
-    
-    const userInfo = firstName ? 
-      (username ? `@${username}][${firstName}` : `${firstName}`) :
-      (username ? `@${username}` : "пользователь")
-    
+
+    const userInfo = firstName
+      ? (username ? `@${username}][${firstName}` : `${firstName}`)
+      : (username ? `@${username}` : "пользователь")
+
     return `[${messageDate}][${userInfo}] пользователь спрашивает тебя: ${message}`
   }
 
@@ -266,14 +267,14 @@ export class AIChatService implements IService {
     reason?: string
     remaining: number
   }> {
-    const chatId = parseInt(contextId)
+    const chatId = Number.parseInt(contextId)
     const context = this.getOrCreateContext(contextId)
     const chatLimits = await this.getChatLimits(chatId)
-    
+
     // Проверяем, нужно ли сбросить дневной счетчик
     const now = Date.now()
     const dayInMs = 24 * 60 * 60 * 1000
-    
+
     if (now - context.lastDailyReset > dayInMs) {
       context.dailyRequestCount = 0
       context.lastDailyReset = now
@@ -281,18 +282,18 @@ export class AIChatService implements IService {
 
     const dailyLimit = chatLimits.dailyLimit
     const remaining = dailyLimit - context.dailyRequestCount
-    
+
     if (context.dailyRequestCount >= dailyLimit) {
       return {
         allowed: false,
         reason: `Превышен дневной лимит запросов (${dailyLimit}). Попробуйте завтра.`,
-        remaining: 0
+        remaining: 0,
       }
     }
 
     return {
       allowed: true,
-      remaining
+      remaining,
     }
   }
 
@@ -301,7 +302,7 @@ export class AIChatService implements IService {
    */
   private getOrCreateContext(contextId: string): ChatContext {
     let context = this.chatContexts.get(contextId)
-    
+
     if (!context) {
       const now = Date.now()
       context = {
@@ -310,7 +311,7 @@ export class AIChatService implements IService {
         lastActivity: now,
         requestCount: 0,
         dailyRequestCount: 0,
-        lastDailyReset: now
+        lastDailyReset: now,
       }
       this.chatContexts.set(contextId, context)
     }
@@ -323,16 +324,18 @@ export class AIChatService implements IService {
    * Запуск обработчика очереди сообщений
    */
   private startQueueProcessor(): void {
-    if (this.isProcessingQueue) return
+    if (this.isProcessingQueue)
+      return
 
     this.isProcessingQueue = true
 
     const processNext = async () => {
-      if (!this.isProcessingQueue) return
+      if (!this.isProcessingQueue)
+        return
 
       try {
         const queueItem = this.messageQueue.shift()
-        
+
         if (queueItem) {
           await this.processQueuedMessage(queueItem)
         }
@@ -357,36 +360,35 @@ export class AIChatService implements IService {
         return
       }
 
-      const chatId = parseInt(queueItem.contextId)
+      const chatId = Number.parseInt(queueItem.contextId)
       const context = this.getOrCreateContext(queueItem.contextId)
-      
+
       // Добавляем новое сообщение пользователя в контекст
       context.messages.push({
-        role: 'user',
+        role: "user",
         content: queueItem.message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
-      
+
       const conversationHistory: GeminiMessage[] = context.messages.map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
       }))
 
       // Получаем настройки чата для ограничения контекста
       const chatLimits = await this.getChatLimits(chatId)
-      
+
       // Обрезаем контекст по длине в символах
       await this.trimContextByCharacters(context, chatLimits.maxContextCharacters)
 
       // Делаем запрос к AI с throttling
       await this.throttledAIRequest(queueItem)
-      
+
       context.requestCount++
       context.dailyRequestCount++
-
     } catch (error) {
       this.logger.e("Error processing queued message:", error)
-      
+
       // Retry logic
       if (queueItem.retryCount < 3) {
         queueItem.retryCount++
@@ -404,8 +406,8 @@ export class AIChatService implements IService {
       // Эмитируем typing индикатор
       this.onTypingStart?.(queueItem.contextId)
 
-      const chatId = parseInt(queueItem.contextId)
-      
+      const chatId = Number.parseInt(queueItem.contextId)
+
       // Получаем API ключ и настройки для чата
       const apiKey = await this.getApiKeyForChat(chatId)
       const systemPrompt = await this.getSystemPromptForChat(chatId)
@@ -413,18 +415,18 @@ export class AIChatService implements IService {
 
       // Получаем контекст и добавляем новое сообщение пользователя
       const context = this.getOrCreateContext(queueItem.contextId)
-      
+
       // Добавляем новое сообщение пользователя в контекст
       context.messages.push({
-        role: 'user',
+        role: "user",
         content: queueItem.message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
-      
+
       // Преобразуем историю в формат Gemini
       const conversationHistory: GeminiMessage[] = context.messages.map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
       }))
 
       // Создаем адаптер (без API ключа в конструкторе)
@@ -432,18 +434,18 @@ export class AIChatService implements IService {
 
       // Делаем запрос к Gemini API, передавая API ключ и историю
       const response = await geminiAdapter.generateContent(
-        apiKey, 
-        queueItem.message, 
+        apiKey,
+        queueItem.message,
         conversationHistory,
-        systemPrompt || undefined
+        systemPrompt || undefined,
       )
 
       if (response && response.trim()) {
         // Добавляем ответ в контекст
         context.messages.push({
-          role: 'assistant',
+          role: "assistant",
           content: response,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
 
         // Обрезаем контекст если нужно
@@ -451,7 +453,7 @@ export class AIChatService implements IService {
 
         // Отправляем ответ
         this.onMessageResponse?.(queueItem.contextId, response, queueItem.id)
-        
+
         this.logger.d(`AI response sent for message ${queueItem.id}`)
       } else {
         this.logger.w(`Empty AI response for message ${queueItem.id}`)
@@ -459,7 +461,6 @@ export class AIChatService implements IService {
 
       // Ждем между запросами (используем настройки чата)
       await new Promise(resolve => setTimeout(resolve, chatLimits.throttleDelay))
-
     } catch (error) {
       this.logger.e("AI request error:", error)
       throw error
@@ -472,12 +473,13 @@ export class AIChatService implements IService {
    * Обрезка контекста по символам
    */
   private async trimContextByCharacters(context: ChatContext, maxCharacters: number): Promise<void> {
-    if (!this.chatAiRepository) return
+    if (!this.chatAiRepository)
+      return
 
     // Преобразуем сообщения в строку
     const messagesText = context.messages
       .map(m => `${m.role}: ${m.content}`)
-      .join('\n')
+      .join("\n")
 
     if (messagesText.length <= maxCharacters) {
       return
@@ -485,22 +487,22 @@ export class AIChatService implements IService {
 
     // Обрезаем контекст, сохраняя последние сообщения
     const trimmedText = this.chatAiRepository.trimContext(messagesText, maxCharacters)
-    
+
     // Парсим обрезанный текст обратно в сообщения
-    const lines = trimmedText.split('\n').filter(line => line.trim())
+    const lines = trimmedText.split("\n").filter(line => line.trim())
     const newMessages: ChatMessage[] = []
 
     for (const line of lines) {
-      const colonIndex = line.indexOf(': ')
+      const colonIndex = line.indexOf(": ")
       if (colonIndex > 0) {
-        const role = line.substring(0, colonIndex) as 'user' | 'assistant'
+        const role = line.substring(0, colonIndex) as "user" | "assistant"
         const content = line.substring(colonIndex + 2)
-        
-        if (role === 'user' || role === 'assistant') {
+
+        if (role === "user" || role === "assistant") {
           newMessages.push({
             role,
             content,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           })
         }
       }
@@ -564,13 +566,13 @@ export class AIChatService implements IService {
       for (const [chatId, context] of this.chatContexts.entries()) {
         const messagesText = context.messages
           .map(m => `${m.role}: ${m.content}`)
-          .join('\n')
-        
+          .join("\n")
+
         await this.chatAiRepository.saveContext(
-          parseInt(chatId),
+          Number.parseInt(chatId),
           messagesText,
           context.requestCount,
-          context.dailyRequestCount
+          context.dailyRequestCount,
         )
       }
       this.logger.d("Chat contexts saved to database")
@@ -597,13 +599,14 @@ export class AIChatService implements IService {
     remaining: number
   } | null {
     const context = this.chatContexts.get(contextId)
-    if (!context) return null
+    if (!context)
+      return null
 
     return {
       messages: context.messages.length,
       requestCount: context.requestCount,
       dailyRequestCount: context.dailyRequestCount,
-      remaining: this.dailyLimit - context.dailyRequestCount
+      remaining: this.dailyLimit - context.dailyRequestCount,
     }
   }
 
@@ -671,7 +674,7 @@ export class AIChatService implements IService {
     return {
       dailyLimit: settings?.dailyLimit ?? this.dailyLimit,
       throttleDelay: settings?.throttleDelay ?? this.throttleDelay,
-      maxContextCharacters: settings?.maxContextCharacters ?? 600
+      maxContextCharacters: settings?.maxContextCharacters ?? 600,
     }
   }
 
@@ -679,7 +682,8 @@ export class AIChatService implements IService {
    * Проверить является ли пользователь администратором чата
    */
   async isChatAdmin(chatId: number, userId: number): Promise<boolean> {
-    if (!this.chatAiRepository) return false
+    if (!this.chatAiRepository)
+      return false
     return await this.chatAiRepository.isAdmin(chatId, userId)
   }
 
@@ -687,8 +691,8 @@ export class AIChatService implements IService {
    * Обновить настройки чата (только для администраторов)
    */
   async updateChatSettings(
-    chatId: number, 
-    userId: number, 
+    chatId: number,
+    userId: number,
     updates: Partial<{
       geminiApiKey: string | null
       systemPrompt: string | null
@@ -696,9 +700,10 @@ export class AIChatService implements IService {
       dailyLimit: number
       throttleDelay: number
       maxContextCharacters: number
-    }>
+    }>,
   ): Promise<boolean> {
-    if (!this.chatAiRepository) return false
+    if (!this.chatAiRepository)
+      return false
 
     // Проверяем права администратора
     const isAdmin = await this.isChatAdmin(chatId, userId)
@@ -727,7 +732,7 @@ export class AIChatService implements IService {
       dailyLimit: this.dailyLimit,
       isProcessing: this.isProcessingQueue,
       activeChats: this.chatSettings.size,
-      serviceStatus: "active"
+      serviceStatus: "active",
     }
   }
-} 
+}

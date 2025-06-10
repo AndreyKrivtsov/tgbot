@@ -8,8 +8,8 @@ interface CaptchaDependencies {
 }
 
 interface CaptchaSettings {
-  timeoutMs: number          // Таймаут капчи (по умолчанию 60 сек)
-  checkIntervalMs: number    // Интервал проверки истекших капч (по умолчанию 5 сек)
+  timeoutMs: number // Таймаут капчи (по умолчанию 60 сек)
+  checkIntervalMs: number // Интервал проверки истекших капч (по умолчанию 5 сек)
 }
 
 interface CaptchaChallenge {
@@ -41,20 +41,20 @@ export class CaptchaService implements IService {
   private isMonitoring = false
 
   constructor(
-    config: AppConfig, 
-    logger: Logger, 
+    config: AppConfig,
+    logger: Logger,
     dependencies: CaptchaDependencies = {},
-    settings?: Partial<CaptchaSettings>
+    settings?: Partial<CaptchaSettings>,
   ) {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
-    
+
     // Настройки по умолчанию
     this.settings = {
-      timeoutMs: 60000,         // 60 секунд
-      checkIntervalMs: 5000,    // 5 секунд
-      ...settings
+      timeoutMs: 60000, // 60 секунд
+      checkIntervalMs: 5000, // 5 секунд
+      ...settings,
     }
   }
 
@@ -71,10 +71,10 @@ export class CaptchaService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting captcha service...")
-    
+
     // Запускаем мониторинг таймаутов
     this.startTimeoutMonitoring()
-    
+
     this.logger.i("✅ Captcha service started")
   }
 
@@ -109,7 +109,7 @@ export class CaptchaService implements IService {
    */
   generateCaptcha(): CaptchaChallenge {
     this.logger.d("🎲 Starting captcha generation...")
-    
+
     const randomOption = (from: number, to: number) => {
       return Math.floor(Math.random() * (to - from + 1)) + from
     }
@@ -135,7 +135,7 @@ export class CaptchaService implements IService {
     const insertIndex = randomOption(0, 3)
     options.splice(insertIndex, 0, answer)
 
-    this.logger.d(`🔢 Generated options: [${options.join(', ')}], correct answer at index ${insertIndex}`)
+    this.logger.d(`🔢 Generated options: [${options.join(", ")}], correct answer at index ${insertIndex}`)
 
     return { question, answer, options }
   }
@@ -149,11 +149,11 @@ export class CaptchaService implements IService {
     questionId: number,
     answer: number,
     username?: string,
-    firstname: string = "Unknown"
+    firstname: string = "Unknown",
   ): void {
     this.logger.i(`🔒 Adding user ${userId} (${firstname}) to restricted list`)
     this.logger.d(`Details: chatId=${chatId}, questionId=${questionId}, answer=${answer}`)
-    
+
     const restrictedUser: RestrictedUser = {
       userId,
       chatId,
@@ -162,11 +162,11 @@ export class CaptchaService implements IService {
       username,
       firstname,
       timestamp: Date.now(),
-      isAnswered: false
+      isAnswered: false,
     }
 
     this.restrictedUsers.set(userId, restrictedUser)
-    
+
     this.logger.i(`✅ User ${userId} (${firstname}) restricted in chat ${chatId}`)
     this.logger.d(`Total restricted users: ${this.restrictedUsers.size}`)
   }
@@ -179,7 +179,7 @@ export class CaptchaService implements IService {
     user?: RestrictedUser
   } {
     this.logger.i(`🔍 Validating answer for user ${userId}, questionId=${questionId}, answer=${userAnswer}`)
-    
+
     const restrictedUser = this.restrictedUsers.get(userId)
 
     if (!restrictedUser) {
@@ -204,14 +204,14 @@ export class CaptchaService implements IService {
     if (isCorrect) {
       this.logger.i(`✅ User ${userId} (${restrictedUser.firstname}) answered correctly!`)
       restrictedUser.isAnswered = true
-      
+
       // Вызываем колбэк успеха
       if (this.onCaptchaSuccess) {
         this.onCaptchaSuccess(restrictedUser)
       }
     } else {
       this.logger.w(`❌ User ${userId} (${restrictedUser.firstname}) answered incorrectly. Expected: ${restrictedUser.answer}, got: ${userAnswer}`)
-      
+
       // Вызываем колбэк неудачи
       if (this.onCaptchaFailed) {
         this.onCaptchaFailed(restrictedUser)
@@ -226,7 +226,7 @@ export class CaptchaService implements IService {
    */
   removeRestrictedUser(userId: number): RestrictedUser | undefined {
     this.logger.i(`🔓 Removing user ${userId} from restricted list`)
-    
+
     const user = this.restrictedUsers.get(userId)
     if (user) {
       this.restrictedUsers.delete(userId)
@@ -235,7 +235,7 @@ export class CaptchaService implements IService {
     } else {
       this.logger.w(`⚠️ User ${userId} was not in restricted list`)
     }
-    
+
     return user
   }
 
@@ -265,13 +265,14 @@ export class CaptchaService implements IService {
    */
   private startTimeoutMonitoring(): void {
     this.isMonitoring = true
-    
+
     const checkTimeouts = () => {
-      if (!this.isMonitoring) return
+      if (!this.isMonitoring)
+        return
 
       const now = Date.now()
       const expiredUsers: RestrictedUser[] = []
-      
+
       for (const [userId, user] of this.restrictedUsers) {
         if (!user.isAnswered && (now - user.timestamp) > this.settings.timeoutMs) {
           this.logger.w(`⏰ Captcha timeout for user ${userId} (${user.firstname})`)
@@ -298,7 +299,7 @@ export class CaptchaService implements IService {
    */
   private handleCaptchaTimeout(user: RestrictedUser): void {
     this.logger.i(`⏰ Handling captcha timeout for user ${user.userId} (${user.firstname})`)
-    
+
     // Вызываем колбэк таймаута
     if (this.onCaptchaTimeout) {
       this.onCaptchaTimeout(user)
@@ -339,7 +340,7 @@ export class CaptchaService implements IService {
   getStats(): object {
     return {
       restrictedUsersCount: this.restrictedUsers.size,
-      isMonitoring: this.isMonitoring
+      isMonitoring: this.isMonitoring,
     }
   }
-} 
+}

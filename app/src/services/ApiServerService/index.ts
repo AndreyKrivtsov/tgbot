@@ -12,16 +12,16 @@ interface BotConfig {
   // Captcha настройки
   captchaEnabled: boolean
   captchaTimeout: number // в секундах
-  
-  // Антиспам настройки  
+
+  // Антиспам настройки
   antispamEnabled: boolean
   antispamThreshold: number
-  
+
   // AI чат настройки
   aiChatEnabled: boolean
   aiDailyLimit: number
   aiCurrentUsage: number
-  
+
   // Общие настройки
   welcomeMessage: string
   adminUsername: string
@@ -39,7 +39,7 @@ export class ApiServerService implements IService {
   private dependencies: ApiServiceDependencies
   private isRunning = false
   private hasFastify = false
-  
+
   // Конфигурация бота (будет сохраняться в БД)
   private botConfig: BotConfig
 
@@ -47,7 +47,7 @@ export class ApiServerService implements IService {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
-    
+
     // Инициализируем конфиг
     this.botConfig = {
       captchaEnabled: true,
@@ -59,7 +59,7 @@ export class ApiServerService implements IService {
       aiCurrentUsage: 0,
       welcomeMessage: "Добро пожаловать! Пройдите простую проверку:",
       adminUsername: this.config.ADMIN_USERNAME || "",
-      logLevel: 2
+      logLevel: 2,
     }
   }
 
@@ -68,7 +68,7 @@ export class ApiServerService implements IService {
    */
   async initialize(): Promise<void> {
     this.logger.i("🌐 Initializing API server...")
-    
+
     try {
       // Проверяем наличие Fastify
       try {
@@ -82,7 +82,7 @@ export class ApiServerService implements IService {
         this.logger.w("   2. Run: npm install fastify @fastify/cors @fastify/static")
         this.logger.w("   3. Restart the application")
       }
-      
+
       this.logger.i("✅ API server service initialized")
     }
     catch (error) {
@@ -96,7 +96,7 @@ export class ApiServerService implements IService {
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting API server...")
-    
+
     if (!this.hasFastify) {
       this.logger.w("🚫 API server not available - Fastify not installed")
       this.logger.i("🤖 Bot continues to work without web interface")
@@ -155,7 +155,7 @@ export class ApiServerService implements IService {
       hasRepository: !!this.dependencies.repository,
       hasTelegramBot: !!this.dependencies.telegramBot,
       status: this.hasFastify ? "ready" : "disabled",
-      note: this.hasFastify ? "Web interface ready" : "Install Fastify to enable web interface"
+      note: this.hasFastify ? "Web interface ready" : "Install Fastify to enable web interface",
     }
   }
 
@@ -175,4 +175,4 @@ export class ApiServerService implements IService {
     // TODO: Сохранение в БД
     // TODO: Уведомление бота об изменениях
   }
-} 
+}
