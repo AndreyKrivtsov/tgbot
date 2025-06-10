@@ -936,7 +936,6 @@ ${question[0]} + ${question[1]} = ?
       await this.bot.api.sendMessage({
         chat_id: Number.parseInt(contextId),
         text: response,
-        reply_parameters: { message_id: messageId },
       })
     } catch (error) {
       this.logger.e("Error sending AI response:", error)

@@ -2,8 +2,8 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import { ChatAiRepository } from "../../repository/ChatAiRepository.js"
-import { GeminiAdapter } from "../ai/providers/GeminiAdapter.js"
-import type { GeminiMessage } from "../ai/providers/GeminiAdapter.js"
+import type { GeminiMessage } from "../AI/providers/GeminiAdapter.js"
+import { GeminiAdapter } from "../AI/providers/GeminiAdapter.js"
 import type { Chat } from "../../db/schema.js"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 
@@ -178,7 +178,7 @@ export class AIChatService implements IService {
     message: string,
     username?: string,
     firstName?: string,
-    isReply?: boolean,
+    _isReply?: boolean,
   ): Promise<{
       success: boolean
       queued: boolean
@@ -370,7 +370,7 @@ export class AIChatService implements IService {
         timestamp: Date.now(),
       })
 
-      const conversationHistory: GeminiMessage[] = context.messages.map(msg => ({
+      const _conversationHistory: GeminiMessage[] = context.messages.map(msg => ({
         role: msg.role === "assistant" ? "model" : "user",
         parts: [{ text: msg.content }],
       }))
