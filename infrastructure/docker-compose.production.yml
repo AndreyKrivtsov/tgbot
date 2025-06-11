@@ -87,48 +87,7 @@ services:
   #   profiles:
   #     - proxy
 
-  # Monitoring с Prometheus (опционально)
-  prometheus:
-    # image: prom/prometheus:latest
-    # container_name: tgbot-prometheus
-    # restart: always
-    # ports:
-    #   - "127.0.0.1:9090:9090"
-    # volumes:
-    #   - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    #   - prometheus_data:/prometheus
-    # command:
-    #   - '--config.file=/etc/prometheus/prometheus.yml'
-    #   - '--storage.tsdb.path=/prometheus'
-    #   - '--web.console.libraries=/etc/prometheus/console_libraries'
-    #   - '--web.console.templates=/etc/prometheus/consoles'
-    #   - '--storage.tsdb.retention.time=200h'
-    #   - '--web.enable-lifecycle'
-    # networks:
-    #   - tgbot-network-prod
-    # profiles:
-    #   - monitoring
 
-  # Grafana для визуализации (опционально)
-  grafana:
-    # image: grafana/grafana:latest
-    # container_name: tgbot-grafana
-    # restart: always
-    # ports:
-    #   - "127.0.0.1:3001:3000"
-    # environment:
-    #   - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-    #   - GF_USERS_ALLOW_SIGN_UP=false
-    # volumes:
-    #   - grafana_data:/var/lib/grafana
-    #   - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-    #   - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    # depends_on:
-    #   - prometheus
-    # networks:
-    #   - tgbot-network-prod
-    # profiles:
-    #   - monitoring
 
   # PostgreSQL Exporter для метрик
   # postgres-exporter:
@@ -161,6 +120,32 @@ services:
   #     - tgbot-network-prod
   #   profiles:
   #     - monitoring
+
+  # AntiSpam Service - сервис проверки спама на Python/FastAPI (продакшен)
+  antispam:
+    build:
+      context: ../antispam
+      dockerfile: Dockerfile
+    container_name: antispam-prod
+    restart: always
+    ports:
+      - "127.0.0.1:6323:6323"  # Только localhost в продакшене
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6323/docs", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - tgbot-network-prod
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
 
 volumes:
   postgres_data_prod:

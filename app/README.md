@@ -21,7 +21,8 @@ npm install
 
 # 3. Настройка окружения
 cp .env.example .env
-# Заполнить BOT_TOKEN, DATABASE_URL, REDIS_URL, AI_API_KEY
+# Заполнить BOT_TOKEN, DATABASE_URL, REDIS_URL
+# AI_API_KEY теперь настраивается для каждого чата через команды бота
 
 # 4. Запуск миграций
 npm run db:migrate
@@ -169,7 +170,6 @@ npm run db:push      # Push схемы (dev)
 ```bash
 # Основные
 BOT_TOKEN=your_telegram_bot_token
-AI_API_KEY=your_gemini_api_key
 
 # База данных (обязательно)
 DATABASE_URL=postgresql://username:password@localhost:5432/tgbot
@@ -178,12 +178,13 @@ DATABASE_URL=postgresql://username:password@localhost:5432/tgbot
 REDIS_URL=redis://localhost:6379/0
 
 # Веб-сервер
-WEB_PORT=3000
-WEB_HOST=0.0.0.0
+PORT=3000
 
 # Настройки бота
-DEFAULT_CHAT_ID=-1001234567890
 ADMIN_USERNAME=@admin_username
+
+# Заметка: AI_API_KEY теперь настраивается для каждого чата отдельно через команды бота
+# DEFAULT_CHAT_ID больше не используется в мультичатовом боте
 ```
 
 ### Константы бота

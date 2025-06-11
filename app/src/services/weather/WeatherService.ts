@@ -2,6 +2,7 @@ import type { CanvasRenderingContext2D } from "canvas"
 import path from "node:path"
 import axios from "axios"
 import { createCanvas, loadImage } from "canvas"
+import { WEATHER_CONFIG } from "../../constants.js"
 
 interface ResponceWeather {
   hourly: {
@@ -33,8 +34,8 @@ interface WeatherData {
 
 export class WeatherService {
   isImage = true
-  latitude = "12.2741076"
-  longitude = "109.2006335"
+  latitude = WEATHER_CONFIG.DEFAULT_LATITUDE
+  longitude = WEATHER_CONFIG.DEFAULT_LONGITUDE
   url = `https://api.open-meteo.com/v1/forecast?latitude=${this.latitude}&longitude=${this.longitude}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,rain,pressure_msl,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=GMT&forecast_days=1`
   isSent = false
 
@@ -45,9 +46,9 @@ export class WeatherService {
   async start(action: (weatherText: string | Blob) => void) {
     const date = new Date()
     const hours = date.getUTCHours()
-    const localHours = hours + 7
+    const localHours = hours + WEATHER_CONFIG.TIMEZONE_OFFSET_HOURS
 
-    if (localHours === 9 || localHours === 13 || localHours === 17 || localHours === 21) {
+    if (WEATHER_CONFIG.FORECAST_HOURS.includes(localHours)) {
       if (this.isSent) {
         return
       }
@@ -61,7 +62,7 @@ export class WeatherService {
 
     setTimeout(() => {
       this.start(action)
-    }, 30000)
+    }, WEATHER_CONFIG.UPDATE_INTERVAL_MS)
   }
 
   async getWeather(hour: number) {
@@ -82,7 +83,7 @@ export class WeatherService {
   async toImage(weather: WeatherData) {
     const imagePath = path.join(import.meta.dirname, "image.jpg")
     const initialImage = await loadImage(imagePath)
-    const canvas = createCanvas(400, 400)
+    const canvas = createCanvas(WEATHER_CONFIG.CANVAS_WIDTH, WEATHER_CONFIG.CANVAS_HEIGHT)
 
     let ctx = canvas.getContext("2d")
     ctx.drawImage(initialImage, 0, 0)

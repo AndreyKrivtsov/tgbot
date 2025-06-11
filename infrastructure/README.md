@@ -66,6 +66,12 @@ infrastructure/
 - **Port**: 6379
 - **Features**: Memory optimization, persistence, TTL support
 
+### AntiSpam Service
+- **Port**: 6323
+- **Technology**: Python/FastAPI
+- **API Documentation**: http://localhost:6323/docs
+- **Features**: Spam detection, ML-based filtering
+
 ### Management Tools (Optional)
 - **pgAdmin**: http://localhost:8080
 - **Redis Commander**: http://localhost:8081
@@ -91,6 +97,9 @@ DATABASE_URL=postgresql://postgres:password@postgres:5432/tgbot
 
 # Redis
 REDIS_URL=redis://redis:6379/0
+
+# AntiSpam
+ANTISPAM_URL=http://antispam:6323
 ```
 
 #### From Host
@@ -100,6 +109,9 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/tgbot
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
+
+# AntiSpam
+ANTISPAM_URL=http://localhost:6323
 ```
 
 ## 📊 Monitoring
@@ -112,6 +124,7 @@ REDIS_URL=redis://localhost:6379/0
 # Manual checks
 docker exec tgbot-postgres pg_isready
 docker exec tgbot-redis redis-cli ping
+curl -f http://localhost:6323/docs
 ```
 
 ### Performance Metrics

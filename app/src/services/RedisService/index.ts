@@ -28,7 +28,6 @@ export class RedisService implements IService {
       // Проверяем наличие REDIS_URL
       if (!this.config.REDIS_URL) {
         this.logger.w("⚠️ REDIS_URL not configured - Redis service disabled")
-        this.logger.w("📋 Redis is optional but recommended for better performance")
         return
       }
 
@@ -37,12 +36,17 @@ export class RedisService implements IService {
         url: this.config.REDIS_URL,
         socket: {
           connectTimeout: 10000, // 10 секунд таймаут подключения
+          lazyConnect: true, // Не подключаться сразу при создании
+          keepAlive: true, // Включаем keep-alive
+          noDelay: true, // Отключаем алгоритм Nagle для меньшей задержки
           reconnectStrategy: (retries) => {
-            if (retries > 3) {
+            if (retries > 10) {
               this.logger.e("Redis: Maximum reconnection attempts reached")
               return false
             }
-            return Math.min(retries * 1000, 5000) // Экспоненциальная задержка до 5 сек
+            const delay = Math.min(retries * 1000, 30000) // До 30 секунд
+            this.logger.i(`Redis: Reconnecting in ${delay}ms (attempt ${retries})`)
+            return delay
           },
         },
         database: 0, // База по умолчанию
@@ -59,17 +63,17 @@ export class RedisService implements IService {
       })
 
       this.client.on("ready", () => {
-        this.logger.d("Redis client ready")
+        this.logger.i("Redis client ready")
         this.isConnected = true
       })
 
       this.client.on("end", () => {
-        this.logger.d("Redis client disconnected")
+        this.logger.w("Redis client disconnected")
         this.isConnected = false
       })
 
       this.client.on("reconnecting", () => {
-        this.logger.d("Redis client reconnecting...")
+        this.logger.i("Redis client reconnecting...")
       })
 
       this.logger.i("✅ Redis service initialized")
@@ -98,10 +102,6 @@ export class RedisService implements IService {
       await this.client.ping()
 
       this.logger.i("✅ Redis service started successfully")
-
-      // Логируем информацию о подключении
-      const info = await this.getConnectionInfo()
-      this.logger.i(`📊 Redis info: ${JSON.stringify(info)}`)
     } catch (error) {
       this.logger.e("❌ Failed to start Redis service:", error)
       this.isConnected = false
@@ -322,6 +322,21 @@ export class RedisService implements IService {
     }
   }
 
+  /**
+   * Поиск ключей по паттерну
+   */
+  async keys(pattern: string): Promise<string[]> {
+    if (!this.client || !this.isConnected)
+      return []
+
+    try {
+      return await this.client.keys(pattern)
+    } catch (error) {
+      this.logger.e(`Redis KEYS error for pattern ${pattern}:`, error)
+      return []
+    }
+  }
+
   // ====== СПЕЦИАЛИЗИРОВАННЫЕ МЕТОДЫ ДЛЯ БОТА ======
 
   /**
@@ -389,6 +404,27 @@ export class RedisService implements IService {
     const today = new Date().toISOString().split("T")[0]
     const count = await this.get<number>(`ai:limit:${chatId}:${today}`)
     return count || 0
+  }
+
+  /**
+   * Кеширование информации о боте
+   */
+  async setBotInfo(botInfo: { id: number, username?: string, first_name: string }): Promise<void> {
+    await this.set("bot:info", botInfo, 86400) // кешируем на 24 часа
+  }
+
+  async getBotInfo(): Promise<{ id: number, username?: string, first_name: string } | null> {
+    return await this.get("bot:info")
+  }
+
+  async getBotId(): Promise<number | null> {
+    const botInfo = await this.getBotInfo()
+    return botInfo?.id || null
+  }
+
+  async getBotUsername(): Promise<string | null> {
+    const botInfo = await this.getBotInfo()
+    return botInfo?.username || null
   }
 
   /**

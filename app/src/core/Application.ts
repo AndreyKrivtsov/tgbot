@@ -88,6 +88,12 @@ export class Application {
   async registerInfrastructureServices(): Promise<void> {
     this.logger.i("🔧 Registering infrastructure services...")
 
+    // Redis Service
+    this.container.register("redis", async () => {
+      const { RedisService } = await import("../services/RedisService/index.js")
+      return new RedisService(this.config, this.logger)
+    })
+
     // AI Service
     this.container.register("aiService", async () => {
       const { AIService } = await import("../services/AI/index.js")
@@ -102,6 +108,21 @@ export class Application {
    */
   async registerBusinessServices(): Promise<void> {
     this.logger.i("🏢 Registering business services...")
+
+    // Chat Repository
+    this.container.register("chatRepository", async () => {
+      const { ChatAiRepository } = await import("../repository/ChatAiRepository.js")
+      const database = await this.container.getAsync("database") as any
+      const cache = await this.container.getAsync("cache") as any
+      return new ChatAiRepository(database, cache)
+    })
+
+    // Chat Config Service
+    this.container.register("chatConfig", async () => {
+      const { ChatConfigService } = await import("../services/ChatConfigService/index.js")
+      const chatRepository = await this.container.getAsync("chatRepository") as any
+      return new ChatConfigService(chatRepository)
+    })
 
     // Captcha Service
     this.container.register("captcha", async () => {
@@ -133,8 +154,8 @@ export class Application {
       return new AntiSpamService(this.config, this.logger, {}, antiSpamSettings)
     })
 
-    // AI Chat Service
-    this.container.register("aiChat", async () => {
+    // Chat Service
+    this.container.register("chat", async () => {
       const { AIChatService } = await import("../services/AIChatService/index.js")
       const aiService = await this.container.getAsync("aiService")
       const database = await this.container.getAsync("database") as any
@@ -157,9 +178,11 @@ export class Application {
     // Telegram Bot Service (с зависимостями)
     this.container.register("telegramBot", async () => {
       const { TelegramBotService } = await import("../services/TelegramBot/index.js")
+      const redisService = await this.container.getAsync("redis")
       const captchaService = await this.container.getAsync("captcha")
       const antiSpamService = await this.container.getAsync("antiSpam")
-      const aiChatService = await this.container.getAsync("aiChat")
+      const chatService = await this.container.getAsync("chat")
+      const chatRepository = await this.container.getAsync("chatRepository")
 
       // Настройки Telegram бота (можно перенести в БД позже)
       const botSettings = {
@@ -173,9 +196,11 @@ export class Application {
       }
 
       return new TelegramBotService(this.config, this.logger, {
+        redisService: redisService as any,
         captchaService: captchaService as any,
         antiSpamService: antiSpamService as any,
-        aiChatService: aiChatService as any,
+        chatService: chatService as any,
+        chatRepository: chatRepository as any,
       }, botSettings)
     })
 

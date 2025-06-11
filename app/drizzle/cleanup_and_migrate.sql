@@ -1,19 +1,9 @@
 -- ==========================================
--- ПОЛНАЯ ОЧИСТКА И МИГРАЦИЯ БАЗЫ ДАННЫХ
+-- СОЗДАНИЕ СХЕМЫ БАЗЫ ДАННЫХ
 -- ==========================================
 
--- 1. Удаляем все существующие таблицы (в правильном порядке)
-DROP TABLE IF EXISTS event_logs CASCADE;
-DROP TABLE IF EXISTS bot_stats CASCADE;
-DROP TABLE IF EXISTS chat_members CASCADE;
-DROP TABLE IF EXISTS ai_contexts CASCADE;
-DROP TABLE IF EXISTS chat_configs CASCADE;
-DROP TABLE IF EXISTS group_admins CASCADE;
-DROP TABLE IF EXISTS chats CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-
--- 2. Создаем новые таблицы согласно обновленной схеме
-CREATE TABLE "chats" (
+-- 1. Создаем таблицы согласно схеме
+CREATE TABLE IF NOT EXISTS "chats" (
 	"id" bigint PRIMARY KEY NOT NULL,
 	"type" varchar(50) NOT NULL,
 	"title" varchar(255),
@@ -22,7 +12,7 @@ CREATE TABLE "chats" (
 	"updated_at" timestamp DEFAULT now()
 );
 
-CREATE TABLE "chat_configs" (
+CREATE TABLE IF NOT EXISTS "chat_configs" (
 	"chat_id" bigint PRIMARY KEY NOT NULL,
 	"gemini_api_key" varchar(512),
 	"system_prompt" jsonb,
@@ -32,33 +22,44 @@ CREATE TABLE "chat_configs" (
 	"updated_at" timestamp DEFAULT now()
 );
 
-CREATE TABLE "group_admins" (
+CREATE TABLE IF NOT EXISTS "group_admins" (
 	"group_id" bigint NOT NULL,
 	"user_id" bigint NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	CONSTRAINT "group_admins_group_id_user_id_pk" PRIMARY KEY("group_id","user_id")
 );
 
--- 3. Создаем индексы для оптимизации производительности
-CREATE INDEX "idx_chats_type" ON "chats" USING btree ("type");
-CREATE INDEX "idx_chats_active" ON "chats" USING btree ("active");
-CREATE INDEX "idx_chat_configs_ai_enabled" ON "chat_configs" USING btree ("ai_enabled");
-CREATE INDEX "idx_group_admins_group" ON "group_admins" USING btree ("group_id");
-CREATE INDEX "idx_group_admins_user" ON "group_admins" USING btree ("user_id");
+-- 2. Создаем индексы для оптимизации производительности
+CREATE INDEX IF NOT EXISTS "idx_chats_type" ON "chats" USING btree ("type");
+CREATE INDEX IF NOT EXISTS "idx_chats_active" ON "chats" USING btree ("active");
+CREATE INDEX IF NOT EXISTS "idx_chat_configs_ai_enabled" ON "chat_configs" USING btree ("ai_enabled");
+CREATE INDEX IF NOT EXISTS "idx_group_admins_group" ON "group_admins" USING btree ("group_id");
+CREATE INDEX IF NOT EXISTS "idx_group_admins_user" ON "group_admins" USING btree ("user_id");
 
--- 4. Добавляем внешние ключи
-ALTER TABLE "chat_configs" ADD CONSTRAINT "fk_chat_configs_chat_id" 
-    FOREIGN KEY ("chat_id") REFERENCES "chats"("id") ON DELETE CASCADE;
+-- 3. Добавляем внешние ключи (только если они еще не существуют)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_chat_configs_chat_id'
+    ) THEN
+        ALTER TABLE "chat_configs" ADD CONSTRAINT "fk_chat_configs_chat_id" 
+            FOREIGN KEY ("chat_id") REFERENCES "chats"("id") ON DELETE CASCADE;
+    END IF;
 
-ALTER TABLE "group_admins" ADD CONSTRAINT "fk_group_admins_group_id" 
-    FOREIGN KEY ("group_id") REFERENCES "chats"("id") ON DELETE CASCADE;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_group_admins_group_id'
+    ) THEN
+        ALTER TABLE "group_admins" ADD CONSTRAINT "fk_group_admins_group_id" 
+            FOREIGN KEY ("group_id") REFERENCES "chats"("id") ON DELETE CASCADE;
+    END IF;
+END $$;
 
--- 5. Добавляем комментарии к таблицам
+-- 4. Добавляем комментарии к таблицам
 COMMENT ON TABLE "chats" IS 'Базовая информация о чатах Telegram';
 COMMENT ON TABLE "chat_configs" IS 'Конфигурация ИИ для чатов';
 COMMENT ON TABLE "group_admins" IS 'Администраторы групп';
 
--- 6. Добавляем комментарии к полям
+-- 5. Добавляем комментарии к полям
 COMMENT ON COLUMN "chats"."id" IS 'Telegram chat ID';
 COMMENT ON COLUMN "chats"."type" IS 'Тип чата: private, group, supergroup';
 COMMENT ON COLUMN "chats"."title" IS 'Название чата';
@@ -74,5 +75,30 @@ COMMENT ON COLUMN "group_admins"."group_id" IS 'ID группы';
 COMMENT ON COLUMN "group_admins"."user_id" IS 'ID пользователя-администратора';
 
 -- ==========================================
--- МИГРАЦИЯ ЗАВЕРШЕНА
+-- ДОБАВЛЕНИЕ ТЕСТОВЫХ ДАННЫХ
+-- ==========================================
+
+-- 6. Добавляем тестовые чаты
+INSERT INTO "chats" ("id", "type", "title", "active", "created_at", "updated_at") 
+VALUES 
+    (-1001728167877, 'supergroup', 'СОСЕДИ Океанус (Начанг)', true, now(), now()),
+    (-1002288402895, 'supergroup', 'Подслушано Океанус', true, now(), now())
+ON CONFLICT ("id") DO NOTHING;
+
+-- 7. Добавляем конфигурации для тестовых чатов с дефолтными настройками
+INSERT INTO "chat_configs" ("chat_id", "ai_enabled", "throttle_delay", "created_at", "updated_at")
+VALUES 
+    (-1001728167877, true, 3000, now(), now()),
+    (-1002288402895, true, 3000, now(), now())
+ON CONFLICT ("chat_id") DO NOTHING;
+
+-- 8. Добавляем администратора для обоих чатов
+INSERT INTO "group_admins" ("group_id", "user_id", "created_at")
+VALUES 
+    (-1001728167877, 1029337724, now()),
+    (-1002288402895, 1029337724, now())
+ON CONFLICT ("group_id", "user_id") DO NOTHING;
+
+-- ==========================================
+-- СОЗДАНИЕ СХЕМЫ ЗАВЕРШЕНО
 -- ========================================== 

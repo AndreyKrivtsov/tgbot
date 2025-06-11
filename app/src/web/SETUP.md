@@ -92,8 +92,7 @@ ngrok http 3000
 
 ```env
 # Веб-сервер
-WEB_PORT=3000
-WEB_HOST=0.0.0.0
+PORT=3000
 
 # Telegram
 ADMIN_USERNAME=your_telegram_username
@@ -243,7 +242,7 @@ tail -f logs/app.log
 
 1. **Node.js устарел** → Обновите до v18+
 2. **Fastify не установлен** → `npm install fastify`
-3. **Порт занят** → Измените `WEB_PORT` в .env
+3. **Порт занят** → Измените `PORT` в .env
 4. **CORS ошибки** → Проверьте origin домена
 5. **Telegram WebApp не работает** → Нужен HTTPS
 

@@ -1,55 +1,56 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
-import type { CaptchaService } from "../CaptchaService/index.js"
-import type { AntiSpamService } from "../AntiSpamService/index.js"
-import type { AIChatService } from "../AIChatService/index.js"
-import type { Bot, MessageContext, NewChatMembersContext } from "gramio"
+import { BOT_CONFIG } from "../../constants.js"
+import type {
+  TelegramBot,
+  TelegramBotDependencies,
+  TelegramBotSettings,
+  TelegramMessageContext,
+  TelegramNewMembersContext,
+  UserMessageCounter,
+} from "./types/index.js"
 
-interface TelegramBotDependencies {
-  captchaService?: CaptchaService
-  antiSpamService?: AntiSpamService
-  aiChatService?: AIChatService
-}
+// Утилиты
+import { SettingsManager } from "./utils/SettingsManager.js"
+import { UserRestrictions } from "./utils/UserRestrictions.js"
 
-interface TelegramBotSettings {
-  // Настройки капчи
-  captchaTimeoutMs: number // Таймаут капчи (по умолчанию 60 сек)
-  captchaCheckIntervalMs: number // Интервал проверки истекших капч (по умолчанию 5 сек)
+// Feature модули
+import { CaptchaManager } from "./features/CaptchaManager.js"
+import { SpamDetector } from "./features/SpamDetector.js"
+import { UserManager } from "./features/UserManager.js"
 
-  // Настройки сообщений
-  errorMessageDeleteTimeoutMs: number // Таймаут удаления сообщений об ошибках (по умолчанию 60 сек)
-  deleteSystemMessages: boolean // Удалять системные сообщения о входе/выходе (по умолчанию true)
-
-  // Настройки банов
-  temporaryBanDurationSec: number // Длительность временного бана в секундах (по умолчанию 40 сек)
-  autoUnbanDelayMs: number // Задержка автоматического разбана (по умолчанию 5 сек)
-
-  // Настройки антиспама
-  maxMessagesForSpamCheck: number // Максимальное количество сообщений для проверки антиспамом (по умолчанию 5)
-}
-
-interface UserMessageCounter {
-  userId: number
-  messageCount: number
-  spamCount: number // Счетчик спам сообщений
-  username?: string
-  firstName: string
-  lastActivity: number
-}
+// Обработчики
+import { MessageHandler } from "./handlers/MessageHandler.js"
+import { MemberHandler } from "./handlers/MemberHandler.js"
+import { CallbackHandler } from "./handlers/CallbackHandler.js"
+import { CommandHandler } from "./handlers/CommandHandler.js"
 
 /**
- * Сервис Telegram бота с интеграцией всех функций
+ * Сервис Telegram бота с модульной архитектурой
  */
 export class TelegramBotService implements IService {
   private config: AppConfig
   private logger: Logger
   private dependencies: TelegramBotDependencies
-  private settings: TelegramBotSettings
-  private userMessageCounters: Map<number, UserMessageCounter> = new Map()
-  private bot: Bot | null = null
+  private bot: TelegramBot | null = null
   private isRunning = false
   private hasGramIO = false
+
+  // Управляющие модули
+  private settingsManager: SettingsManager
+  private userRestrictions: UserRestrictions | null = null
+
+  // Feature модули
+  private captchaManager: CaptchaManager | null = null
+  private spamDetector: SpamDetector | null = null
+  private userManager: UserManager
+
+  // Обработчики
+  private messageHandler: MessageHandler | null = null
+  private memberHandler: MemberHandler | null = null
+  private callbackHandler: CallbackHandler | null = null
+  private commandHandler: CommandHandler | null = null
 
   constructor(
     config: AppConfig,
@@ -61,40 +62,23 @@ export class TelegramBotService implements IService {
     this.logger = logger
     this.dependencies = dependencies
 
-    // Настройки по умолчанию
-    this.settings = {
-      captchaTimeoutMs: 60000, // 60 секунд
-      captchaCheckIntervalMs: 5000, // 5 секунд
-      errorMessageDeleteTimeoutMs: 60000, // 60 секунд
-      deleteSystemMessages: true, // Удалять системные сообщения
-      temporaryBanDurationSec: 40, // 40 секунд
-      autoUnbanDelayMs: 5000, // 5 секунд
-      maxMessagesForSpamCheck: 5, // 5 сообщений для проверки антиспамом
-      ...settings,
+    // Инициализируем менеджер настроек
+    this.settingsManager = new SettingsManager(settings || {}, logger, dependencies)
+
+    // Инициализируем менеджер пользователей с Redis
+    if (!dependencies.redisService) {
+      this.logger.e("❌ RedisService is required for UserManager")
+      this.logger.w("💡 To fix this:")
+      this.logger.w("   1. Ensure Redis server is running (docker run -d -p 6379:6379 redis:7-alpine)")
+      this.logger.w("   2. Check REDIS_URL in .env file")
+      this.logger.w("   3. Restart the application")
+      throw new Error("RedisService is required for UserManager")
     }
+    this.userManager = new UserManager(logger, dependencies.redisService)
   }
 
   /**
-   * Экранирование символов для HTML
-   */
-  private escapeHTML(text: string): string {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-  }
-
-  /**
-   * Экранирование символов для MarkdownV2
-   */
-  private escapeMarkdownV2(text: string): string {
-    // Символы, которые нужно экранировать в MarkdownV2:
-    // _ * [ ] ( ) ~ ` > # + - = | { } . !
-    return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&")
-  }
-
-  /**
-   * Инициализация бота
+   * Инициализация бота и всех модулей
    */
   async initialize(): Promise<void> {
     this.logger.i("🤖 Initializing Telegram bot service...")
@@ -108,21 +92,98 @@ export class TelegramBotService implements IService {
         // Создаем бота
         this.bot = new Bot(this.config.BOT_TOKEN)
 
+        // Инициализируем все модули
+        await this.initializeModules()
+
         // Настраиваем обработчики событий
         this.setupEventHandlers()
 
-        this.logger.i("✅ Telegram bot initialized")
-      } catch (_error) {
+        this.logger.i("✅ Telegram bot initialized with modular architecture")
+      } catch {
         this.logger.w("⚠️ GramIO not available. Bot service disabled.")
-        this.logger.w("📋 To enable bot:")
-        this.logger.w("   1. Run: npm install gramio")
-        this.logger.w("   2. Set BOT_TOKEN in .env")
-        this.logger.w("   3. Restart the application")
       }
     } catch (error) {
       this.logger.e("❌ Failed to initialize Telegram bot:", error)
       // Не прерываем выполнение приложения
     }
+  }
+
+  /**
+   * Инициализация всех модулей
+   */
+  private async initializeModules(): Promise<void> {
+    if (!this.bot) {
+      return
+    }
+
+    const settings = this.settingsManager.getSettings()
+
+    // Инициализируем утилиты
+    this.userRestrictions = new UserRestrictions(this.bot, this.logger)
+
+    // Инициализируем feature модули
+    this.captchaManager = new CaptchaManager(
+      this.logger,
+      this.config,
+      this.bot,
+      this.userRestrictions,
+      this.dependencies.captchaService,
+    )
+
+    this.spamDetector = new SpamDetector(
+      this.logger,
+      this.config,
+      this.bot,
+      this.userRestrictions,
+      this.userManager,
+      settings.errorMessageDeleteTimeoutMs,
+      this.dependencies.antiSpamService,
+    )
+
+    // Проверяем наличие ChatAiRepository
+    if (!this.dependencies.chatRepository) {
+      this.logger.e("❌ ChatAiRepository is required for TelegramBot handlers")
+      throw new Error("ChatAiRepository is required")
+    }
+
+    // Инициализируем обработчики
+    this.commandHandler = new CommandHandler(
+      this.logger,
+      this.config,
+      this.userRestrictions,
+      this.userManager,
+      this.dependencies.chatRepository,
+      this,
+    )
+
+    this.messageHandler = new MessageHandler(
+      this.logger,
+      this.config,
+      this.bot,
+      settings,
+      this.userManager,
+      this.dependencies.chatRepository,
+      this.spamDetector,
+      this.commandHandler,
+      this.dependencies.chatService,
+    )
+
+    this.memberHandler = new MemberHandler(
+      this.logger,
+      settings,
+      this.captchaManager,
+      this.userRestrictions,
+      this.userManager,
+      this.dependencies.chatRepository,
+      this.dependencies.captchaService,
+    )
+
+    this.callbackHandler = new CallbackHandler(
+      this.logger,
+      this.captchaManager,
+    )
+
+    this.logger.i("✅ All modules initialized")
   }
 
   /**
@@ -132,28 +193,12 @@ export class TelegramBotService implements IService {
     this.logger.i("🚀 Starting TelegramBot service...")
 
     // Проверяем зависимости
-    this.logger.i("🔍 [ANTISPAM DEBUG] Checking dependencies:")
-    this.logger.i(`  CaptchaService: ${!!this.dependencies.captchaService}`)
-    this.logger.i(`  AntiSpamService: ${!!this.dependencies.antiSpamService}`)
-    this.logger.i(`  AIChatService: ${!!this.dependencies.aiChatService}`)
-
-    // Дополнительная отладочная информация об AntiSpamService
-    if (this.dependencies.antiSpamService) {
-      this.logger.i("🛡️ [ANTISPAM DEBUG] AntiSpamService details:")
-      this.logger.i(`   - Service type: ${this.dependencies.antiSpamService.constructor.name}`)
-      this.logger.i(`   - Has checkMessage method: ${typeof this.dependencies.antiSpamService.checkMessage === "function"}`)
-      this.logger.i(`   - Is healthy: ${typeof this.dependencies.antiSpamService.isHealthy === "function" ? this.dependencies.antiSpamService.isHealthy() : "unknown"}`)
-    } else {
-      this.logger.w("⚠️ [ANTISPAM DEBUG] AntiSpamService is NOT available")
-    }
-
-    // Отладочная информация о настройках
-    this.logger.i("🔧 [ANTISPAM DEBUG] Bot settings:")
-    this.logger.i(`   - maxMessagesForSpamCheck: ${this.settings.maxMessagesForSpamCheck}`)
-    this.logger.i(`   - Other settings:`, JSON.stringify(this.settings, null, 2))
-
     if (!this.dependencies.captchaService) {
       this.logger.w("⚠️ CaptchaService is not available - captcha functionality will be disabled")
+    }
+
+    if (!this.dependencies.antiSpamService) {
+      this.logger.w("⚠️ AntiSpamService is not available - spam protection disabled")
     }
 
     if (!this.hasGramIO || !this.bot) {
@@ -161,6 +206,7 @@ export class TelegramBotService implements IService {
       return
     }
 
+    // Настраиваем колбэки для сервисов
     this.setupServiceCallbacks()
 
     if (this.isRunning) {
@@ -175,18 +221,18 @@ export class TelegramBotService implements IService {
       // Получаем информацию о боте
       const botInfo = await this.bot.api.getMe()
 
-      // Запускаем периодическую очистку старых записей о спам-нарушениях
-      this.startSpamCleanupTimer()
-
-      // Тестируем AntiSpamService при запуске
-      if (this.dependencies.antiSpamService && typeof (this.dependencies.antiSpamService as any).testAntiSpam === "function") {
-        this.logger.i("🧪 [ANTISPAM DEBUG] Running AntiSpam test...")
-        try {
-          await (this.dependencies.antiSpamService as any).testAntiSpam()
-        } catch (error) {
-          this.logger.e("🧪 [ANTISPAM DEBUG] AntiSpam test failed:", error)
-        }
+      // Кешируем информацию о боте в Redis
+      if (this.dependencies.redisService) {
+        await this.dependencies.redisService.setBotInfo({
+          id: botInfo.id,
+          username: botInfo.username,
+          first_name: botInfo.first_name,
+        })
+        this.logger.i(`📝 Bot info cached: ID=${botInfo.id}, Username=@${botInfo.username}`)
       }
+
+      // Запускаем автоматическую очистку старых записей
+      this.userManager.startCleanupTimer()
 
       this.logger.i(`✅ TelegramBot service started: @${botInfo.username}`)
     } catch (error) {
@@ -205,6 +251,10 @@ export class TelegramBotService implements IService {
       try {
         await this.bot.stop()
         this.isRunning = false
+
+        // Останавливаем автоматическую очистку
+        this.userManager.stopCleanupTimer()
+
         this.logger.i("✅ Telegram bot stopped")
       } catch (error) {
         this.logger.e("Error stopping bot:", error)
@@ -217,7 +267,12 @@ export class TelegramBotService implements IService {
    */
   async dispose(): Promise<void> {
     this.logger.i("🗑️ Disposing Telegram bot service...")
+
     await this.stop()
+
+    // Освобождаем ресурсы модулей
+    this.userManager.dispose()
+
     this.bot = null
     this.logger.i("✅ Telegram bot service disposed")
   }
@@ -233,64 +288,36 @@ export class TelegramBotService implements IService {
    * Настройка обработчиков событий
    */
   private setupEventHandlers(): void {
-    if (!this.bot)
+    if (!this.bot || !this.messageHandler || !this.memberHandler || !this.callbackHandler) {
       return
+    }
 
-    // Обработка команд
-    this.bot.command("start", (context: any) => {
-      this.handleStartCommand(context)
-    })
-
-    this.bot.command("help", (context: any) => {
-      this.handleHelpCommand(context)
-    })
-
-    this.bot.command("stats", (context: any) => {
-      this.handleStatsCommand(context)
-    })
-
-    // Административные команды
-    this.bot.command("ban", (context: any) => {
-      this.handleBanCommand(context)
-    })
-
-    this.bot.command("unban", (context: any) => {
-      this.handleUnbanCommand(context)
-    })
-
-    this.bot.command("mute", (context: any) => {
-      this.handleMuteCommand(context)
-    })
-
-    this.bot.command("unmute", (context: any) => {
-      this.handleUnmuteCommand(context)
+    // Обработка сообщений
+    this.bot.on("message", (context: TelegramMessageContext) => {
+      this.messageHandler!.handleMessage(context)
     })
 
     // Обработка новых участников
-    this.bot.on("chat_member", (context: any) => {
-      this.logger.i("🔥 CHAT_MEMBER event triggered!")
-      this.handleChatMember(context)
+    this.bot.on("new_chat_members", (context: TelegramNewMembersContext) => {
+      this.memberHandler!.handleNewChatMembers(context)
     })
 
-    this.bot.on("new_chat_members", (context: any) => {
-      this.logger.i("🔥 NEW_CHAT_MEMBERS event triggered!")
-      this.handleNewChatMembers(context)
-    })
-
+    // Обработка ушедших участников
     this.bot.on("left_chat_member", (context: any) => {
-      this.logger.i("🔥 LEFT_CHAT_MEMBER event triggered!")
-      this.handleLeftChatMember(context)
+      this.memberHandler!.handleLeftChatMember(context)
     })
 
-    // Обработка сообщений
-    this.bot.on("message", (context: MessageContext<Bot>) => {
-      this.handleMessage(context)
+    // Обработка изменений участников
+    this.bot.on("chat_member", (context: any) => {
+      this.memberHandler!.handleChatMember(context)
     })
 
-    // Обработка колбэков (капча)
+    // Обработка callback запросов
     this.bot.on("callback_query", (context: any) => {
-      this.handleCallbackQuery(context)
+      this.callbackHandler!.handleCallback(context)
     })
+
+    this.logger.i("✅ Event handlers configured")
   }
 
   /**
@@ -298,1001 +325,69 @@ export class TelegramBotService implements IService {
    */
   private setupServiceCallbacks(): void {
     // Колбэки для CaptchaService
-    if (this.dependencies.captchaService) {
-      this.dependencies.captchaService.onCaptchaTimeout = (user) => {
-        this.handleCaptchaTimeout(user)
+    if (this.dependencies.captchaService && this.captchaManager) {
+      this.dependencies.captchaService.onCaptchaTimeout = (_user) => {
+        this.captchaManager?.handleCaptchaTimeout(_user)
       }
 
-      this.dependencies.captchaService.onCaptchaSuccess = (user) => {
-        this.handleCaptchaSuccess(user)
+      this.dependencies.captchaService.onCaptchaSuccess = (_user) => {
+        // Обработка будет через CaptchaManager
       }
 
-      this.dependencies.captchaService.onCaptchaFailed = (user) => {
-        this.handleCaptchaFailed(user)
+      this.dependencies.captchaService.onCaptchaFailed = (_user) => {
+        // Обработка будет через CaptchaManager
       }
     }
 
-    // Колбэки для AIChatService
-    if (this.dependencies.aiChatService) {
-      this.dependencies.aiChatService.onMessageResponse = (contextId, response, messageId) => {
-        this.handleAIResponse(contextId, response, messageId)
+    // Колбэки для ChatService
+    if (this.dependencies.chatService && this.messageHandler) {
+      this.dependencies.chatService.onMessageResponse = (contextId: string, response: string, messageId: number) => {
+        this.messageHandler?.handleAIResponse(contextId, response, messageId)
       }
 
-      this.dependencies.aiChatService.onTypingStart = (contextId) => {
-        this.sendTypingAction(contextId)
+      this.dependencies.chatService.onTypingStart = (contextId: string) => {
+        this.messageHandler?.sendTypingAction(contextId)
       }
 
-      this.dependencies.aiChatService.onTypingStop = (contextId) => {
+      this.dependencies.chatService.onTypingStop = (_contextId: string) => {
         // Можно реализовать остановку typing индикатора если нужно
       }
     }
   }
 
   /**
-   * Обработка изменения статуса участника чата
-   */
-  private async handleChatMember(context: any): Promise<void> {
-    const _oldMember = context.oldChatMember
-    const newMember = context.newChatMember
-    const _chatId = context.chat.id
-    const _user = newMember.user
-
-    if (newMember.status === "member" && context.oldChatMember.status === "left") {
-      // Пользователь присоединился к группе
-      await this.handleNewChatMembers({
-        ...context,
-        newChatMembers: [newMember.user],
-      } as NewChatMembersContext<Bot>)
-    }
-  }
-
-  /**
-   * Обработка новых участников
-   */
-  private async handleNewChatMembers(context: NewChatMembersContext<Bot>): Promise<void> {
-    try {
-      this.logger.i("🎯 Processing new chat members...")
-
-      const chatId = context.chat.id
-      const newMembers = context.newChatMembers
-      const messageId = (context as any).messageId || (context as any).message_id || context.id
-
-      // Удаляем системное сообщение о присоединении
-      if (this.settings.deleteSystemMessages && messageId) {
-        await this.deleteMessage(chatId, messageId)
-      }
-
-      // Детальное логирование для отладки
-      this.logger.i("=== NEW CHAT MEMBERS EVENT ===")
-      this.logger.i(`Chat ID: ${chatId}`)
-      this.logger.i(`Message ID: ${messageId}`)
-      this.logger.i(`New members count: ${newMembers?.length || 0}`)
-      this.logger.i(`CaptchaService available: ${!!this.dependencies.captchaService}`)
-
-      if (newMembers?.length) {
-        newMembers.forEach((user: any, index: number) => {
-          this.logger.i(`Member ${index + 1}: ${user.firstName} (ID: ${user.id}, isBot: ${user.isBot()})`)
-        })
-
-        for (const user of newMembers) {
-          if (!user.isBot()) {
-            this.logger.i(`🔐 Processing captcha for new member: ${user.firstName} (ID: ${user.id})`)
-            await this.initiateUserCaptcha(chatId, user)
-          } else {
-
-          }
-        }
-      }
-
-      this.logger.i("✅ New chat members processing completed")
-    } catch (error) {
-      this.logger.e("❌ Error handling new chat members:", error)
-    }
-  }
-
-  /**
-   * Обработка ушедших участников
-   */
-  private async handleLeftChatMember(context: any): Promise<void> {
-    try {
-      const chatId = context.chat.id
-      const leftUser = context.leftChatMember
-      const messageId = context.messageId || context.message_id || context.id
-
-      this.logger.i(`👋 User left chat: ${leftUser?.firstName} (ID: ${leftUser?.id})`)
-      this.logger.i(`💬 Chat ID: ${chatId}, Message ID: ${messageId}`)
-
-      // Удаляем системное сообщение о покидании/исключении, если включена настройка
-      if (this.settings.deleteSystemMessages && messageId) {
-        this.logger.i("🗑️ Deleting left chat member system message...")
-        await this.deleteMessage(chatId, messageId)
-      }
-
-      // Если пользователь был в ограниченном состоянии (капча), удаляем его из списка
-      if (this.dependencies.captchaService && leftUser?.id) {
-        if (this.dependencies.captchaService.isUserRestricted(leftUser.id)) {
-          this.logger.i(`🧹 Removing user ${leftUser.id} from captcha restrictions`)
-          this.dependencies.captchaService.removeRestrictedUser(leftUser.id)
-        }
-      }
-
-      // Удаляем счетчик сообщений пользователя из кэша
-      if (leftUser?.id && this.userMessageCounters.has(leftUser.id)) {
-        this.userMessageCounters.delete(leftUser.id)
-        this.logger.i(`🧹 Removed message counter for user ${leftUser.id}`)
-      }
-
-      this.logger.i("✅ Left chat member processing completed")
-    } catch (error) {
-      this.logger.e("❌ Error handling left chat member:", error)
-    }
-  }
-
-  /**
-   * Инициация капчи для пользователя
-   */
-  private async initiateUserCaptcha(chatId: number, user: any): Promise<void> {
-    this.logger.i(`🔐 Starting captcha initiation for user ${user.id} (${user.firstName})`)
-
-    if (!this.dependencies.captchaService) {
-      this.logger.w("❌ Captcha service not available")
-      return
-    }
-
-    // Проверяем, не создана ли уже капча для этого пользователя
-    if (this.dependencies.captchaService.isUserRestricted(user.id)) {
-      this.logger.i(`⚠️ User ${user.id} already has active captcha, skipping duplicate`)
-      return
-    }
-
-    try {
-      this.logger.i("🎲 Generating captcha challenge...")
-
-      // Генерируем капчу
-      const captcha = this.dependencies.captchaService.generateCaptcha()
-
-      // Проверяем валидность капчи
-      if (!captcha.question || captcha.question.length < 2
-        || typeof captcha.question[0] !== "number" || typeof captcha.question[1] !== "number") {
-        this.logger.e("❌ Invalid captcha question generated")
-        return
-      }
-
-      this.logger.i(`🧮 Captcha generated: ${captcha.question[0]} + ${captcha.question[1]} = ${captcha.answer}`)
-      this.logger.i(`🔢 Options: [${captcha.options.join(", ")}]`)
-
-      this.logger.i("📤 Sending captcha message...")
-
-      // Отправляем капчу
-      const correctAnswer = captcha.question[0] + captcha.question[1]
-      const sentMessage = await this.sendCaptchaMessage(
-        chatId,
-        user,
-        captcha.question,
-        captcha.options,
-      )
-
-      this.logger.i(`✅ Captcha message sent with ID: ${sentMessage?.messageId || sentMessage?.message_id || "unknown"}`)
-
-      // Добавляем пользователя в ограниченные
-      if (this.dependencies.captchaService && sentMessage) {
-        this.dependencies.captchaService.addRestrictedUser(
-          user.id,
-          chatId,
-          sentMessage?.messageId || sentMessage?.message_id || 0,
-          captcha.answer,
-          user.username,
-        )
-      }
-
-      // Ограничиваем права пользователя
-      this.logger.i("🚫 Restricting user permissions...")
-      await this.restrictUser(chatId, user.id)
-
-      this.logger.i(`🎉 Captcha initiated successfully for user ${user.id} (${user.firstName})`)
-    } catch (error) {
-      this.logger.e(`❌ Error initiating captcha for user ${user.id}:`, error)
-    }
-  }
-
-  /**
-   * Отправка сообщения с капчей
-   */
-  private async sendCaptchaMessage(
-    chatId: number,
-    user: any,
-    question: number[],
-    options: number[],
-  ): Promise<any> {
-    if (!this.bot)
-      return null
-
-    // Проверяем валидность входных данных
-    if (!question || question.length < 2
-      || typeof question[0] !== "number" || typeof question[1] !== "number") {
-      this.logger.e("❌ Invalid question data provided to sendCaptchaMessage")
-      return null
-    }
-
-    // Выбираем правильный ответ
-    const correctAnswer = question[0] + question[1]
-
-    try {
-      const sentMessage = await this.bot.api.sendMessage({
-        chat_id: chatId,
-        text: `🔐 Для подтверждения, что вы не робот, решите пример:
-
-${question[0]} + ${question[1]} = ?
-
-Выберите правильный ответ:`,
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            options.map((option, index) => ({
-              text: option.toString(),
-              callback_data: `captcha_${user.id}_${index}_${option === correctAnswer ? "correct" : "wrong"}`,
-            })),
-          ],
-        },
-      })
-
-      return sentMessage
-    } catch (error) {
-      this.logger.e("Error sending captcha message:", error)
-      return null
-    }
-  }
-
-  /**
-   * Обработка колбэков (ответы на капчу)
-   */
-  private async handleCallbackQuery(context: any): Promise<void> {
-    this.logger.i("🔘 Processing callback query...")
-
-    if (!this.dependencies.captchaService) {
-      this.logger.w("❌ CaptchaService not available for callback")
-      return
-    }
-
-    try {
-      const userId = context.from.id
-      const callbackData = context.data
-      
-      // Парсим callback data в формате: captcha_${userId}_${optionIndex}_${correct|wrong}
-      const callbackParts = callbackData.split('_')
-      if (callbackParts.length !== 4 || callbackParts[0] !== 'captcha') {
-        this.logger.e(`❌ Invalid callback data format: ${callbackData}`)
-        await context.answerCallbackQuery()
-        return
-      }
-
-      const callbackUserId = Number.parseInt(callbackParts[1])
-      const optionIndex = Number.parseInt(callbackParts[2])
-      const isCorrect = callbackParts[3] === 'correct'
-
-      // Проверяем, что пользователь отвечает на свою капчу
-      if (callbackUserId !== userId) {
-        this.logger.w(`❌ User ${userId} trying to answer captcha for user ${callbackUserId}`)
-        await context.answerCallbackQuery({ text: "Это не ваша капча!" })
-        return
-      }
-
-      // Получаем messageId из callback query
-      let messageId: number | undefined
-      if (context.message?.messageId) {
-        messageId = context.message.messageId
-      } else if (context.message?.message_id) {
-        messageId = context.message.message_id
-      } else if (context.message?.id) {
-        messageId = context.message.id
-      } else if (context.messageId) {
-        messageId = context.messageId
-      } else if (context.message_id) {
-        messageId = context.message_id
-      } else if (context.id) {
-        messageId = context.id
-      }
-
-      this.logger.i(`📝 Callback details: userId=${userId}, messageId=${messageId}, optionIndex=${optionIndex}, isCorrect=${isCorrect}`)
-
-      if (messageId === undefined) {
-        this.logger.e("❌ Could not determine messageId from callback context")
-        await context.answerCallbackQuery()
-        return
-      }
-
-      // Используем простую проверку на основе callback data
-      const validation = {
-        isValid: isCorrect,
-        user: this.dependencies.captchaService?.getRestrictedUser(userId)
-      }
-
-      this.logger.i(`🔍 Validation result: isValid=${validation.isValid}, user found=${!!validation.user}`)
-
-      if (validation.user) {
-        if (validation.isValid) {
-          this.logger.i("✅ Captcha answer is CORRECT!")
-          await this.handleCaptchaSuccess(validation.user)
-          await context.answerCallbackQuery({ text: "✅ Правильно! Добро пожаловать!" })
-        } else {
-          this.logger.i("❌ Captcha answer is WRONG!")
-          await this.handleCaptchaFailed(validation.user)
-          await context.answerCallbackQuery({ text: "❌ Неправильный ответ!" })
-        }
-
-        // Удаляем сообщение с капчей
-        await this.deleteMessage(validation.user.chatId, validation.user.questionId)
-        this.dependencies.captchaService.removeRestrictedUser(userId)
-        this.logger.i("🧹 User removed from restricted list")
-      } else {
-        this.logger.w("⚠️ No restricted user found for this callback")
-        await context.answerCallbackQuery({ text: "⚠️ Капча не найдена" })
-      }
-
-    } catch (error) {
-      this.logger.e("❌ Error handling callback query:", error)
-      await context.answerCallbackQuery({ text: "❌ Произошла ошибка" })
-    }
-  }
-
-  /**
-   * Обработка сообщений
-   */
-  private async handleMessage(context: MessageContext<Bot>): Promise<void> {
-    const fromUser = context.from
-    const messageText = context.text
-    const _chatType = context.chat?.type
-
-    if (!fromUser || !messageText)
-      return
-
-    const userId = fromUser.id
-    const chatId = context.chat?.id
-
-    if (!chatId)
-      return
-
-    // Получаем или создаем счетчик сообщений пользователя (ХРАНИТСЯ В КЕШЕ)
-    let userCounter = this.userMessageCounters.get(userId)
-    if (!userCounter) {
-      userCounter = {
-        userId,
-        messageCount: 0,
-        spamCount: 0,
-        username: fromUser.username,
-        firstName: fromUser.firstName || "Unknown",
-        lastActivity: Date.now(),
-      }
-      this.userMessageCounters.set(userId, userCounter)
-    }
-
-    // Увеличиваем счетчик сообщений
-    userCounter.messageCount++
-
-    // Обновляем информацию о пользователе
-    userCounter.username = fromUser.username
-    userCounter.firstName = fromUser.firstName || "Unknown"
-    userCounter.lastActivity = Date.now()
-
-    // Проверяем на спам, если у пользователя меньше установленного лимита сообщений
-    if (userCounter && userCounter.messageCount < this.settings.maxMessagesForSpamCheck && this.dependencies.antiSpamService) {
-      const spamCheck = await this.dependencies.antiSpamService.checkMessage(userId, messageText)
-
-      if (spamCheck.isSpam) {
-        // Передаем обработку спама в специализированный метод
-        await this.handleSpamMessage(context, spamCheck.reason, userCounter)
-        return
-      }
-    }
-
-    // Проверяем AI чат только если бот доступен
-    if (this.bot && this.dependencies.aiChatService) {
-      const botInfo = await this.bot.api.getMe()
-      const isMention = this.dependencies.aiChatService.isBotMention(messageText, botInfo.username)
-
-      if (isMention || context.replyMessage?.from?.id === botInfo.id) {
-        await this.handleAIChat(context)
-      }
-    }
-  }
-
-  /**
-   * Обработка AI чата
-   */
-  private async handleAIChat(context: any): Promise<void> {
-    if (!this.dependencies.aiChatService)
-      return
-
-    try {
-      const result = await this.dependencies.aiChatService.processMessage(
-        context.from.id,
-        context.chat.id,
-        context.text,
-        context.from.username,
-        context.from.firstName,
-        !!context.replyMessage,
-      )
-
-      if (!result.success) {
-        if (result.reason) {
-          await context.reply(result.reason)
-        }
-      }
-      // Если успешно добавлено в очередь, ничего не отправляем - ответ придет асинхронно
-    } catch (error) {
-      this.logger.e("Error handling AI chat:", error)
-    }
-  }
-
-  /**
-   * Обработка спам сообщения с логикой предупреждения и кика
-   */
-  private async handleSpamMessage(context: any, reason?: string, userCounter?: UserMessageCounter): Promise<void> {
-    try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const firstName = userCounter?.firstName || context.from?.firstName || "Unknown"
-      const username = userCounter?.username || context.from?.username
-
-      if (!userId || !chatId || !userCounter) {
-        this.logger.w("Cannot handle spam message: missing userId, chatId or userCounter")
-        return
-      }
-
-      this.logger.w(`Spam detected from user ${userId} (${firstName}). Reason: ${reason}`)
-
-      // Удаляем спам сообщение
-      await context.delete()
-
-      // Увеличиваем счетчик спама
-      userCounter.spamCount++
-
-      if (userCounter.spamCount === 1) {
-        // Первое нарушение - предупреждение
-        const fullName = firstName
-        const displayName = username ? `${fullName}, @${username}` : fullName
-        const warningText = `Хмм... 🧐\nСообщение от [${displayName}] похоже на спам.\n\nСообщение удалено. \n\n${this.config.ADMIN_USERNAME || ""}`
-
-        if (!this.bot) {
-          this.logger.e("Bot is not available for sending spam warning")
-          return
-        }
-
-        const messageResult = await this.bot.api.sendMessage({
-          chat_id: chatId,
-          text: warningText,
-          parse_mode: "HTML",
-        })
-
-        // Удаляем предупреждение через заданное время
-        setTimeout(() => {
-          this.deleteMessage(chatId, messageResult.message_id)
-        }, this.settings.errorMessageDeleteTimeoutMs)
-
-        this.logger.w(`User ${userId} (${firstName}) received spam warning (${userCounter.spamCount}/2)`)
-      } else {
-        // Второе нарушение - кик из группы
-        const fullName = firstName
-        const displayName = username ? `${fullName}, @${username}` : fullName
-        const kickText = `Хмм... 🧐\nСообщение от [${displayName}] похоже на спам.\n\nПользователь исключен из чата.\n\n${this.config.ADMIN_USERNAME || ""}`
-
-        if (!this.bot) {
-          this.logger.e("Bot is not available for sending kick message")
-          return
-        }
-
-        // Отправляем сообщение о кике
-        const messageResult = await this.bot.api.sendMessage({
-          chat_id: chatId,
-          text: kickText,
-          parse_mode: "HTML",
-        })
-
-        // Кикаем пользователя
-        await this.kickUserFromChat(chatId, userId, firstName)
-
-        // Удаляем сообщение о кике через заданное время
-        setTimeout(() => {
-          this.deleteMessage(chatId, messageResult.message_id)
-        }, this.settings.errorMessageDeleteTimeoutMs)
-
-        // Удаляем счетчик сообщений пользователя
-        this.userMessageCounters.delete(userId)
-
-        this.logger.w(`User ${userId} (${firstName}) kicked from chat for repeated spam`)
-      }
-    } catch (error) {
-      this.logger.e("Error handling spam message:", error)
-    }
-  }
-
-  /**
-   * Обработка ограниченного пользователя
-   */
-  private async handleRestrictedUser(context: any, restriction: any): Promise<void> {
-    try {
-      await context.delete()
-
-      const escapedReason = this.escapeMarkdownV2(restriction.reason || "Не указана")
-      const escapedAdminUsername = this.config.ADMIN_USERNAME ? this.escapeMarkdownV2(this.config.ADMIN_USERNAME) : ""
-
-      const restrictionText = `Вы заблокированы\\. \n\nПричина: ${escapedReason}\n\n${escapedAdminUsername}`
-
-      await context.reply(restrictionText, { parse_mode: "MarkdownV2" })
-    } catch (error) {
-      this.logger.e("Error handling restricted user:", error)
-    }
-  }
-
-  /**
-   * Получение или создание пользователя
-   */
-  private getUserOrCreate(fromUser: any): any {
-    if (!fromUser?.id)
-      return null
-
-    // В упрощенной архитектуре просто возвращаем информацию о пользователе
-    return {
-      id: fromUser.id,
-      username: fromUser.username,
-      firstname: fromUser.first_name,
-      messages: 0,
-      sessionId: `session_${fromUser.id}_${Date.now()}`,
-    }
-  }
-
-  /**
-   * Успешная капча
-   */
-  private async handleCaptchaSuccess(user: any): Promise<void> {
-    try {
-      await this.unrestrictUser(user.chatId, user.userId)
-
-      // В старой версии не было отдельного сообщения для успеха, только размут
-
-      this.logger.i(`User ${user.userId} (${user.firstname}) passed captcha`)
-    } catch (error) {
-      this.logger.e("Error handling captcha success:", error)
-    }
-  }
-
-  /**
-   * Неправильная капча
-   */
-  private async handleCaptchaFailed(user: any): Promise<void> {
-    try {
-      await this.temporaryBanUser(user.chatId, user.userId)
-
-      // Используем старое сообщение из MemberController
-      const name = user.username ? `@${user.username}` : user.firstname
-      const failText = `К сожалению, ${name} выбрал неправильный вариант ответа 😢`
-
-      if (!this.bot) {
-        this.logger.e("Bot is not available for sending captcha failed message")
-        return
-      }
-
-      const messageResult = await this.bot.api.sendMessage({
-        chat_id: user.chatId,
-        text: failText,
-        parse_mode: "HTML",
-      })
-
-      // Удаляем сообщение через заданное время
-      setTimeout(() => {
-        this.deleteMessage(user.chatId, messageResult.message_id)
-      }, this.settings.errorMessageDeleteTimeoutMs)
-
-      this.logger.w(`User ${user.userId} (${user.firstname}) failed captcha`)
-    } catch (error) {
-      this.logger.e("Error handling captcha failure:", error)
-    }
-  }
-
-  /**
-   * Таймаут капчи
-   */
-  private async handleCaptchaTimeout(user: any): Promise<void> {
-    try {
-      await this.temporaryBanUser(user.chatId, user.userId)
-
-      // Используем старое сообщение из MemberController
-      const name = user.username ? `@${user.username}` : user.firstname
-      const timeoutText = `К сожалению, ${name} не выбрал ни один вариант ответа 🧐`
-
-      if (!this.bot) {
-        this.logger.e("Bot is not available for sending captcha timeout message")
-        return
-      }
-
-      const messageResult = await this.bot.api.sendMessage({
-        chat_id: user.chatId,
-        text: timeoutText,
-        parse_mode: "HTML",
-      })
-
-      // Удаляем сообщение через заданное время
-      setTimeout(() => {
-        this.deleteMessage(user.chatId, messageResult.message_id)
-      }, this.settings.errorMessageDeleteTimeoutMs)
-
-      this.logger.w(`User ${user.userId} (${user.firstname}) captcha timeout`)
-    } catch (error) {
-      this.logger.e("Error handling captcha timeout:", error)
-    }
-  }
-
-  /**
-   * Обработка ответа от AI
-   */
-  private async handleAIResponse(contextId: string, response: string, messageId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.sendMessage({
-        chat_id: Number.parseInt(contextId),
-        text: response,
-      })
-    } catch (error) {
-      this.logger.e("Error sending AI response:", error)
-    }
-  }
-
-  /**
-   * Отправка typing индикатора
-   */
-  private async sendTypingAction(contextId: string): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.sendChatAction({
-        chat_id: Number.parseInt(contextId),
-        action: "typing",
-      })
-    } catch (error) {
-      this.logger.e("Error sending typing action:", error)
-    }
-  }
-
-  /**
-   * Ограничение прав пользователя
-   */
-  private async restrictUser(chatId: number, userId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.restrictChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        permissions: {
-          can_send_messages: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false,
-        },
-      })
-    } catch (error) {
-      this.logger.e("Error restricting user:", error)
-    }
-  }
-
-  /**
-   * Снятие ограничений с пользователя
-   */
-  private async unrestrictUser(chatId: number, userId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.restrictChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        permissions: {
-          can_send_messages: true,
-          can_send_polls: true,
-          can_send_other_messages: true,
-          can_add_web_page_previews: true,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false,
-        },
-      })
-    } catch (error) {
-      this.logger.e("Error unrestricting user:", error)
-    }
-  }
-
-  /**
-   * Временный бан пользователя (как в старой версии)
-   */
-  private async temporaryBanUser(chatId: number, userId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        until_date: Math.floor(Date.now() / 1000) + this.settings.temporaryBanDurationSec,
-      })
-    } catch (error) {
-      this.logger.e("Error banning user:", error)
-    }
-  }
-
-  /**
-   * Удаление пользователя из чата (кик)
-   */
-  private async deleteUserFromChat(chatId: number, userId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
-    } catch (error) {
-      this.logger.e("Error deleting user from chat:", error)
-    }
-  }
-
-  /**
-   * Кик пользователя за спам (с уведомлением)
-   */
-  private async kickUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
-      this.logger.i(`User ${userName} (${userId}) kicked from chat ${chatId}`)
-
-      // Автоматический разбан через 5 секунд
-      setTimeout(async () => {
-        await this.unbanUserFromChat(chatId, userId, userName)
-      }, 5000)
-    } catch (error) {
-      this.logger.e(`Error kicking user ${userName} from chat:`, error)
-    }
-  }
-
-  /**
-   * Разбан пользователя из чата
-   */
-  private async unbanUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.unbanChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
-      this.logger.i(`User ${userName} (${userId}) unbanned from chat ${chatId}`)
-    } catch (error) {
-      this.logger.e(`Error unbanning user ${userName} from chat:`, error)
-    }
-  }
-
-  /**
-   * Отправка сообщения
-   */
-  private async sendMessage(chatId: number, text: string): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.sendMessage({
-        chat_id: chatId,
-        text,
-      })
-    } catch (error) {
-      this.logger.e("Error sending message:", error)
-    }
-  }
-
-  /**
-   * Удаление сообщения
-   */
-  private async deleteMessage(chatId: number, messageId: number): Promise<void> {
-    if (!this.bot)
-      return
-
-    try {
-      await this.bot.api.deleteMessage({
-        chat_id: chatId,
-        message_id: messageId,
-      })
-    } catch (error) {
-      this.logger.e("Error deleting message:", error)
-    }
-  }
-
-  /**
    * Получение информации о сервисе
    */
-  getServiceInfo(): object {
+  async getServiceInfo(): Promise<object> {
+    const userStats = await this.userManager.getAllUserCounters()
+    const spamStats = await this.spamDetector?.getSpamStats()
+    const memberStats = await this.memberHandler?.getMemberStats()
+
     return {
+      name: "TelegramBotService",
+      version: BOT_CONFIG.VERSION,
       isRunning: this.isRunning,
-      hasGramIO: this.hasGramIO,
-
-      hasCaptchaService: !!this.dependencies.captchaService,
-      hasAntiSpamService: !!this.dependencies.antiSpamService,
-      hasAIChatService: !!this.dependencies.aiChatService,
-      settings: this.settings,
-      userMessageCountersCount: this.userMessageCounters.size,
-      status: this.isRunning ? "active" : "inactive",
-    }
-  }
-
-  /**
-   * Обработка команды /start
-   */
-  private async handleStartCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-
-    const helpText = "🤖 **Бот активен!**\n\n"
-      + "🛡️ **Защита от спама**: Автоматически проверяет сообщения на спам\n"
-      + "🔐 **Система капчи**: Новые участники проходят проверку\n"
-      + "🤖 **ИИ-помощник**: Отвечает на вопросы в группе\n"
-      + "📊 **Статистика**: Отслеживает активность участников\n"
-      + "\n"
-      + "💡 **Доступные команды**:\n"
-      + "• `/help` - показать справку\n"
-      + "• `/stats` - статистика бота\n"
-      + "• `/ban @user` - забанить пользователя (только админы)\n"
-      + "• `/unban @user` - разбанить пользователя (только админы)\n"
-      + "• `/mute @user` - заглушить пользователя (только админы)\n"
-      + "• `/unmute @user` - снять заглушение (только админы)"
-
-    try {
-      await context.reply(helpText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error sending start message:", error)
-    }
-  }
-
-  /**
-   * Обработка команды /help
-   */
-  private async handleHelpCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-
-    const helpText = "📚 **Справка по боту**"
-
-    try {
-      await context.reply(helpText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error sending help message:", error)
-    }
-  }
-
-  /**
-   * Обработка команды /stats
-   */
-  private async handleStatsCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-    const adminCommands = "🔹 `/ban @user` - забанить пользователя\n🔹 `/unban @user` - разбанить пользователя"
-
-    try {
-      const statsText = `📊 **Статистика бота**\n\n${adminCommands}`
-
-      await context.reply(statsText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error sending stats:", error)
-    }
-  }
-
-  /**
-   * Обработка команды /ban
-   */
-  private async handleBanCommand(context: any): Promise<void> {
-    try {
-      const userId = context.from?.id
-      const chatId = context.chat?.id
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace("@", "")
-
-      if (!isAdmin) {
-        await context.reply("❌ У вас нет прав для использования этой команды.")
-        return
-      }
-
-      const args = context.text.split(" ")
-      if (args.length < 2) {
-        await context.reply("❌ Использование: /ban @username или /ban в ответ на сообщение")
-        return
-      }
-
-      let targetUserId: number | null = null
-      let targetUsername: string | null = null
-
-      // Если команда в ответ на сообщение
-      if (context.replyMessage) {
-        targetUserId = context.replyMessage.from?.id
-        targetUsername = context.replyMessage.from?.username || context.replyMessage.from?.firstName
-      } else {
-        // Извлекаем username из аргументов
-        const username = args[1].replace("@", "")
-        targetUsername = username
-        // Здесь можно добавить поиск userId по username через repository
-      }
-
-      if (!targetUserId && !targetUsername) {
-        await context.reply("❌ Не удалось определить пользователя для блокировки.")
-        return
-      }
-
-      // Блокируем пользователя
-      if (targetUserId) {
-        await this.deleteUserFromChat(chatId, targetUserId)
-        // В упрощенной архитектуре не используем repository
-      }
-
-      await context.reply(`✅ Пользователь ${targetUsername} заблокирован.`)
-      this.logger.i(`Admin ${userId} banned user ${targetUsername} (${targetUserId})`)
-    } catch (error) {
-      this.logger.e("Error handling ban command:", error)
-      await context.reply("❌ Произошла ошибка при блокировке пользователя.")
-    }
-  }
-
-  /**
-   * Обработка команды /unban
-   */
-  private async handleUnbanCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-    const adminCommands = "🔹 `/ban @user` - забанить пользователя\n🔹 `/unban @user` - разбанить пользователя"
-
-    try {
-      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
-
-      await context.reply(commandText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error in unban command:", error)
-    }
-  }
-
-  /**
-   * Обработка команды /mute
-   */
-  private async handleMuteCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-
-    const adminCommands = "🔹 `/mute @user` - заглушить пользователя\n🔹 `/unmute @user` - снять заглушение"
-
-    try {
-      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
-
-      await context.reply(commandText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error in mute command:", error)
-    }
-  }
-
-  /**
-   * Обработка команды /unmute
-   */
-  private async handleUnmuteCommand(context: any): Promise<void> {
-    const _chatId = context.chat?.id
-
-    const adminCommands = "🔹 `/mute @user` - заглушить пользователя\n🔹 `/unmute @user` - снять заглушение"
-
-    try {
-      const commandText = `📊 **Команды бота**\n\n${adminCommands}`
-
-      await context.reply(commandText, { parse_mode: "Markdown" })
-    } catch (error) {
-      this.logger.e("Error in unmute command:", error)
+      hasBot: !!this.bot,
+      settings: this.settingsManager.getSettings(),
+      dependencies: {
+        captcha: !!this.dependencies.captchaService,
+        antiSpam: !!this.dependencies.antiSpamService,
+        chat: !!this.dependencies.chatService,
+        redis: !!this.dependencies.redisService,
+      },
+      modules: {
+        captchaManager: !!this.captchaManager,
+        spamDetector: !!this.spamDetector,
+        userManager: !!this.userManager,
+        messageHandler: !!this.messageHandler,
+        memberHandler: !!this.memberHandler,
+        callbackHandler: !!this.callbackHandler,
+      },
+      statistics: {
+        totalUsers: userStats.length,
+        ...spamStats,
+        ...memberStats,
+      },
     }
   }
 
@@ -1300,102 +395,72 @@ ${question[0]} + ${question[1]} = ?
    * Получение текущих настроек
    */
   getSettings(): TelegramBotSettings {
-    return { ...this.settings }
+    return this.settingsManager.getSettings()
   }
 
   /**
-   * Обновление настроек (для будущего использования с БД)
+   * Обновление настроек
    */
   updateSettings(newSettings: Partial<TelegramBotSettings>): void {
-    this.settings = { ...this.settings, ...newSettings }
-    this.logger.i("📝 Telegram bot settings updated:", newSettings)
-
-    // Передаем настройки капчи в CaptchaService
-    if (this.dependencies.captchaService
-      && (newSettings.captchaTimeoutMs !== undefined || newSettings.captchaCheckIntervalMs !== undefined)) {
-      const captchaSettings: any = {}
-      if (newSettings.captchaTimeoutMs !== undefined) {
-        captchaSettings.timeoutMs = newSettings.captchaTimeoutMs
-      }
-      if (newSettings.captchaCheckIntervalMs !== undefined) {
-        captchaSettings.checkIntervalMs = newSettings.captchaCheckIntervalMs
-      }
-
-      // Если CaptchaService поддерживает updateSettings
-      if (typeof (this.dependencies.captchaService as any).updateSettings === "function") {
-        (this.dependencies.captchaService as any).updateSettings(captchaSettings)
-      }
-    }
-  }
-
-  /**
-   * Загрузка настроек из базы данных (для будущего использования)
-   */
-  async loadSettingsFromDatabase(): Promise<void> {
-    try {
-      // TODO: Реализовать загрузку настроек из БД
-      // const settings = await this.dependencies.repository?.getSettings?.()
-      // if (settings) {
-      //   this.updateSettings(settings)
-      // }
-
-    } catch (error) {
-      this.logger.e("❌ Error loading settings from database:", error)
-    }
-  }
-
-  /**
-   * Сохранение настроек в базу данных (для будущего использования)
-   */
-  async saveSettingsToDatabase(): Promise<void> {
-    try {
-      // TODO: Реализовать сохранение настроек в БД
-      // await this.dependencies.repository?.saveSettings?.(this.settings)
-
-    } catch (error) {
-      this.logger.e("❌ Error saving settings to database:", error)
-    }
+    this.settingsManager.updateSettings(newSettings)
   }
 
   /**
    * Получение счетчиков сообщений пользователей
    */
-  getUserMessageCounters(): UserMessageCounter[] {
-    return Array.from(this.userMessageCounters.values())
+  async getUserMessageCounters(): Promise<UserMessageCounter[]> {
+    return await this.userManager.getAllUserCounters()
   }
 
   /**
    * Очистка счетчика сообщений для пользователя
    */
-  clearUserMessageCounter(userId: number): boolean {
-    const cleared = this.userMessageCounters.delete(userId)
-    if (cleared) {
-      this.logger.i(`Cleared message counter for user ${userId}`)
-    }
-    return cleared
+  async clearUserMessageCounter(userId: number): Promise<boolean> {
+    return await this.userManager.clearUserCounter(userId)
   }
 
   /**
-   * Очистка старых счетчиков пользователей (неактивных более 7 дней)
+   * Получение статистики модулей
    */
-  cleanupOldUserCounters(): void {
-    const now = Date.now()
-    const maxAge = 24 * 60 * 60 * 1000 // 24 часа
-
-    for (const [userId, counter] of this.userMessageCounters.entries()) {
-      if (now - counter.lastActivity > maxAge) {
-        this.userMessageCounters.delete(userId)
-      }
+  async getModuleStats(): Promise<object> {
+    const userCounters = await this.userManager.getAllUserCounters()
+    return {
+      captcha: this.captchaManager?.isAvailable() || false,
+      spam: this.spamDetector?.isAvailable() || false,
+      ai: this.messageHandler?.hasAIService() || false,
+      userCount: userCounters.length,
     }
   }
 
   /**
-   * Запуск таймера для периодической очистки старых записей о спам-нарушениях
+   * Получение API бота для прямого взаимодействия
    */
-  private startSpamCleanupTimer(): void {
-    // Запускаем очистку каждые 30 минут
-    setInterval(() => {
-      this.cleanupOldUserCounters()
-    }, 30 * 60 * 1000)
+  getBotApi() {
+    if (!this.bot) {
+      throw new Error("Bot is not initialized")
+    }
+    return this.bot.api
+  }
+
+  /**
+   * Получение ID бота из кеша Redis
+   */
+  async getBotId(): Promise<number | null> {
+    if (!this.dependencies.redisService) {
+      this.logger.w("Redis service not available for bot ID lookup")
+      return null
+    }
+    return await this.dependencies.redisService.getBotId()
+  }
+
+  /**
+   * Получение полной информации о боте из кеша Redis
+   */
+  async getBotInfo(): Promise<{ id: number, username?: string, first_name: string } | null> {
+    if (!this.dependencies.redisService) {
+      this.logger.w("Redis service not available for bot info lookup")
+      return null
+    }
+    return await this.dependencies.redisService.getBotInfo()
   }
 }

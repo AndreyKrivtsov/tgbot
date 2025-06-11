@@ -97,6 +97,13 @@ export class GeminiAdapter {
       // Формируем URL с API ключом
       const url = `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`
 
+      // Логируем детали HTTP запроса
+      console.log(`🌐 [GEMINI HTTP] Making request to: ${this.baseUrl}/${this.model}:generateContent?key=${apiKey.substring(0, 12)}...${apiKey.slice(-4)}`)
+      console.log(`📊 [GEMINI HTTP] Request method: POST`)
+      console.log(`📋 [GEMINI HTTP] Contents array length: ${contents.length}`)
+      console.log(`⚙️ [GEMINI HTTP] Generation config:`, JSON.stringify(generationConfig, null, 2))
+      console.log(`📤 [GEMINI HTTP] Full request body:`, JSON.stringify(requestBody, null, 2))
+
       // Выполняем запрос
       const response = await fetch(url, {
         method: "POST",
@@ -106,15 +113,21 @@ export class GeminiAdapter {
         body: JSON.stringify(requestBody),
       })
 
+      console.log(`📡 [GEMINI HTTP] Response status: ${response.status} ${response.statusText}`)
+
       if (!response.ok) {
         const errorText = await response.text()
+        console.error(`❌ [GEMINI HTTP] Error response body:`, errorText)
         throw new Error(`Gemini API error (${response.status}): ${errorText}`)
       }
 
       const data = await response.json() as GeminiResponse
 
+      console.log(`📥 [GEMINI HTTP] Response data:`, JSON.stringify(data, null, 2))
+
       // Проверяем на ошибки в ответе
       if (data.error) {
+        console.error(`❌ [GEMINI HTTP] API error in response:`, data.error)
         throw new Error(`Gemini API error: ${data.error.message} (code: ${data.error.code})`)
       }
 
@@ -124,11 +137,13 @@ export class GeminiAdapter {
         if (candidate && candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
           const part = candidate.content.parts[0]
           if (part && part.text) {
+            console.log(`✅ [GEMINI HTTP] Successfully extracted response text (${part.text.length} characters)`)
             return part.text
           }
         }
       }
 
+      console.error(`❌ [GEMINI HTTP] No valid response structure found`)
       throw new Error("No valid response from Gemini API")
     } catch (error) {
       console.error("Gemini API request failed:", error)

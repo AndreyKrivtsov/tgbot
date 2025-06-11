@@ -6,6 +6,8 @@ import type { GeminiMessage } from "../AI/providers/GeminiAdapter.js"
 import { GeminiAdapter } from "../AI/providers/GeminiAdapter.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
+import { AI_CHAT_CONFIG } from "../../constants.js"
+import { MessageFormatter } from "../TelegramBot/utils/MessageFormatter.js"
 
 interface AIChatDependencies {
   aiService?: any
@@ -17,8 +19,6 @@ interface ChatContext {
   messages: ChatMessage[]
   lastActivity: number
   requestCount: number
-  dailyRequestCount: number
-  lastDailyReset: number
 }
 
 interface ChatMessage {
@@ -46,8 +46,7 @@ export class AIChatService implements IService {
   private messageQueue: MessageQueue[] = []
   private isProcessingQueue = false
   private nextMessageId = 1
-  private dailyLimit = 1500
-  private throttleDelay = 3000 // 3 секунды между запросами
+  private throttleDelay = AI_CHAT_CONFIG.THROTTLE_DELAY_MS
   private chatAiRepository?: ChatAiRepository
   private chatSettings: Map<number, { chat: Chat | null, config: ChatConfig | null }> = new Map() // Кэш настроек чатов
 
@@ -81,9 +80,6 @@ export class AIChatService implements IService {
 
     // Запускаем обработчик очереди
     this.startQueueProcessor()
-
-    // Запускаем очистку старых контекстов
-    this.startContextCleanup()
 
     this.logger.i("✅ AI chat service started")
   }
@@ -186,18 +182,8 @@ export class AIChatService implements IService {
       queuePosition?: number
     }> {
     try {
-      // Проверяем лимиты
-      const limitCheck = await this.checkDailyLimit(chatId.toString())
-      if (!limitCheck.allowed) {
-        return {
-          success: false,
-          queued: false,
-          reason: limitCheck.reason,
-        }
-      }
-
       // Проверяем размер очереди
-      if (this.messageQueue.length >= 8) {
+      if (this.messageQueue.length >= AI_CHAT_CONFIG.MAX_QUEUE_SIZE) {
         return {
           success: false,
           queued: false,
@@ -260,41 +246,6 @@ export class AIChatService implements IService {
   }
 
   /**
-   * Проверка дневного лимита
-   */
-  private async checkDailyLimit(contextId: string): Promise<{
-    allowed: boolean
-    reason?: string
-    remaining: number
-  }> {
-    const context = this.getOrCreateContext(contextId)
-
-    // Сброс счетчика если прошел день
-    const now = Date.now()
-    const dayInMs = 24 * 60 * 60 * 1000
-    if (now - context.lastDailyReset > dayInMs) {
-      context.dailyRequestCount = 0
-      context.lastDailyReset = now
-    }
-
-    const dailyLimit = this.dailyLimit
-    const remaining = dailyLimit - context.dailyRequestCount
-
-    if (context.dailyRequestCount >= dailyLimit) {
-      return {
-        allowed: false,
-        reason: `Превышен дневной лимит запросов (${dailyLimit}). Попробуйте завтра.`,
-        remaining: 0,
-      }
-    }
-
-    return {
-      allowed: true,
-      remaining,
-    }
-  }
-
-  /**
    * Получение или создание контекста чата
    */
   private getOrCreateContext(contextId: string): ChatContext {
@@ -307,8 +258,6 @@ export class AIChatService implements IService {
         messages: [],
         lastActivity: now,
         requestCount: 0,
-        dailyRequestCount: 0,
-        lastDailyReset: now,
       }
       this.chatContexts.set(contextId, context)
     }
@@ -358,12 +307,11 @@ export class AIChatService implements IService {
       await this.throttledAIRequest(queueItem)
 
       context.requestCount++
-      context.dailyRequestCount++
     } catch (error) {
       this.logger.e("Error processing queued message:", error)
 
       // Retry logic
-      if (queueItem.retryCount < 3) {
+      if (queueItem.retryCount < 2) {
         queueItem.retryCount++
         this.messageQueue.push(queueItem)
         this.logger.w(`Retrying message ${queueItem.id}, attempt ${queueItem.retryCount}`)
@@ -381,8 +329,15 @@ export class AIChatService implements IService {
 
       const chatId = Number.parseInt(queueItem.contextId)
 
-      // Получаем API ключ и настройки для чата
-      const apiKey = await this.getApiKeyForChat(chatId)
+      // Получаем API ключ и проверяем его наличие
+      const apiKeyResult = await this.getApiKeyForChat(chatId)
+      if (!apiKeyResult) {
+        // API ключ отсутствует - отправляем сообщение об ошибке
+        const errorMessage = MessageFormatter.formatApiKeyMissingMessage()
+        this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id)
+        return
+      }
+
       const chatLimits = await this.getChatLimits(chatId)
 
       // Получаем контекст и добавляем новое сообщение пользователя
@@ -401,12 +356,27 @@ export class AIChatService implements IService {
         parts: [{ text: msg.content }],
       }))
 
+      // Логируем детали запроса к AI
+      this.logger.i(`🤖 [AI REQUEST] Sending request to Gemini API`)
+      this.logger.i(`📝 [AI REQUEST] Message: "${queueItem.message}"`)
+      this.logger.i(`🔑 [AI REQUEST] API Key: ${apiKeyResult.key.substring(0, 12)}...${apiKeyResult.key.slice(-4)} (real: ${apiKeyResult.isReal})`)
+      this.logger.i(`📚 [AI REQUEST] Conversation history length: ${conversationHistory.length} messages`)
+      this.logger.i(`⏱️ [AI REQUEST] Throttle delay: ${chatLimits.throttleDelay}ms`)
+
+      if (conversationHistory.length > 0) {
+        this.logger.d(`📜 [AI REQUEST] Full conversation history:`)
+        conversationHistory.forEach((msg, index) => {
+          const text = msg.parts[0]?.text || ""
+          this.logger.d(`  ${index + 1}. [${msg.role}]: "${text.substring(0, 100)}${text.length > 100 ? "..." : ""}"`)
+        })
+      }
+
       // Создаем адаптер (без API ключа в конструкторе)
       const geminiAdapter = new GeminiAdapter()
 
       // Делаем запрос к Gemini API, передавая API ключ и историю
       const response = await geminiAdapter.generateContent(
-        apiKey,
+        apiKeyResult.key,
         queueItem.message,
         conversationHistory,
       )
@@ -436,30 +406,15 @@ export class AIChatService implements IService {
       await new Promise(resolve => setTimeout(resolve, chatLimits.throttleDelay))
     } catch (error) {
       this.logger.e("AI request error:", error)
+
+      // Отправляем сообщение об ошибке в чат
+      const errorMessage = MessageFormatter.formatAIServiceErrorMessage()
+      this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id)
+
       throw error
     } finally {
       this.onTypingStop?.(queueItem.contextId)
     }
-  }
-
-  /**
-   * Очистка старых контекстов
-   */
-  private startContextCleanup(): void {
-    const cleanup = () => {
-      const now = Date.now()
-      const maxAge = 24 * 60 * 60 * 1000 // 24 часа
-
-      for (const [contextId, context] of this.chatContexts.entries()) {
-        if (now - context.lastActivity > maxAge) {
-          this.chatContexts.delete(contextId)
-          this.logger.d(`Cleaned up old context: ${contextId}`)
-        }
-      }
-    }
-
-    // Запускаем очистку каждый час
-    setInterval(cleanup, 60 * 60 * 1000)
   }
 
   /**
@@ -501,21 +456,11 @@ export class AIChatService implements IService {
   }
 
   /**
-   * Настройка дневного лимита
-   */
-  setDailyLimit(limit: number): void {
-    this.dailyLimit = Math.max(1, limit)
-    this.logger.i(`Set daily limit: ${this.dailyLimit}`)
-  }
-
-  /**
    * Получение статистики контекста
    */
   getContextStats(contextId: string): {
     messages: number
     requestCount: number
-    dailyRequestCount: number
-    remaining: number
   } | null {
     const context = this.chatContexts.get(contextId)
     if (!context)
@@ -524,8 +469,6 @@ export class AIChatService implements IService {
     return {
       messages: context.messages.length,
       requestCount: context.requestCount,
-      dailyRequestCount: context.dailyRequestCount,
-      remaining: this.dailyLimit - context.dailyRequestCount,
     }
   }
 
@@ -559,11 +502,21 @@ export class AIChatService implements IService {
   }
 
   /**
-   * Получить API ключ для чата (или использовать глобальный)
+   * Получить API ключ для чата (или вернуть null если отсутствует)
    */
-  async getApiKeyForChat(chatId: number): Promise<string> {
+  async getApiKeyForChat(chatId: number): Promise<{ key: string, isReal: boolean } | null> {
     const { config } = await this.getChatSettings(chatId)
-    return config?.geminiApiKey || this.config.AI_API_KEY
+
+    // Если есть настоящий API ключ в конфиге чата, используем его
+    if (config?.geminiApiKey && config.geminiApiKey !== "mock_gemini_api_key_for_development") {
+      return {
+        key: config.geminiApiKey,
+        isReal: true,
+      }
+    }
+
+    // API ключ отсутствует
+    return null
   }
 
   /**
@@ -646,7 +599,6 @@ export class AIChatService implements IService {
     return {
       activeContexts: this.chatContexts.size,
       queueLength: this.messageQueue.length,
-      dailyLimit: this.dailyLimit,
       isProcessing: this.isProcessingQueue,
       activeChats: this.chatSettings.size,
       serviceStatus: "active",

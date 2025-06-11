@@ -23,7 +23,7 @@ interface RestrictedUser {
   questionId: number
   answer: number
   username?: string
-  firstname: string
+  firstName: string
   timestamp: number
   isAnswered: boolean
 }
@@ -107,8 +107,6 @@ export class CaptchaService implements IService {
    * Генерация математической капчи
    */
   generateCaptcha(): CaptchaChallenge {
-    this.logger.d("🎲 Starting captcha generation...")
-
     const randomOption = (from: number, to: number) => {
       return Math.floor(Math.random() * (to - from + 1)) + from
     }
@@ -118,8 +116,6 @@ export class CaptchaService implements IService {
     const num2 = randomOption(1, 10)
     const question: number[] = [num1, num2]
     const answer = num1 + num2
-
-    this.logger.d(`🧮 Math problem: ${num1} + ${num2} = ${answer}`)
 
     // Генерируем неправильные варианты ответов
     const options: number[] = []
@@ -134,8 +130,6 @@ export class CaptchaService implements IService {
     const insertIndex = randomOption(0, 3)
     options.splice(insertIndex, 0, answer)
 
-    this.logger.d(`🔢 Generated options: [${options.join(", ")}], correct answer at index ${insertIndex}`)
-
     return { question, answer, options }
   }
 
@@ -148,26 +142,20 @@ export class CaptchaService implements IService {
     questionId: number,
     answer: number,
     username?: string,
-    firstname: string = "Unknown",
+    firstName: string = "Unknown",
   ): void {
-    this.logger.i(`🔒 Adding user ${userId} (${firstname}) to restricted list`)
-    this.logger.d(`Details: chatId=${chatId}, questionId=${questionId}, answer=${answer}`)
-
     const restrictedUser: RestrictedUser = {
       userId,
       chatId,
       questionId,
       answer,
       username,
-      firstname,
+      firstName,
       timestamp: Date.now(),
       isAnswered: false,
     }
 
     this.restrictedUsers.set(userId, restrictedUser)
-
-    this.logger.i(`✅ User ${userId} (${firstname}) restricted in chat ${chatId}`)
-    this.logger.d(`Total restricted users: ${this.restrictedUsers.size}`)
   }
 
   /**
@@ -177,47 +165,47 @@ export class CaptchaService implements IService {
     isValid: boolean
     user?: RestrictedUser
   } {
-    this.logger.i(`🔍 Validating answer for user ${userId}, questionId=${questionId}, answer=${userAnswer}`)
-
     const restrictedUser = this.restrictedUsers.get(userId)
 
     if (!restrictedUser) {
-      this.logger.w(`❌ No restricted user found with ID ${userId}`)
       return { isValid: false }
     }
 
-    this.logger.d(`👤 Found restricted user: ${restrictedUser.firstname} (${restrictedUser.userId})`)
-
     if (restrictedUser.isAnswered) {
-      this.logger.w(`⚠️ User ${userId} already answered the captcha`)
       return { isValid: false, user: restrictedUser }
     }
 
     if (restrictedUser.questionId !== questionId) {
-      this.logger.w(`⚠️ Question ID mismatch: expected ${restrictedUser.questionId}, got ${questionId}`)
       return { isValid: false, user: restrictedUser }
     }
 
+    // Проверяем правильность ответа
     const isCorrect = restrictedUser.answer === userAnswer
 
-    if (isCorrect) {
-      this.logger.i(`✅ User ${userId} (${restrictedUser.firstname}) answered correctly!`)
-      restrictedUser.isAnswered = true
+    // Отмечаем как отвеченный
+    restrictedUser.isAnswered = true
 
+    if (isCorrect) {
       // Вызываем колбэк успеха
       if (this.onCaptchaSuccess) {
         this.onCaptchaSuccess(restrictedUser)
       }
-    } else {
-      this.logger.w(`❌ User ${userId} (${restrictedUser.firstname}) answered incorrectly. Expected: ${restrictedUser.answer}, got: ${userAnswer}`)
 
+      // Удаляем пользователя из ограниченных
+      this.restrictedUsers.delete(userId)
+
+      return { isValid: true, user: restrictedUser }
+    } else {
       // Вызываем колбэк неудачи
       if (this.onCaptchaFailed) {
         this.onCaptchaFailed(restrictedUser)
       }
-    }
 
-    return { isValid: isCorrect, user: restrictedUser }
+      // Удаляем пользователя из ограниченных
+      this.restrictedUsers.delete(userId)
+
+      return { isValid: false, user: restrictedUser }
+    }
   }
 
   /**
@@ -229,7 +217,7 @@ export class CaptchaService implements IService {
     const user = this.restrictedUsers.get(userId)
     if (user) {
       this.restrictedUsers.delete(userId)
-      this.logger.i(`✅ User ${userId} (${user.firstname}) removed from restrictions`)
+      this.logger.i(`✅ User ${userId} (${user.firstName}) removed from restrictions`)
       this.logger.d(`Remaining restricted users: ${this.restrictedUsers.size}`)
     } else {
       this.logger.w(`⚠️ User ${userId} was not in restricted list`)
@@ -274,7 +262,7 @@ export class CaptchaService implements IService {
 
       for (const [userId, user] of this.restrictedUsers) {
         if (!user.isAnswered && (now - user.timestamp) > this.settings.timeoutMs) {
-          this.logger.w(`⏰ Captcha timeout for user ${userId} (${user.firstname})`)
+          this.logger.w(`⏰ Captcha timeout for user ${userId} (${user.firstName})`)
           expiredUsers.push(user)
         }
       }
@@ -297,7 +285,7 @@ export class CaptchaService implements IService {
    * Обработка таймаута капчи
    */
   private handleCaptchaTimeout(user: RestrictedUser): void {
-    this.logger.i(`⏰ Handling captcha timeout for user ${user.userId} (${user.firstname})`)
+    this.logger.i(`⏰ Handling captcha timeout for user ${user.userId} (${user.firstName})`)
 
     // Вызываем колбэк таймаута
     if (this.onCaptchaTimeout) {

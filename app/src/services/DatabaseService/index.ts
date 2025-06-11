@@ -74,10 +74,6 @@ export class DatabaseService implements IService {
       this.isConnected = true
 
       this.logger.i("✅ Database service started - connection successful")
-
-      // Логируем информацию о подключении
-      const connectionInfo = await this.getConnectionInfo()
-      this.logger.i(`📊 Database info: ${JSON.stringify(connectionInfo)}`)
     } catch (error) {
       this.logger.e("❌ Failed to start database service:", error)
       throw error

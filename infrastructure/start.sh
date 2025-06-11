@@ -22,8 +22,8 @@ echo "🌐 Creating Docker network..."
 docker network create tgbot-network 2>/dev/null || echo "📌 Network already exists"
 
 # Запуск основных сервисов
-echo "🗄️ Starting PostgreSQL and Redis..."
-docker-compose up -d postgres redis
+echo "🗄️ Starting PostgreSQL, Redis and AntiSpam..."
+docker-compose up -d postgres redis antispam
 
 # Ожидание готовности PostgreSQL
 echo "⏳ Waiting for PostgreSQL to be ready..."
@@ -32,6 +32,10 @@ timeout 60 bash -c 'until docker exec tgbot-postgres pg_isready -U postgres; do 
 # Ожидание готовности Redis
 echo "⏳ Waiting for Redis to be ready..."
 timeout 30 bash -c 'until docker exec tgbot-redis redis-cli ping | grep -q PONG; do sleep 2; done'
+
+# Ожидание готовности AntiSpam
+echo "⏳ Waiting for AntiSpam to be ready..."
+timeout 60 bash -c 'until curl -f http://localhost:6323/docs >/dev/null 2>&1; do sleep 2; done'
 
 echo "✅ Infrastructure is ready!"
 echo ""
@@ -42,6 +46,7 @@ echo ""
 echo "🔗 Connection URLs:"
 echo "   PostgreSQL: postgresql://postgres:[password]@localhost:5432/tgbot"
 echo "   Redis: redis://localhost:6379/0"
+echo "   AntiSpam API: http://localhost:6323/docs"
 echo ""
 echo "🛠️ Optional tools (run with --profile tools):"
 echo "   pgAdmin: http://localhost:8080"

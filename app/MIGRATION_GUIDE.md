@@ -59,7 +59,7 @@ npm run db:migrate
 ```sql
 - id (bigint) - Telegram chat ID
 - type (varchar) - тип чата
-- title (varchar) - название чата  
+- title (varchar) - название чата
 - gemini_api_key (varchar) - API ключ для Gemini
 - ai_enabled (boolean) - включен ли ИИ
 - throttle_delay (integer) - задержка между запросами
@@ -81,17 +81,17 @@ npm run db:migrate
 
 ```sql
 -- Проверить созданные таблицы
-SELECT table_name FROM information_schema.tables 
+SELECT table_name FROM information_schema.tables
 WHERE table_schema = 'public';
 
 -- Проверить структуру таблицы chats
 \d chats
 
--- Проверить структуру таблицы group_admins  
+-- Проверить структуру таблицы group_admins
 \d group_admins
 
 -- Проверить индексы
-SELECT indexname, tablename FROM pg_indexes 
+SELECT indexname, tablename FROM pg_indexes
 WHERE schemaname = 'public';
 ```
 
@@ -115,4 +115,4 @@ pg_restore -h localhost -U postgres -d tgbot backup.dump
 
 1. Обновите код приложения для работы с новой схемой
 2. Протестируйте основные функции бота
-3. При необходимости добавьте недостающие поля в будущих миграциях 
+3. При необходимости добавьте недостающие поля в будущих миграциях

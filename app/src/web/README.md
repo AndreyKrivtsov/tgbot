@@ -71,8 +71,7 @@ npm run dev
 
 ### Environment (.env)
 ```env
-WEB_PORT=3000
-WEB_HOST=0.0.0.0
+PORT=3000
 ADMIN_USERNAME=your_username
 ```
 

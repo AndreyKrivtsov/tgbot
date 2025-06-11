@@ -18,8 +18,6 @@ interface BotConfig {
 
   // AI чат настройки
   aiChatEnabled: boolean
-  aiDailyLimit: number
-  aiCurrentUsage: number
 
   // Общие настройки
   welcomeMessage: string
@@ -54,8 +52,6 @@ export class ApiServerService implements IService {
       antispamEnabled: true,
       antispamThreshold: 5,
       aiChatEnabled: true,
-      aiDailyLimit: 1500,
-      aiCurrentUsage: 0,
       welcomeMessage: "Добро пожаловать! Пройдите простую проверку:",
       adminUsername: this.config.ADMIN_USERNAME || "",
       logLevel: 2,
@@ -74,12 +70,8 @@ export class ApiServerService implements IService {
         await import("fastify")
         this.hasFastify = true
         this.logger.i("✅ Fastify available - API server can be enabled")
-      } catch (error) {
+      } catch {
         this.logger.w("⚠️ Fastify not available. API server disabled.")
-        this.logger.w("📋 To enable web interface:")
-        this.logger.w("   1. Update Node.js to v18+ or v20+")
-        this.logger.w("   2. Run: npm install fastify @fastify/cors @fastify/static")
-        this.logger.w("   3. Restart the application")
       }
 
       this.logger.i("✅ API server service initialized")
@@ -98,15 +90,13 @@ export class ApiServerService implements IService {
 
     if (!this.hasFastify) {
       this.logger.w("🚫 API server not available - Fastify not installed")
-      this.logger.i("🤖 Bot continues to work without web interface")
       return
     }
 
     try {
       // TODO: Здесь будет код запуска Fastify сервера
       this.isRunning = true
-      this.logger.i(`✅ API server started on http://${this.config.WEB_HOST}:${this.config.WEB_PORT}`)
-      this.logger.i(`📱 Telegram WebApp URL: http://${this.config.WEB_HOST}:${this.config.WEB_PORT}/admin`)
+      this.logger.i("✅ API server started")
     }
     catch (error) {
       this.logger.e("❌ Failed to start API server:", error)
@@ -148,8 +138,8 @@ export class ApiServerService implements IService {
     return {
       isRunning: this.isRunning,
       hasFastify: this.hasFastify,
-      host: this.config.WEB_HOST,
-      port: this.config.WEB_PORT,
+      host: "0.0.0.0",
+      port: this.config.PORT,
       hasDatabase: !!this.dependencies.database,
       hasTelegramBot: !!this.dependencies.telegramBot,
       status: this.hasFastify ? "ready" : "disabled",
@@ -169,7 +159,7 @@ export class ApiServerService implements IService {
    */
   updateBotConfig(updates: Partial<BotConfig>): void {
     this.botConfig = { ...this.botConfig, ...updates }
-    this.logger.i("Bot configuration updated:", updates)
+    this.logger.i("Bot configuration updated")
     // TODO: Сохранение в БД
     // TODO: Уведомление бота об изменениях
   }

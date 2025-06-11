@@ -415,8 +415,7 @@ export const config = {
   BOT_TOKEN: process.env.BOT_TOKEN!,
 
   // Веб-сервер
-  WEB_PORT: Number.parseInt(process.env.WEB_PORT || "3000"),
-  WEB_HOST: process.env.WEB_HOST || "0.0.0.0",
+  PORT: Number.parseInt(process.env.PORT || "3000"),
 
   // База данных
   DATABASE_URL: process.env.DATABASE_URL || "postgresql://...",
@@ -441,8 +440,7 @@ NODE_ENV=development
 BOT_TOKEN=your_telegram_bot_token
 
 # Веб-сервер
-WEB_PORT=3000
-WEB_HOST=0.0.0.0
+PORT=3000
 
 # AI
 AI_API_KEY=your_gemini_api_key

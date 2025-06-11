@@ -41,7 +41,7 @@
 ```json
 {
   "основные правила": "string (optional)",
-  "характер": "string (optional)", 
+  "характер": "string (optional)",
   "пол": "string (optional)"
 }
 ```
