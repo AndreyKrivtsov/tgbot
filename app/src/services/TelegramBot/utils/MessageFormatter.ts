@@ -39,7 +39,11 @@ export class MessageFormatter {
       "🔹 `/unmute @user` - снять заглушение",
     ]
 
-    return `📋 **Доступные команды:**\n\n${commands.join("\n")}\n\n👑 **Команды администратора:**\n\n${adminCommands.join("\n")}`
+    const privateCommands = [
+      "🔹 `/addAltronKey @group_name API_KEY` - добавить AI ключ для группы (только в ЛС)",
+    ]
+
+    return `📋 **Доступные команды:**\n\n${commands.join("\n")}\n\n👑 **Команды администратора:**\n\n${adminCommands.join("\n")}\n\n🔒 **Команды в приватном чате:**\n\n${privateCommands.join("\n")}`
   }
 
   /**

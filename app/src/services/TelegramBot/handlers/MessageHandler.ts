@@ -118,12 +118,31 @@ export class MessageHandler {
   /**
    * Обработка AI ответов
    */
-  async handleAIResponse(contextId: string, response: string, messageId: number): Promise<void> {
+  async handleAIResponse(contextId: string, response: string, _messageId: number): Promise<void> {
     try {
-      // Здесь можно добавить дополнительную обработку AI ответов
-      this.logger.d(`AI response handled for context ${contextId}, message ${messageId}`)
+      const chatId = Number.parseInt(contextId)
+
+      // Отправляем ответ AI в чат
+      await this.bot.api.sendMessage({
+        chat_id: chatId,
+        text: response,
+        parse_mode: "Markdown",
+      })
+
+      this.logger.i(`✅ AI response sent to chat ${chatId}: ${response.substring(0, 100)}${response.length > 100 ? "..." : ""}`)
     } catch (error) {
       this.logger.e("Error handling AI response:", error)
+
+      // Попробуем отправить сообщение об ошибке
+      try {
+        const chatId = Number.parseInt(contextId)
+        await this.bot.api.sendMessage({
+          chat_id: chatId,
+          text: "❌ Произошла ошибка при отправке ответа AI",
+        })
+      } catch (sendError) {
+        this.logger.e("Failed to send error message:", sendError)
+      }
     }
   }
 
@@ -132,8 +151,15 @@ export class MessageHandler {
    */
   async sendTypingAction(contextId: string): Promise<void> {
     try {
-      // Здесь можно реализовать отправку typing действия
-      this.logger.d(`Typing action sent for context ${contextId}`)
+      const chatId = Number.parseInt(contextId)
+
+      // Отправляем typing индикатор
+      await this.bot.api.sendChatAction({
+        chat_id: chatId,
+        action: "typing",
+      })
+
+      this.logger.d(`🎭 Typing action sent for context ${contextId}`)
     } catch (error) {
       this.logger.e("Error sending typing action:", error)
     }
@@ -144,6 +170,7 @@ export class MessageHandler {
    */
   private async handleChat(context: TelegramMessageContext, messageText: string): Promise<void> {
     if (!this.chatService || !context.from) {
+      this.logger.w("Cannot handle AI chat: missing chatService or user info")
       return
     }
 
@@ -153,14 +180,22 @@ export class MessageHandler {
       const username = context.from.username
       const firstName = context.from.firstName
 
+      this.logger.i(`🤖 Processing AI message from ${firstName} (${userId}) in chat ${chatId}: "${messageText.substring(0, 100)}${messageText.length > 100 ? "..." : ""}"`)
+
       // Обрабатываем сообщение через AI Chat Service
-      await this.chatService.processMessage(
+      const result = await this.chatService.processMessage(
         userId,
         chatId,
         messageText,
         username,
         firstName,
       )
+
+      if (result.success) {
+        this.logger.i(`✅ Message queued for AI processing (position: ${result.queuePosition})`)
+      } else {
+        this.logger.w(`❌ Failed to queue AI message: ${result.reason}`)
+      }
     } catch (error) {
       this.logger.e("Error handling AI chat:", error)
     }

@@ -193,6 +193,7 @@ export class AntiSpamService implements IService {
    * Выполнение HTTP запроса к антиспам API
    */
   private async makeHttpRequest(text: string): Promise<Response> {
+    this.logger.i(`🔍 Checking message for spam: ${text}`)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), this.settings.timeoutMs)
 

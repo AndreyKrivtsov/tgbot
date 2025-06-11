@@ -154,6 +154,7 @@ export class TelegramBotService implements IService {
       this.userManager,
       this.dependencies.chatRepository,
       this,
+      this.dependencies.chatService,
     )
 
     this.messageHandler = new MessageHandler(

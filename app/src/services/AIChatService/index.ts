@@ -483,21 +483,39 @@ export class AIChatService implements IService {
    * Получить настройки чата
    */
   async getChatSettings(chatId: number): Promise<{ chat: Chat | null, config: ChatConfig | null }> {
+    this.logger.i(`⚙️ [DEBUG] Getting settings for chat ${chatId}`)
+    
     // Сначала проверяем кэш
     if (this.chatSettings.has(chatId)) {
       const cached = this.chatSettings.get(chatId)!
+      this.logger.i(`⚙️ [DEBUG] Found cached settings for chat ${chatId}: ${JSON.stringify({
+        chat: !!cached.chat,
+        config: !!cached.config
+      })}`)
       return { chat: cached.chat, config: cached.config }
     }
 
+    this.logger.i(`⚙️ [DEBUG] No cache for chat ${chatId}, loading from database`)
+    
     // Загружаем из БД
     if (this.chatAiRepository) {
       const result = await this.chatAiRepository.getChatWithConfig(chatId)
+      this.logger.i(`⚙️ [DEBUG] Database result for chat ${chatId}: ${JSON.stringify({
+        chat: !!result.chat,
+        config: !!result.config,
+        chatTitle: result.chat?.title,
+        hasApiKey: !!result.config?.geminiApiKey
+      })}`)
+      
       if (result.chat && result.config) {
         this.chatSettings.set(chatId, result)
         return result
       }
+    } else {
+      this.logger.w(`⚙️ [DEBUG] No chatAiRepository available for chat ${chatId}`)
     }
 
+    this.logger.w(`⚙️ [DEBUG] No settings found for chat ${chatId}`)
     return { chat: null, config: null }
   }
 
@@ -505,16 +523,25 @@ export class AIChatService implements IService {
    * Получить API ключ для чата (или вернуть null если отсутствует)
    */
   async getApiKeyForChat(chatId: number): Promise<{ key: string, isReal: boolean } | null> {
+    this.logger.i(`🔑 [DEBUG] Getting API key for chat ${chatId}`)
     const { config } = await this.getChatSettings(chatId)
+
+    this.logger.i(`🔑 [DEBUG] Chat config for ${chatId}: ${JSON.stringify({
+      exists: !!config,
+      geminiApiKey: config?.geminiApiKey ? `${config.geminiApiKey.substring(0, 12)}...${config.geminiApiKey.slice(-4)}` : null,
+      aiEnabled: config?.aiEnabled
+    })}`)
 
     // Если есть настоящий API ключ в конфиге чата, используем его
     if (config?.geminiApiKey && config.geminiApiKey !== "mock_gemini_api_key_for_development") {
+      this.logger.i(`🔑 [DEBUG] Found real API key for chat ${chatId}`)
       return {
         key: config.geminiApiKey,
         isReal: true,
       }
     }
 
+    this.logger.w(`🔑 [DEBUG] No API key found for chat ${chatId}`)
     // API ключ отсутствует
     return null
   }
@@ -590,6 +617,14 @@ export class AIChatService implements IService {
     }
 
     return success
+  }
+
+  /**
+   * Очистить кэш настроек для конкретного чата
+   */
+  clearChatCache(chatId: number): void {
+    this.logger.i(`🔄 [CACHE] Clearing cache for chat ${chatId}`)
+    this.chatSettings.delete(chatId)
   }
 
   /**
