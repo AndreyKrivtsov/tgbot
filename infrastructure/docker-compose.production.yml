@@ -145,6 +145,20 @@ services:
           memory: 256M
           cpus: '0.25'
 
+  bot:
+    build:
+      context: ../app
+      dockerfile: Dockerfile
+    container_name: tgbot-bot-prod
+    restart: always
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - tgbot-network-prod
+
 volumes:
   postgres_data_prod:
     driver: local
