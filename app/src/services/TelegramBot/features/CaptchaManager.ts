@@ -162,6 +162,13 @@ export class CaptchaManager {
         return false
       }
 
+      // Отвечаем на callback query с соответствующим сообщением
+      const callbackResponse = isCorrect
+        ? getMessage("callback_captcha_correct")
+        : getMessage("callback_captcha_wrong")
+
+      await this.answerCallback(context, callbackResponse)
+
       if (isCorrect) {
         await this.handleCaptchaSuccess(restrictedUser)
       } else {
@@ -176,6 +183,23 @@ export class CaptchaManager {
     } catch (error) {
       this.logger.e("❌ Error handling captcha callback:", error)
       return false
+    }
+  }
+
+  /**
+   * Отправка ответа на callback query
+   */
+  private async answerCallback(context: any, text: string): Promise<void> {
+    try {
+      if (context.answerCallbackQuery) {
+        await context.answerCallbackQuery({ text })
+      } else if (context.answer) {
+        await context.answer(text)
+      } else {
+        this.logger.w("No method to answer callback query found in context")
+      }
+    } catch (error) {
+      this.logger.e("Error answering callback query:", error)
     }
   }
 

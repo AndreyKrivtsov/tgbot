@@ -37,10 +37,8 @@ export class CallbackHandler {
           return
         }
 
-        const result = await this.captchaManager.handleCaptchaCallback(context, callbackData)
-        if (!result) {
-          await this.answerCallback(context, getMessage("callback_unknown_command"))
-        }
+        // CaptchaManager сам отвечает на callback query, поэтому не дублируем ответ
+        await this.captchaManager.handleCaptchaCallback(context, callbackData)
       } else {
         await this.answerCallback(context, getMessage("callback_unknown_command"))
       }
