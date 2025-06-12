@@ -31,12 +31,37 @@ export const BOT_CONFIG = {
 // =============================================================================
 
 export const AI_CHAT_CONFIG = {
-  THROTTLE_DELAY_MS: 3_000, // 3 секунды между запросами
   MAX_QUEUE_SIZE: 8, // Максимальный размер очереди сообщений
-  QUEUE_PROCESS_INTERVAL_MS: 1_000, // 1 секунда - интервал обработки очереди
-  CONTEXT_CLEANUP_INTERVAL_MS: 60 * 60 * 1_000, // 1 час - интервал очистки контекстов
-  DEFAULT_USER_CLEANUP_AGE_HOURS: 24, // 24 часа по умолчанию для старых записей
+  QUEUE_PROCESS_INTERVAL_MS: 200, // 200ms - интервал обработки очереди
   MAX_CONTEXT_MESSAGES: 100, // Максимальное количество сообщений в контексте чата
+  
+  // Redis кэширование контекстов
+  CONTEXT_TTL_SECONDS: 24 * 60 * 60, // 24 часа - время жизни контекста в кэше
+  CONTEXT_SAVE_INTERVAL_MS: 30 * 1000, // 30 секунд - интервал автосохранения
+} as const
+
+// =============================================================================
+// ADAPTIVE THROTTLING SYSTEM
+// =============================================================================
+
+export const AI_THROTTLE_CONFIG = {
+  // Adaptive throttling настройки
+  BASE_REFILL_INTERVAL: 10000,   // Базовый интервал пополнения (мс) = 1/REFILL_RATE
+  MIN_DELAY: 10000 / 4,          // Минимальная задержка (1/4 от BASE_REFILL_INTERVAL)
+  MAX_DELAY: 10000,              // Максимальная задержка (= BASE_REFILL_INTERVAL)
+
+  // Token Bucket настройки
+  BUCKET_CAPACITY: 5,           // Максимум токенов (burst capacity)
+  REFILL_RATE: 1 / (10000 / 1000),            // Токенов в секунду (1 токен каждые 10 сек)
+  TOKENS_PER_REQUEST: 1,        // Токенов за запрос
+  
+  // Адаптивность по длине ответа
+  SHORT_RESPONSE_THRESHOLD: 100,  // Символов для "короткого" ответа
+  LONG_RESPONSE_THRESHOLD: 500,   // Символов для "длинного" ответа
+  
+  // Cleanup
+  CLEANUP_INTERVAL: 5 * 60 * 1000,  // 5 минут
+  INACTIVE_TIMEOUT: 30 * 60 * 1000, // 30 минут неактивности
 } as const
 
 // =============================================================================
@@ -212,6 +237,7 @@ export const CACHE_CONFIG = {
 
 export type BotConfigType = typeof BOT_CONFIG
 export type AIChatConfigType = typeof AI_CHAT_CONFIG
+export type AIThrottleConfigType = typeof AI_THROTTLE_CONFIG
 export type AntiSpamConfigType = typeof ANTI_SPAM_CONFIG
 export type AIServiceConfigType = typeof AI_SERVICE_CONFIG
 export type WeatherConfigType = typeof WEATHER_CONFIG

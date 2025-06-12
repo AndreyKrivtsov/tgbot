@@ -340,16 +340,16 @@ export class TelegramBotService implements IService {
 
     // Колбэки для ChatService
     if (this.dependencies.chatService && this.messageHandler) {
-      this.dependencies.chatService.onMessageResponse = (contextId: string, response: string, messageId: number) => {
-        this.messageHandler?.handleAIResponse(contextId, response, messageId)
+      this.dependencies.chatService.onMessageResponse = (contextId: string, response: string, messageId: number, userMessageId?: number, isError?: boolean) => {
+        this.messageHandler?.handleAIResponse(contextId, response, messageId, userMessageId, isError)
       }
 
       this.dependencies.chatService.onTypingStart = (contextId: string) => {
         this.messageHandler?.sendTypingAction(contextId)
       }
 
-      this.dependencies.chatService.onTypingStop = (_contextId: string) => {
-        // Можно реализовать остановку typing индикатора если нужно
+      this.dependencies.chatService.onTypingStop = (contextId: string) => {
+        this.messageHandler?.stopTypingAction(contextId)
       }
     }
   }

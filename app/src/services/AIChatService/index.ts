@@ -6,12 +6,15 @@ import type { GeminiMessage } from "../AI/providers/GeminiAdapter.js"
 import { GeminiAdapter } from "../AI/providers/GeminiAdapter.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 import type { DatabaseService } from "../DatabaseService/index.js"
+import type { RedisService } from "../RedisService/index.js"
 import { AI_CHAT_CONFIG, AI_SERVICE_CONFIG } from "../../constants.js"
 import { getMessage } from "../TelegramBot/utils/Messages.js"
+import { AdaptiveChatThrottleManager } from "./AdaptiveThrottleManager.js"
 
 interface AIChatDependencies {
   aiService?: any
   database?: DatabaseService
+  redis?: RedisService
 }
 
 interface ChatContext {
@@ -33,6 +36,7 @@ interface MessageQueue {
   contextId: string
   timestamp: number
   retryCount: number
+  userMessageId?: number
 }
 
 /**
@@ -46,17 +50,25 @@ export class AIChatService implements IService {
   private messageQueue: MessageQueue[] = []
   private isProcessingQueue = false
   private nextMessageId = 1
-  private throttleDelay = AI_CHAT_CONFIG.THROTTLE_DELAY_MS
   private chatRepository?: ChatRepository
+  private redisService?: RedisService
   private chatSettings: Map<number, { chat: Chat | null, config: ChatConfig | null }> = new Map() // Кэш настроек чатов
+  private activeTypingChats: Set<string> = new Set() // Чаты где активен typing
+  private throttleManager: AdaptiveChatThrottleManager // Адаптивный throttling менеджер
+  private contextSaveTimer?: NodeJS.Timeout // Таймер автосохранения контекстов
 
   constructor(config: AppConfig, logger: Logger, dependencies: AIChatDependencies = {}) {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
+    this.throttleManager = new AdaptiveChatThrottleManager(logger)
 
     if (dependencies.database) {
       this.chatRepository = new ChatRepository(dependencies.database)
+    }
+    
+    if (dependencies.redis) {
+      this.redisService = dependencies.redis
     }
   }
 
@@ -66,8 +78,8 @@ export class AIChatService implements IService {
   async initialize(): Promise<void> {
     this.logger.i("🤖 Initializing AI chat service...")
 
-    // Загружаем контексты из БД если есть
-    await this.loadChatContexts()
+    // Загружаем настройки чатов из БД
+    await this.loadChatSettings()
 
     this.logger.i("✅ AI chat service initialized")
   }
@@ -80,6 +92,9 @@ export class AIChatService implements IService {
 
     // Запускаем обработчик очереди
     this.startQueueProcessor()
+    
+    // Запускаем автосохранение контекстов
+    this.startContextAutoSave()
 
     this.logger.i("✅ AI chat service started")
   }
@@ -90,9 +105,15 @@ export class AIChatService implements IService {
   async stop(): Promise<void> {
     this.logger.i("🛑 Stopping AI chat service...")
     this.isProcessingQueue = false
+    
+    // Останавливаем автосохранение
+    if (this.contextSaveTimer) {
+      clearInterval(this.contextSaveTimer)
+      this.contextSaveTimer = undefined
+    }
 
-    // Сохраняем контексты в БД
-    await this.saveChatContexts()
+    // Сохраняем все контексты в кэш
+    await this.saveAllContextsToCache()
 
     this.logger.i("✅ AI chat service stopped")
   }
@@ -103,6 +124,7 @@ export class AIChatService implements IService {
   async dispose(): Promise<void> {
     this.logger.i("🗑️ Disposing AI chat service...")
     await this.stop()
+    this.throttleManager.dispose()
     this.chatContexts.clear()
     this.messageQueue = []
     this.logger.i("✅ AI chat service disposed")
@@ -118,9 +140,14 @@ export class AIChatService implements IService {
   /**
    * Проверка, является ли сообщение обращением к боту
    */
-  isBotMention(message: string, botUsername?: string): boolean {
+  isBotMention(message: string, botUsername?: string, replyToBotMessage?: boolean): boolean {
     if (!message || message.trim().length === 0) {
       return false
+    }
+
+    // Если это ответ на сообщение бота, то это обращение к боту
+    if (replyToBotMessage) {
+      return true
     }
 
     const text = message.toLowerCase().trim()
@@ -174,7 +201,7 @@ export class AIChatService implements IService {
     message: string,
     username?: string,
     firstName?: string,
-    _isReply?: boolean,
+    userMessageId?: number,
   ): Promise<{
       success: boolean
       queued: boolean
@@ -206,9 +233,16 @@ export class AIChatService implements IService {
         contextId: chatId.toString(),
         timestamp: Date.now(),
         retryCount: 0,
+        userMessageId,
       }
 
       this.messageQueue.push(queueItem)
+
+      // Включаем typing для этого чата если еще не включен
+      if (!this.activeTypingChats.has(queueItem.contextId)) {
+        this.activeTypingChats.add(queueItem.contextId)
+        this.onTypingStart?.(queueItem.contextId)
+      }
 
       this.logger.d(`Added message to queue from ${firstName} (${userId})`)
 
@@ -248,18 +282,28 @@ export class AIChatService implements IService {
   /**
    * Получение или создание контекста чата
    */
-  private getOrCreateContext(contextId: string): ChatContext {
+  private async getOrCreateContext(contextId: string): Promise<ChatContext> {
     let context = this.chatContexts.get(contextId)
 
-    if (!context) {
-      const now = Date.now()
-      context = {
-        chatId: contextId,
-        messages: [],
-        lastActivity: now,
-        requestCount: 0,
+          if (!context) {
+        // Пытаемся загрузить из кэша
+        const cachedContext = await this.loadContextFromCache(contextId)
+        
+        if (cachedContext) {
+          // Восстанавливаем из кэша
+          context = cachedContext
+          this.chatContexts.set(contextId, context)
+        } else {
+        // Создаем новый контекст
+        const now = Date.now()
+        context = {
+          chatId: contextId,
+          messages: [],
+          lastActivity: now,
+          requestCount: 0,
+        }
+        this.chatContexts.set(contextId, context)
       }
-      this.chatContexts.set(contextId, context)
     }
 
     context.lastActivity = Date.now()
@@ -290,10 +334,30 @@ export class AIChatService implements IService {
       }
 
       // Планируем следующую обработку
-      setTimeout(processNext, 1000)
+      setTimeout(processNext, AI_CHAT_CONFIG.QUEUE_PROCESS_INTERVAL_MS)
     }
 
     processNext()
+  }
+
+  /**
+   * Запуск автосохранения контекстов
+   */
+  private startContextAutoSave(): void {
+    if (!this.redisService) {
+      this.logger.d("No Redis connection, skipping context auto-save")
+      return
+    }
+
+    this.contextSaveTimer = setInterval(async () => {
+      try {
+        await this.saveAllContextsToCache()
+      } catch (error) {
+        this.logger.e("Error in context auto-save:", error)
+      }
+    }, AI_CHAT_CONFIG.CONTEXT_SAVE_INTERVAL_MS)
+
+    this.logger.d("Context auto-save started")
   }
 
   /**
@@ -301,7 +365,7 @@ export class AIChatService implements IService {
    */
   private async processQueuedMessage(queueItem: MessageQueue): Promise<void> {
     try {
-      const context = this.getOrCreateContext(queueItem.contextId)
+      const context = await this.getOrCreateContext(queueItem.contextId)
 
       // Делаем запрос к AI с throttling
       await this.throttledAIRequest(queueItem)
@@ -315,16 +379,29 @@ export class AIChatService implements IService {
         queueItem.retryCount++
         this.messageQueue.push(queueItem)
         this.logger.w(`Retrying message ${queueItem.id}, attempt ${queueItem.retryCount}`)
+      } else {
+        // Все попытки исчерпаны - отправляем сообщение об ошибке
+        const errorMessage = getMessage("ai_service_error")
+        this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id, queueItem.userMessageId, true)
+
+        // Проверяем, есть ли еще сообщения для этого чата в очереди
+        const hasMoreMessages = this.messageQueue.some(item => item.contextId === queueItem.contextId)
+        if (!hasMoreMessages && this.activeTypingChats.has(queueItem.contextId)) {
+          // Больше нет сообщений для этого чата - выключаем typing
+          this.activeTypingChats.delete(queueItem.contextId)
+          this.onTypingStop?.(queueItem.contextId)
+        }
       }
     }
   }
 
   /**
-   * Выполнение AI запроса с ограничением скорости
+   * Выполнение AI запроса с адаптивным ограничением скорости
    */
   private async throttledAIRequest(queueItem: MessageQueue): Promise<void> {
     try {
-      this.onTypingStart?.(queueItem.contextId)
+      // 1. Ждем разрешения от token bucket (перед запросом)
+      await this.throttleManager.waitForRequestPermission(queueItem.contextId)
 
       const chatId = Number.parseInt(queueItem.contextId)
 
@@ -334,12 +411,11 @@ export class AIChatService implements IService {
         throw new Error("No API key available for this chat")
       }
 
-      // Получаем системный промпт и лимиты для чата
+      // Получаем системный промпт для чата
       const systemPrompt = await this.getSystemPromptForChat(chatId)
-      const chatLimits = await this.getChatLimits(chatId)
 
       // Получаем или создаем контекст для этого чата
-      const context = this.getOrCreateContext(queueItem.contextId)
+      const context = await this.getOrCreateContext(queueItem.contextId)
 
       // Добавляем сообщение пользователя в контекст
       context.messages.push({
@@ -347,6 +423,7 @@ export class AIChatService implements IService {
         content: queueItem.message,
         timestamp: Date.now(),
       })
+      
       // Подготавливаем историю разговора для Gemini (исключаем текущее сообщение)
       const conversationHistory: GeminiMessage[] = context.messages
         .slice(0, -1) // исключаем последнее сообщение (текущее)
@@ -355,10 +432,8 @@ export class AIChatService implements IService {
           parts: [{ text: msg.content }],
         }))
 
-      // Создаем адаптер (без API ключа в конструкторе)
+      // Создаем адаптер и делаем запрос к Gemini API
       const geminiAdapter = new GeminiAdapter()
-
-      // Делаем запрос к Gemini API, передавая API ключ, историю и системный промпт
       const response = await geminiAdapter.generateContent(
         apiKeyResult.key,
         queueItem.message,
@@ -379,33 +454,37 @@ export class AIChatService implements IService {
           context.messages = context.messages.slice(-AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES)
         }
 
-        // Отправляем ответ
-        this.onMessageResponse?.(queueItem.contextId, response, queueItem.id)
+        // Сохраняем обновленный контекст в кэш
+        await this.saveContextToCache(queueItem.contextId, context)
+
+        // 2. Применяем адаптивную задержку после получения ответа
+        await this.throttleManager.applyPostResponseDelay(queueItem.contextId, response.length)
+
+        // 3. Отправляем ответ
+        this.onMessageResponse?.(queueItem.contextId, response, queueItem.id, queueItem.userMessageId, false)
       } else {
         this.logger.w(`Empty AI response for message ${queueItem.id}`)
       }
 
-      // Ждем между запросами (используем настройки чата)
-      await new Promise(resolve => setTimeout(resolve, chatLimits.throttleDelay))
+      // Проверяем, есть ли еще сообщения для этого чата в очереди
+      const hasMoreMessages = this.messageQueue.some(item => item.contextId === queueItem.contextId)
+      if (!hasMoreMessages && this.activeTypingChats.has(queueItem.contextId)) {
+        // Больше нет сообщений для этого чата - выключаем typing
+        this.activeTypingChats.delete(queueItem.contextId)
+        this.onTypingStop?.(queueItem.contextId)
+      }
     } catch (error) {
       this.logger.e("AI request error:", error)
-
-      // Отправляем сообщение об ошибке пользователю
-      const errorMessage = getMessage("ai_service_error")
-      this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id)
-
       throw error
-    } finally {
-      this.onTypingStop?.(queueItem.contextId)
     }
   }
 
   /**
-   * Загрузка контекстов из БД
+   * Загрузка настроек чатов из БД
    */
-  private async loadChatContexts(): Promise<void> {
+  private async loadChatSettings(): Promise<void> {
     if (!this.chatRepository) {
-      this.logger.d("No database connection, skipping context loading")
+      this.logger.d("No database connection, skipping chat settings loading")
       return
     }
 
@@ -418,25 +497,65 @@ export class AIChatService implements IService {
       }
       this.logger.i(`Loaded ${activeChats.length} active AI chats`)
     } catch (error) {
-      this.logger.e("Error loading chat contexts:", error)
+      this.logger.e("Error loading chat settings:", error)
     }
   }
 
   /**
-   * Сохранение контекстов в БД (упрощенная версия)
+   * Загрузка контекста из кэша
    */
-  private async saveChatContexts(): Promise<void> {
-    if (!this.chatRepository) {
-      this.logger.d("No database connection, skipping context saving")
+  private async loadContextFromCache(contextId: string): Promise<ChatContext | null> {
+    if (!this.redisService) return null
+
+    try {
+      const cached = await this.redisService.get<ChatContext>(`ai:context:${contextId}`)
+      if (cached) {
+        this.logger.d(`Loaded context for chat ${contextId} from cache`)
+        return cached
+      }
+    } catch (error) {
+      this.logger.e(`Error loading context ${contextId} from cache:`, error)
+    }
+    
+    return null
+  }
+
+  /**
+   * Сохранение контекста в кэш
+   */
+  private async saveContextToCache(contextId: string, context: ChatContext): Promise<void> {
+    if (!this.redisService) return
+
+    try {
+      await this.redisService.set(
+        `ai:context:${contextId}`, 
+        context, 
+        AI_CHAT_CONFIG.CONTEXT_TTL_SECONDS
+      )
+      this.logger.d(`Saved context for chat ${contextId} to cache`)
+    } catch (error) {
+      this.logger.e(`Error saving context ${contextId} to cache:`, error)
+    }
+  }
+
+  /**
+   * Сохранение всех активных контекстов в кэш
+   */
+  private async saveAllContextsToCache(): Promise<void> {
+    if (!this.redisService) {
+      this.logger.d("No Redis connection, skipping context saving")
       return
     }
 
     try {
-      // В упрощенной схеме мы не сохраняем контексты в БД
-      // Только обновляем настройки чатов при необходимости
-      this.logger.d("Chat contexts saved (simplified)")
+      const savePromises = Array.from(this.chatContexts.entries()).map(([contextId, context]) =>
+        this.saveContextToCache(contextId, context)
+      )
+      
+      await Promise.all(savePromises)
+      this.logger.i(`Saved ${this.chatContexts.size} contexts to cache`)
     } catch (error) {
-      this.logger.e("Error saving chat contexts:", error)
+      this.logger.e("Error saving contexts to cache:", error)
     }
   }
 
@@ -458,9 +577,19 @@ export class AIChatService implements IService {
   }
 
   /**
+   * Получение статистики throttling для чата
+   */
+  getThrottleStats(contextId: string): {
+    bucketState: { tokens: number, capacity: number }
+    lastRequestTime: number
+  } {
+    return this.throttleManager.getChatStats(contextId)
+  }
+
+  /**
    * Колбэки для интеграции с TelegramBotService
    */
-  public onMessageResponse?: (contextId: string, response: string, messageId: number) => void
+  public onMessageResponse?: (contextId: string, response: string, messageId: number, userMessageId?: number, isError?: boolean) => void
   public onTypingStart?: (contextId: string) => void
   public onTypingStop?: (contextId: string) => void
 
@@ -536,17 +665,7 @@ export class AIChatService implements IService {
     return config?.aiEnabled ?? true
   }
 
-  /**
-   * Получить лимиты для чата
-   */
-  async getChatLimits(chatId: number): Promise<{
-    throttleDelay: number
-  }> {
-    const { config } = await this.getChatSettings(chatId)
-    return {
-      throttleDelay: config?.throttleDelay ?? this.throttleDelay,
-    }
-  }
+
 
   /**
    * Проверить является ли пользователь администратором чата

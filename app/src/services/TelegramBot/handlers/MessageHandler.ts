@@ -25,6 +25,9 @@ export class MessageHandler {
 
   // AI Chat Service
   private chatService?: AIChatService
+  
+  // Typing intervals для каждого чата
+  private typingIntervals: Map<string, NodeJS.Timeout> = new Map()
 
   constructor(
     logger: Logger,
@@ -91,10 +94,13 @@ export class MessageHandler {
 
       // Проверяем, является ли сообщение обращением к AI
       if (this.chatService) {
-        // Проверяем упоминание бота
-        const isMention = this.chatService.isBotMention(messageText, botInfo.username)
+        // Проверяем, является ли это ответом на сообщение бота
+        const isReplyToBotMessage = context.replyMessage?.from?.id === botInfo.id
 
-        // Если есть упоминание, обрабатываем через AI
+        // Проверяем упоминание бота или ответ на его сообщение
+        const isMention = this.chatService.isBotMention(messageText, botInfo.username, isReplyToBotMessage)
+
+        // Если есть упоминание или ответ на сообщение бота, обрабатываем через AI
         if (isMention) {
           return this.handleChat(context, messageText)
         }
@@ -118,18 +124,34 @@ export class MessageHandler {
   /**
    * Обработка AI ответов
    */
-  async handleAIResponse(contextId: string, response: string, _messageId: number): Promise<void> {
+  async handleAIResponse(contextId: string, response: string, _messageId: number, userMessageId?: number, isError?: boolean): Promise<void> {
     try {
       const chatId = Number.parseInt(contextId)
 
-      // Отправляем ответ AI в чат
-      await this.bot.sendMessage({
+      // Подготавливаем параметры сообщения
+      const messageParams: any = {
         chat_id: chatId,
         text: response,
         parse_mode: "Markdown",
-      })
+      }
 
-      this.logger.d(`✅ AI response sent to chat ${chatId} (${response.length} chars)`)
+      // Если есть ID сообщения пользователя, отвечаем на него
+      if (userMessageId) {
+        messageParams.reply_parameters = {
+          message_id: userMessageId,
+        }
+      }
+
+      // Отправляем ответ AI в чат
+      if (isError) {
+        // Для сообщений об ошибках используем автоудаление (20 секунд)
+        await this.bot.sendGroupMessage(messageParams, 10_000)
+      } else {
+        // Обычные ответы отправляем без автоудаления
+        await this.bot.sendMessage(messageParams)
+      }
+
+      this.logger.d(`✅ AI response sent to chat ${chatId} (${response.length} chars)${userMessageId ? ` as reply to ${userMessageId}` : ''}`)
     } catch (error) {
       this.logger.e("Error handling AI response:", error)
 
@@ -154,10 +176,43 @@ export class MessageHandler {
     try {
       const chatId = Number.parseInt(contextId)
 
-      // Отправляем typing индикатор
+      // Если уже есть интервал для этого чата, не создаем новый
+      if (this.typingIntervals.has(contextId)) {
+        return
+      }
+
+      // Отправляем typing индикатор сразу
       await this.bot.sendChatAction(chatId, "typing")
+
+      // Создаем интервал для повторной отправки каждые 5 секунд
+      const interval = setInterval(async () => {
+        try {
+          await this.bot.sendChatAction(chatId, "typing")
+        } catch (error) {
+          this.logger.e("Error sending typing action in interval:", error)
+        }
+      }, 10000)
+
+      this.typingIntervals.set(contextId, interval)
+      
     } catch (error) {
       this.logger.e("Error sending typing action:", error)
+    }
+  }
+
+  /**
+   * Остановка typing действия
+   */
+  async stopTypingAction(contextId: string): Promise<void> {
+    try {
+      const interval = this.typingIntervals.get(contextId)
+      if (interval) {
+        clearInterval(interval)
+        this.typingIntervals.delete(contextId)
+        this.logger.d(`Stopped typing for chat ${contextId}`)
+      }
+    } catch (error) {
+      this.logger.e("Error stopping typing action:", error)
     }
   }
 
@@ -175,6 +230,7 @@ export class MessageHandler {
       const chatId = context.chat.id
       const username = context.from.username
       const firstName = context.from.firstName
+      const userMessageId = context.id // ID сообщения пользователя для reply
 
       this.logger.d(`🤖 Processing AI message from ${firstName} (${userId}) in chat ${chatId}`)
 
@@ -185,6 +241,7 @@ export class MessageHandler {
         messageText,
         username,
         firstName,
+        userMessageId, // Передаем ID сообщения пользователя
       )
 
       if (!result.success) {

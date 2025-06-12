@@ -159,10 +159,12 @@ export class Application {
       const { AIChatService } = await import("../services/AIChatService/index.js")
       const aiService = await this.container.getAsync("aiService")
       const database = await this.container.getAsync("database") as any
+      const redis = await this.container.getAsync("redis") as any
 
       return new AIChatService(this.config, this.logger, {
         aiService,
         database,
+        redis,
       })
     })
 
