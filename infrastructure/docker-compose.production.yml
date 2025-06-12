@@ -158,6 +158,9 @@ services:
       - redis
     networks:
       - tgbot-network-prod
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
 volumes:
   postgres_data_prod:
