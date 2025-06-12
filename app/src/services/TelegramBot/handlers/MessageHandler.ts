@@ -5,7 +5,8 @@ import type { TelegramBot, TelegramBotSettings, TelegramMessageContext } from ".
 import type { SpamDetector } from "../features/SpamDetector.js"
 import type { UserManager } from "../features/UserManager.js"
 import type { CommandHandler } from "./CommandHandler.js"
-import type { ChatAiRepository } from "../../../repository/ChatAiRepository.js"
+import type { ChatRepository } from "../../../repository/ChatRepository.js"
+import { getMessage } from "../utils/Messages.js"
 import { MessageFormatter } from "../utils/MessageFormatter.js"
 
 /**
@@ -19,7 +20,7 @@ export class MessageHandler {
   private spamDetector?: SpamDetector
   private userManager: UserManager
   private commandHandler?: CommandHandler
-  private chatRepository: ChatAiRepository
+  private chatRepository: ChatRepository
   private isProcessing = false
 
   // AI Chat Service
@@ -31,7 +32,7 @@ export class MessageHandler {
     bot: TelegramBot,
     settings: TelegramBotSettings,
     userManager: UserManager,
-    chatRepository: ChatAiRepository,
+    chatRepository: ChatRepository,
     spamDetector?: SpamDetector,
     commandHandler?: CommandHandler,
     chatService?: AIChatService,
@@ -85,18 +86,8 @@ export class MessageHandler {
       // Обновляем счетчик пользователя
       await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
 
-      // Обработка спама
-      if (this.spamDetector) {
-        const userCounter = await this.userManager.getUserOrCreate(from.id, from.username, from.firstName)
-        const spamResult = await this.spamDetector.checkMessage(from.id, messageText, userCounter)
-        if (spamResult.isSpam) {
-          await this.spamDetector.handleSpamMessage(context, spamResult.reason, userCounter)
-          return
-        }
-      }
-
       // Получаем информацию о боте для проверки упоминаний
-      const botInfo = await this.bot.api.getMe()
+      const botInfo = await this.bot.getMe()
 
       // Проверяем, является ли сообщение обращением к AI
       if (this.chatService) {
@@ -106,6 +97,15 @@ export class MessageHandler {
         // Если есть упоминание, обрабатываем через AI
         if (isMention) {
           return this.handleChat(context, messageText)
+        }
+      }
+
+      // Обработка спама
+      if (this.spamDetector) {
+        const userCounter = await this.userManager.getUserOrCreate(from.id, from.username, from.firstName)
+        const spamResult = await this.spamDetector.checkMessage(from.id, messageText, userCounter)
+        if (spamResult.isSpam) {
+          await this.spamDetector.handleSpamMessage(context, spamResult.reason, userCounter)
         }
       }
     } catch (error) {
@@ -123,22 +123,23 @@ export class MessageHandler {
       const chatId = Number.parseInt(contextId)
 
       // Отправляем ответ AI в чат
-      await this.bot.api.sendMessage({
+      await this.bot.sendMessage({
         chat_id: chatId,
         text: response,
         parse_mode: "Markdown",
       })
 
-      this.logger.i(`✅ AI response sent to chat ${chatId}: ${response.substring(0, 100)}${response.length > 100 ? "..." : ""}`)
+      this.logger.d(`✅ AI response sent to chat ${chatId} (${response.length} chars)`)
     } catch (error) {
       this.logger.e("Error handling AI response:", error)
 
       // Попробуем отправить сообщение об ошибке
       try {
         const chatId = Number.parseInt(contextId)
-        await this.bot.api.sendMessage({
+        const errorMessage = getMessage("ai_response_error")
+        await this.bot.sendGroupMessage({
           chat_id: chatId,
-          text: "❌ Произошла ошибка при отправке ответа AI",
+          text: errorMessage,
         })
       } catch (sendError) {
         this.logger.e("Failed to send error message:", sendError)
@@ -154,12 +155,7 @@ export class MessageHandler {
       const chatId = Number.parseInt(contextId)
 
       // Отправляем typing индикатор
-      await this.bot.api.sendChatAction({
-        chat_id: chatId,
-        action: "typing",
-      })
-
-      this.logger.d(`🎭 Typing action sent for context ${contextId}`)
+      await this.bot.sendChatAction(chatId, "typing")
     } catch (error) {
       this.logger.e("Error sending typing action:", error)
     }
@@ -180,7 +176,7 @@ export class MessageHandler {
       const username = context.from.username
       const firstName = context.from.firstName
 
-      this.logger.i(`🤖 Processing AI message from ${firstName} (${userId}) in chat ${chatId}: "${messageText.substring(0, 100)}${messageText.length > 100 ? "..." : ""}"`)
+      this.logger.d(`🤖 Processing AI message from ${firstName} (${userId}) in chat ${chatId}`)
 
       // Обрабатываем сообщение через AI Chat Service
       const result = await this.chatService.processMessage(
@@ -191,9 +187,7 @@ export class MessageHandler {
         firstName,
       )
 
-      if (result.success) {
-        this.logger.i(`✅ Message queued for AI processing (position: ${result.queuePosition})`)
-      } else {
+      if (!result.success) {
         this.logger.w(`❌ Failed to queue AI message: ${result.reason}`)
       }
     } catch (error) {
@@ -236,14 +230,21 @@ export class MessageHandler {
         await context.delete()
       }
 
-      const escapedReason = MessageFormatter.escapeMarkdownV2(restriction.reason || "Не указана")
+      const escapedReason = MessageFormatter.escapeMarkdownV2(restriction.reason || getMessage("reason_not_specified"))
       const escapedAdminUsername = this.config.ADMIN_USERNAME
         ? MessageFormatter.escapeMarkdownV2(this.config.ADMIN_USERNAME)
         : ""
 
-      const restrictionText = `Вы заблокированы\\. \n\nПричина: ${escapedReason}\n\n${escapedAdminUsername}`
+      const restrictionText = getMessage("user_restricted", {
+        reason: escapedReason,
+        admin: escapedAdminUsername,
+      })
 
-      await context.reply(restrictionText, { parse_mode: "MarkdownV2" })
+      await this.bot.sendGroupMessage({
+        chat_id: context.chat.id,
+        text: restrictionText,
+        parse_mode: "MarkdownV2",
+      })
     } catch (error) {
       this.logger.e("Error handling restricted user:", error)
     }

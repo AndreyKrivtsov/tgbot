@@ -10,6 +10,7 @@ import type {
   TelegramNewMembersContext,
   UserMessageCounter,
 } from "./types/index.js"
+import { GramioBot } from "./core/GramioBot.js"
 
 // Утилиты
 import { SettingsManager } from "./utils/SettingsManager.js"
@@ -68,10 +69,7 @@ export class TelegramBotService implements IService {
     // Инициализируем менеджер пользователей с Redis
     if (!dependencies.redisService) {
       this.logger.e("❌ RedisService is required for UserManager")
-      this.logger.w("💡 To fix this:")
-      this.logger.w("   1. Ensure Redis server is running (docker run -d -p 6379:6379 redis:7-alpine)")
-      this.logger.w("   2. Check REDIS_URL in .env file")
-      this.logger.w("   3. Restart the application")
+      this.logger.w("💡 Start Redis server and check REDIS_URL in .env file")
       throw new Error("RedisService is required for UserManager")
     }
     this.userManager = new UserManager(logger, dependencies.redisService)
@@ -86,11 +84,11 @@ export class TelegramBotService implements IService {
     try {
       // Проверяем наличие GramIO
       try {
-        const { Bot } = await import("gramio")
+        await import("gramio")
         this.hasGramIO = true
 
-        // Создаем бота
-        this.bot = new Bot(this.config.BOT_TOKEN)
+        // Создаем бота через обертку
+        this.bot = new GramioBot(this.config.BOT_TOKEN, this.logger)
 
         // Инициализируем все модули
         await this.initializeModules()
@@ -98,7 +96,7 @@ export class TelegramBotService implements IService {
         // Настраиваем обработчики событий
         this.setupEventHandlers()
 
-        this.logger.i("✅ Telegram bot initialized with modular architecture")
+        this.logger.i("✅ Telegram bot initialized successfully")
       } catch {
         this.logger.w("⚠️ GramIO not available. Bot service disabled.")
       }
@@ -140,11 +138,11 @@ export class TelegramBotService implements IService {
       this.dependencies.antiSpamService,
     )
 
-    // Проверяем наличие ChatAiRepository
-    if (!this.dependencies.chatRepository) {
-      this.logger.e("❌ ChatAiRepository is required for TelegramBot handlers")
-      throw new Error("ChatAiRepository is required")
-    }
+            // Проверяем наличие ChatRepository
+        if (!this.dependencies.chatRepository) {
+          this.logger.e("❌ ChatRepository is required for TelegramBot handlers")
+          throw new Error("ChatRepository is required")
+        }
 
     // Инициализируем обработчики
     this.commandHandler = new CommandHandler(
@@ -181,10 +179,9 @@ export class TelegramBotService implements IService {
 
     this.callbackHandler = new CallbackHandler(
       this.logger,
+      this.bot,
       this.captchaManager,
     )
-
-    this.logger.i("✅ All modules initialized")
   }
 
   /**
@@ -193,13 +190,17 @@ export class TelegramBotService implements IService {
   async start(): Promise<void> {
     this.logger.i("🚀 Starting TelegramBot service...")
 
-    // Проверяем зависимости
+    // Проверяем зависимости и собираем отсутствующие
+    const missingServices = []
     if (!this.dependencies.captchaService) {
-      this.logger.w("⚠️ CaptchaService is not available - captcha functionality will be disabled")
+      missingServices.push("CaptchaService")
+    }
+    if (!this.dependencies.antiSpamService) {
+      missingServices.push("AntiSpamService")
     }
 
-    if (!this.dependencies.antiSpamService) {
-      this.logger.w("⚠️ AntiSpamService is not available - spam protection disabled")
+    if (missingServices.length > 0) {
+      this.logger.w(`⚠️ Optional services not available: ${missingServices.join(", ")}. Some features will be disabled.`)
     }
 
     if (!this.hasGramIO || !this.bot) {
@@ -220,7 +221,7 @@ export class TelegramBotService implements IService {
       this.isRunning = true
 
       // Получаем информацию о боте
-      const botInfo = await this.bot.api.getMe()
+      const botInfo = await this.bot.getMe()
 
       // Кешируем информацию о боте в Redis
       if (this.dependencies.redisService) {
@@ -229,7 +230,6 @@ export class TelegramBotService implements IService {
           username: botInfo.username,
           first_name: botInfo.first_name,
         })
-        this.logger.i(`📝 Bot info cached: ID=${botInfo.id}, Username=@${botInfo.username}`)
       }
 
       // Запускаем автоматическую очистку старых записей
@@ -315,10 +315,8 @@ export class TelegramBotService implements IService {
 
     // Обработка callback запросов
     this.bot.on("callback_query", (context: any) => {
-      this.callbackHandler!.handleCallback(context)
+      this.callbackHandler!.handleCallbackQuery(context)
     })
-
-    this.logger.i("✅ Event handlers configured")
   }
 
   /**
@@ -448,7 +446,6 @@ export class TelegramBotService implements IService {
    */
   async getBotId(): Promise<number | null> {
     if (!this.dependencies.redisService) {
-      this.logger.w("Redis service not available for bot ID lookup")
       return null
     }
     return await this.dependencies.redisService.getBotId()
@@ -459,7 +456,6 @@ export class TelegramBotService implements IService {
    */
   async getBotInfo(): Promise<{ id: number, username?: string, first_name: string } | null> {
     if (!this.dependencies.redisService) {
-      this.logger.w("Redis service not available for bot info lookup")
       return null
     }
     return await this.dependencies.redisService.getBotInfo()

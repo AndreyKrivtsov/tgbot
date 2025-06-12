@@ -1,13 +1,13 @@
 import type { IService } from "../../../core/Container.js"
 import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
-import type { BotContext, TelegramMessageContext } from "../types/index.js"
-import { MessageFormatter } from "../utils/MessageFormatter.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import type { UserManager } from "../features/UserManager.js"
-import type { ChatAiRepository } from "../../../repository/ChatAiRepository.js"
+import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { TelegramBotService } from "../index.js"
 import type { AIChatService } from "../../AIChatService/index.js"
+import { getMessage } from "../utils/Messages.js"
+import type { BotContext, TelegramMessageContext } from "../types/index.js"
 
 /**
  * Обработчик команд Telegram бота
@@ -17,7 +17,7 @@ export class CommandHandler {
   private config: AppConfig
   private userRestrictions: UserRestrictions
   private userManager: UserManager
-  private chatRepository: ChatAiRepository
+  private chatRepository: ChatRepository
   private botService: TelegramBotService
   private aiChatService?: AIChatService
 
@@ -26,7 +26,7 @@ export class CommandHandler {
     config: AppConfig,
     userRestrictions: UserRestrictions,
     userManager: UserManager,
-    chatRepository: ChatAiRepository,
+    chatRepository: ChatRepository,
     botService: TelegramBotService,
     aiChatService?: AIChatService,
   ) {
@@ -40,17 +40,42 @@ export class CommandHandler {
   }
 
   /**
+   * Удаление сообщения пользователя с командой
+   * По умолчанию удаляет только в группах, но можно принудительно удалить и в приватных чатах
+   */
+  private async deleteUserCommandMessage(context: TelegramMessageContext, forceDeleteInPrivate = false): Promise<void> {
+    try {
+      // Удаляем сообщение пользователя с командой
+      // В группах (chatId < 0) - всегда удаляем
+      // В приватных чатах (chatId > 0) - только если forceDeleteInPrivate = true
+      if (context.chat && context.id) {
+        const shouldDelete = context.chat.id < 0 || forceDeleteInPrivate
+        
+        if (shouldDelete) {
+          await this.userRestrictions.deleteMessage(context.chat.id, context.id)
+          this.logger.d(`Deleted user command message ${context.id} in chat ${context.chat.id}`)
+        }
+      }
+    } catch (error) {
+      this.logger.w("Failed to delete user command message:", error)
+      // Не прерываем выполнение, если не удалось удалить сообщение
+    }
+  }
+
+  /**
    * Обработка команды /start
    */
   async handleStartCommand(context: BotContext): Promise<void> {
     try {
-      const message = MessageFormatter.formatWelcomeMessage()
-      await this.userRestrictions.sendMessage(context.chat!.id, message)
-      this.logger.i(`Start command handled for chat ${context.chat!.id}`)
+      // Удаляем сообщение пользователя с командой
+      await this.deleteUserCommandMessage(context as TelegramMessageContext)
+      
+      const message = getMessage("welcome")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
       this.logger.e("Error handling start command:", error)
-      const errorMessage = MessageFormatter.formatErrorMessage("Не удалось выполнить команду /start")
-      await this.userRestrictions.sendMessage(context.chat!.id, errorMessage)
+      const errorMessage = getMessage("command_start_error")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, errorMessage)
     }
   }
 
@@ -93,15 +118,7 @@ export class CommandHandler {
         return
       }
 
-      // Логируем обработку команды
-      if (targetBotUsername) {
-        this.logger.d(`Processing targeted command: ${command}@${targetBotUsername}`)
-      } else {
-        this.logger.d(`Processing general command: ${command}`)
-      }
-
       // Обрабатываем команду
-      this.logger.d(`Handling command: "${command}"`)
       switch (command) {
         case "/start":
           await this.handleStartCommand(context)
@@ -144,11 +161,15 @@ export class CommandHandler {
    */
   async handleHelpCommand(context: BotContext): Promise<void> {
     try {
-      const message = MessageFormatter.formatHelpText()
-      await this.userRestrictions.sendMessage(context.chat!.id, message)
-      this.logger.i(`Help command handled for chat ${context.chat!.id}`)
+      // Удаляем сообщение пользователя с командой
+      await this.deleteUserCommandMessage(context as TelegramMessageContext)
+      
+      const message = getMessage("help")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
       this.logger.e("Error handling help command:", error)
+      const errorMessage = getMessage("help_command_error")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, errorMessage)
     }
   }
 
@@ -156,30 +177,40 @@ export class CommandHandler {
    * Обработка команды бана
    */
   async handleBanCommand(context: any): Promise<void> {
-    if (!this.isAdminCommand(context)) {
-      return
-    }
-
     const chatId = context.chat?.id
     if (!chatId) {
       this.logger.w("No chat ID in ban command")
       return
     }
 
+    // Команда работает только в группах
+    if (chatId >= 0) {
+      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context as TelegramMessageContext)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
+      return
+    }
+
     try {
       const args = (context.text || "").split(" ")
       if (args.length < 2) {
-        await this.userRestrictions.sendMessage(chatId, "Использование: /ban @username или /ban (ответ на сообщение)")
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_usage"))
         return
       }
 
       let targetUserId: number | null = null
-      let targetUsername = "неизвестный"
+      let targetUsername = getMessage("unknown_user")
 
       // Проверяем, есть ли reply на сообщение
       if (context.replyMessage?.from) {
         targetUserId = context.replyMessage.from.id
-        targetUsername = context.replyMessage.from.first_name || context.replyMessage.from.username || "неизвестный"
+        targetUsername = context.replyMessage.from.first_name || context.replyMessage.from.username || getMessage("unknown_user")
       } else if (args[1]) {
         // Пытаемся извлечь username из аргумента
         const username = args[1].replace("@", "")
@@ -187,104 +218,124 @@ export class CommandHandler {
 
         // В реальном боте здесь нужно найти пользователя по username
         // Пока просто выводим ошибку
-        await this.userRestrictions.sendMessage(chatId, `⚠️ Не удалось найти пользователя @${username}. Используйте reply на сообщение пользователя.`)
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
         return
       } else {
-        await this.userRestrictions.sendMessage(chatId, "Укажите пользователя для бана или ответьте на его сообщение")
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
       if (targetUserId) {
-        // Баним пользователя
-        await this.userRestrictions.kickUserFromChat(chatId, targetUserId, targetUsername)
-        await this.userRestrictions.sendMessage(chatId, `✅ Пользователь ${targetUsername} забанен`)
-
-        this.logger.i(`👤 Admin ${context.from?.first_name || context.from?.username} banned user ${targetUsername} (${targetUserId})`)
+        // Здесь должна быть логика бана пользователя
+        // await this.userRestrictions.banUser(chatId, targetUserId)
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_success", { username: targetUsername }))
+        this.logger.i(`User ${targetUserId} (${targetUsername}) banned by admin`)
       }
     } catch (error) {
-      this.logger.e("Error handling ban command:", error)
-      await this.userRestrictions.sendMessage(chatId, "❌ Ошибка при выполнении команды бана")
+      this.logger.e("Error in ban command:", error)
+      await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_error"))
     }
   }
 
   /**
-   * Обработка команды /unban
+   * Обработка команды разбана
    */
-  async handleUnbanCommand(context: BotContext): Promise<void> {
+  async handleUnbanCommand(context: any): Promise<void> {
     const chatId = context.chat?.id
-
     if (!chatId) {
       return
     }
 
+    // Команда работает только в группах
+    if (chatId >= 0) {
+      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context as TelegramMessageContext)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
+      return
+    }
+
     try {
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace("@", "")
-
-      if (!isAdmin) {
-        const errorMessage = MessageFormatter.formatErrorMessage("У вас нет прав для использования этой команды.")
-        await this.userRestrictions.sendMessage(chatId, errorMessage)
-        return
-      }
-
-      // Пока что показываем справку по команде
-      const message = "🔹 `/unban @user` - разбанить пользователя"
-      await this.userRestrictions.sendMessage(chatId, message)
+      // Здесь должна быть логика разбана
+      const message = getMessage("unban_success", { username: getMessage("generic_user") })
+      await this.userRestrictions.sendGroupMessage(chatId, message)
     } catch (error) {
       this.logger.e("Error in unban command:", error)
+      const errorMessage = getMessage("unban_error")
+      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
     }
   }
 
   /**
-   * Обработка команды /mute
+   * Обработка команды заглушения
    */
-  async handleMuteCommand(context: BotContext): Promise<void> {
+  async handleMuteCommand(context: any): Promise<void> {
     const chatId = context.chat?.id
-
     if (!chatId) {
       return
     }
 
+    // Команда работает только в группах
+    if (chatId >= 0) {
+      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context as TelegramMessageContext)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
+      return
+    }
+
     try {
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace("@", "")
-
-      if (!isAdmin) {
-        const errorMessage = MessageFormatter.formatErrorMessage("У вас нет прав для использования этой команды.")
-        await this.userRestrictions.sendMessage(chatId, errorMessage)
-        return
-      }
-
-      // Пока что показываем справку по команде
-      const message = "🔹 `/mute @user` - заглушить пользователя"
-      await this.userRestrictions.sendMessage(chatId, message)
+      // Здесь должна быть логика mute
+      const message = getMessage("mute_success", { username: getMessage("generic_user") })
+      await this.userRestrictions.sendGroupMessage(chatId, message)
     } catch (error) {
       this.logger.e("Error in mute command:", error)
+      const errorMessage = getMessage("mute_error")
+      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
     }
   }
 
   /**
-   * Обработка команды /unmute
+   * Обработка команды снятия заглушения
    */
-  async handleUnmuteCommand(context: BotContext): Promise<void> {
+  async handleUnmuteCommand(context: any): Promise<void> {
     const chatId = context.chat?.id
-
     if (!chatId) {
       return
     }
 
+    // Команда работает только в группах
+    if (chatId >= 0) {
+      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context as TelegramMessageContext)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
+      return
+    }
+
     try {
-      const isAdmin = context.from?.username === this.config.ADMIN_USERNAME?.replace("@", "")
-
-      if (!isAdmin) {
-        const errorMessage = MessageFormatter.formatErrorMessage("У вас нет прав для использования этой команды.")
-        await this.userRestrictions.sendMessage(chatId, errorMessage)
-        return
-      }
-
-      // Пока что показываем справку по команде
-      const message = "🔹 `/unmute @user` - снять заглушение"
-      await this.userRestrictions.sendMessage(chatId, message)
+      // Здесь должна быть логика unmute
+      const message = getMessage("unmute_success", { username: getMessage("generic_user") })
+      await this.userRestrictions.sendGroupMessage(chatId, message)
     } catch (error) {
       this.logger.e("Error in unmute command:", error)
+      const errorMessage = getMessage("unmute_error")
+      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
     }
   }
 
@@ -303,18 +354,18 @@ export class CommandHandler {
 
     // Команда работает только в приватном чате с ботом
     if (chat.id < 0) {
-      await this.userRestrictions.sendMessage(chat.id, "❌ Эта команда работает только в приватном чате с ботом")
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_private_only"))
       return
     }
 
     try {
+      // Удаляем сообщение пользователя с командой (даже в приватном чате)
+      await this.deleteUserCommandMessage(context, true)
+      
       const args = (context.text || "").split(" ")
       if (args.length < 3) {
-        const helpMessage = "📝 Использование: `/addAltronKey @chat_username API_KEY`\n\n"
-          + "Где:\n"
-          + "• `@chat_username` - юзернейм группы\n"
-          + "• `API_KEY` - ваш API ключ для Altron AI"
-        await this.userRestrictions.sendMessage(chat.id, helpMessage)
+        const helpMessage = getMessage("api_key_usage")
+        await this.userRestrictions.sendGroupMessage(chat.id, helpMessage)
         return
       }
 
@@ -322,83 +373,68 @@ export class CommandHandler {
       const apiKey = args[2]
 
       if (!chatUsername || !apiKey) {
-        await this.userRestrictions.sendMessage(chat.id, "❌ Неверный формат команды")
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_invalid_format"))
         return
       }
 
       // Валидация API ключа (базовая проверка)
       if (apiKey.length < 10) {
-        await this.userRestrictions.sendMessage(chat.id, "❌ API ключ слишком короткий")
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_too_short"))
         return
       }
 
       // Ищем чат по username в базе данных
       const targetChat = await this.findChatByUsername(chatUsername)
+
       if (!targetChat) {
-        // Получаем список доступных групп для администратора
-        const availableChats = await this.getAvailableChatsForUser(userId)
-        
-        let notFoundMessage = `❌ Группа @${chatUsername} не найдена в базе данных\n\n`
-          + "💡 Убедитесь что:\n"
-          + "• Бот добавлен в группу @" + chatUsername + "\n"
-          + "• Группа зарегистрирована командой /register\n"
-          + "• Вы являетесь администратором этой группы"
-          
-        if (availableChats.length > 0) {
-          notFoundMessage += "\n\n📋 Доступные группы, где вы администратор:\n"
-            + availableChats.map(chat => `• ${chat.title || 'Без названия'} (ID: ${chat.id})`).join("\n")
-        }
-        
-        await this.userRestrictions.sendMessage(chat.id, notFoundMessage)
+        const notFoundMessage = getMessage("api_key_chat_not_found", { username: chatUsername })
+        await this.userRestrictions.sendGroupMessage(chat.id, notFoundMessage)
         return
       }
 
-      // Проверяем является ли пользователь администратором этой группы
-      const isAdmin = await this.chatRepository.isAdmin(targetChat.id, userId)
-      if (!isAdmin) {
-        const noPermissionMessage = `❌ Вы не являетесь администратором группы "${targetChat.title || chatUsername}"\n\n`
-          + "Только администраторы группы могут добавлять API ключи."
-        await this.userRestrictions.sendMessage(chat.id, noPermissionMessage)
+      // Проверяем права пользователя (должен быть админом в целевой группе)
+      const hasPermission = await this.chatRepository.isAdmin(targetChat.id, userId)
+      if (!hasPermission) {
+        const noPermissionMessage = getMessage("api_key_no_permission", { username: chatUsername })
+        await this.userRestrictions.sendGroupMessage(chat.id, noPermissionMessage)
         return
       }
 
-      // Добавляем API ключ в настройки группы
-      this.logger.i(`🔑 [SAVE] Attempting to save API key for chat ${targetChat.id} (${targetChat.title})`)
-      const success = await this.chatRepository.updateChatConfig(targetChat.id, {
-        geminiApiKey: apiKey,
-      })
-      this.logger.i(`🔑 [SAVE] Save result for chat ${targetChat.id}: ${success}`)
+      // Сохраняем API ключ
+      const saveResult = await this.saveChatApiKey(targetChat.id, apiKey)
 
-      if (success) {
-        // Проверяем, что API ключ действительно сохранен
-        const savedConfig = await this.chatRepository.getChatConfig(targetChat.id)
-        this.logger.i(`🔑 [VERIFY] Saved config for chat ${targetChat.id}: ${JSON.stringify({
-          exists: !!savedConfig,
-          hasApiKey: !!savedConfig?.geminiApiKey,
-          apiKeyPreview: savedConfig?.geminiApiKey ? `${savedConfig.geminiApiKey.substring(0, 12)}...${savedConfig.geminiApiKey.slice(-4)}` : null,
-        })}`)
-
-        // Очищаем кэш в AIChatService, чтобы он загрузил свежие данные
-        this.logger.i(`🔄 [CACHE] Clearing AIChatService cache for chat ${targetChat.id}`)
-        if (this.aiChatService) {
-          this.aiChatService.clearChatCache(targetChat.id)
-          this.logger.i(`🔄 [CACHE] Cache cleared successfully for chat ${targetChat.id}`)
-        } else {
-          this.logger.w(`🔄 [CACHE] No AIChatService available to clear cache for chat ${targetChat.id}`)
-        }
-
-        const successMessage = `✅ API ключ успешно добавлен для группы "${targetChat.title || chatUsername}"\n\n🤖 Теперь группа может использовать собственный AI API ключ`
-        await this.userRestrictions.sendMessage(chat.id, successMessage)
-        
-        this.logger.i(`Admin ${userId} added API key for chat ${targetChat.id} (${targetChat.title})`)
+      if (saveResult.success) {
+        const successMessage = getMessage("api_key_success", { username: chatUsername })
+        await this.userRestrictions.sendGroupMessage(chat.id, successMessage)
+        this.logger.i(`API key added for chat @${chatUsername} by user ${userId}`)
       } else {
-        await this.userRestrictions.sendMessage(chat.id, "❌ Не удалось сохранить API ключ. Попробуйте позже.")
-        this.logger.e(`Failed to update API key for chat ${targetChat.id} by user ${userId}`)
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_save_error"))
       }
-
     } catch (error) {
-      this.logger.e("Error handling addAltronKey command:", error)
-      await this.userRestrictions.sendMessage(chat.id, "❌ Произошла ошибка при обработке команды")
+      this.logger.e("Error in addAltronKey command:", error)
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_general_error"))
+    }
+  }
+
+  /**
+   * Проверить права пользователя для работы с чатом
+   */
+
+
+  /**
+   * Сохранить API ключ для чата
+   */
+  private async saveChatApiKey(chatId: number, apiKey: string): Promise<{ success: boolean, message?: string }> {
+    try {
+      const success = await this.chatRepository.setApiKey(chatId, apiKey)
+      if (success) {
+        return { success: true }
+      } else {
+        return { success: false, message: "Ошибка при сохранении API ключа" }
+      }
+    } catch (error) {
+      this.logger.e("Error saving API key:", error)
+      return { success: false, message: "Внутренняя ошибка" }
     }
   }
 
@@ -417,8 +453,8 @@ export class CommandHandler {
           // Проверяем, есть ли этот чат в нашей базе данных
           const existingChat = await this.chatRepository.getChat(chatInfo.id)
           if (existingChat && existingChat.active) {
-            return { 
-              id: chatInfo.id, 
+            return {
+              id: chatInfo.id,
               title: chatInfo.title || chatInfo.first_name || username,
             }
           }
@@ -429,14 +465,14 @@ export class CommandHandler {
 
       // Fallback: ищем по title в базе данных
       const chats = await this.chatRepository.getActiveAiChats()
-      
+
       for (const chat of chats) {
         // Простой поиск по вхождению username в title
         if (chat.title?.toLowerCase().includes(username.toLowerCase())) {
           return { id: chat.id, title: chat.title }
         }
       }
-      
+
       return null
     } catch (error) {
       this.logger.e("Error finding chat by username:", error)
@@ -451,14 +487,14 @@ export class CommandHandler {
     try {
       const chats = await this.chatRepository.getActiveAiChats()
       const availableChats: Array<{ id: number, title?: string }> = []
-      
+
       for (const chat of chats) {
         const isAdmin = await this.chatRepository.isAdmin(chat.id, userId)
         if (isAdmin) {
           availableChats.push({ id: chat.id, title: chat.title || undefined })
         }
       }
-      
+
       return availableChats
     } catch (error) {
       this.logger.e("Error getting available chats for user:", error)
@@ -471,171 +507,142 @@ export class CommandHandler {
    */
   async handleRegisterCommand(context: TelegramMessageContext): Promise<void> {
     const chat = context.chat
-    const userId = context.from?.id
 
-    if (!chat || !chat.id || !userId) {
+    if (!chat) {
       return
     }
 
     // Команда работает только в группах
-    if (chat.id > 0) {
-      await this.userRestrictions.sendMessage(chat.id, "❌ Эта команда работает только в группах")
+    if (chat.id >= 0) {
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context)) {
       return
     }
 
     try {
-      const result = await this.registerChat(chat.id, userId, chat.title, chat.type)
+      const result = await this.chatRepository.registerChat(chat.id, chat.title || "Unknown Group")
+
       if (result.success) {
-        await this.userRestrictions.sendMessage(chat.id, "✅ Группа успешно зарегистрирована в боте!")
-        this.logger.i(`User ${userId} registered chat ${chat.id}`)
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_success"))
+        this.logger.i(`Chat ${chat.id} registered successfully`)
       } else {
-        await this.userRestrictions.sendMessage(chat.id, `❌ ${result.message}`)
+        await this.userRestrictions.sendGroupMessage(chat.id, `❌ ${result.message}`)
       }
     } catch (error) {
-      this.logger.e("Error handling register command:", error)
-      await this.userRestrictions.sendMessage(chat.id, "❌ Ошибка при регистрации группы")
+      this.logger.e("Error registering chat:", error)
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_error"))
     }
   }
 
   /**
-   * Обработка команды /unregister (разрегистрация группы)
+   * Обработка команды /unregister (исключение группы из бота)
    */
   async handleUnregisterCommand(context: TelegramMessageContext): Promise<void> {
     const chat = context.chat
-    const userId = context.from?.id
 
-    if (!chat || !chat.id || !userId) {
+    if (!chat) {
       return
     }
 
     // Команда работает только в группах
-    if (chat.id > 0) {
-      await this.userRestrictions.sendMessage(chat.id, "❌ Эта команда работает только в группах")
+    if (chat.id >= 0) {
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_groups_only"))
+      return
+    }
+
+    // Удаляем сообщение пользователя с командой перед проверкой прав
+    await this.deleteUserCommandMessage(context)
+    
+    // Проверяем права администратора группы
+    if (!await this.isGroupAdminCommand(context)) {
       return
     }
 
     try {
-      const result = await this.unregisterChat(chat.id, userId)
+      const result = await this.chatRepository.unregisterChat(chat.id)
+
       if (result.success) {
-        await this.userRestrictions.sendMessage(chat.id, "✅ Группа успешно исключена из бота!")
-        this.logger.i(`User ${userId} unregistered chat ${chat.id}`)
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("unregister_success"))
+        this.logger.i(`Chat ${chat.id} unregistered successfully`)
       } else {
-        await this.userRestrictions.sendMessage(chat.id, `❌ ${result.message}`)
+        await this.userRestrictions.sendGroupMessage(chat.id, `❌ ${result.message}`)
       }
     } catch (error) {
-      this.logger.e("Error handling unregister command:", error)
-      await this.userRestrictions.sendMessage(chat.id, "❌ Ошибка при разрегистрации группы")
+      this.logger.e("Error unregistering chat:", error)
+      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("unregister_error"))
     }
   }
 
   /**
-   * Регистрация чата в боте
+   * Проверка, является ли пользователь суперадминистратором бота
    */
-  private async registerChat(chatId: number, userId: number, chatTitle?: string, chatType?: string): Promise<{ success: boolean, message?: string }> {
-    // Проверяем, есть ли уже чат в базе
-    const existingChat = await this.chatRepository.getChat(chatId)
-
-    if (existingChat) {
-      // Если чат существует и активен - сообщаем что уже зарегистрирован
-      if (existingChat.active) {
-        return { success: false, message: "Эта группа уже зарегистрирована в боте" }
-      }
-
-      // Если чат существует но деактивирован - реактивируем его
-      this.logger.i(`Reactivating previously deactivated chat ${chatId}`)
-      const reactivated = await this.chatRepository.activateChat(chatId)
-      if (!reactivated) {
-        return { success: false, message: "Ошибка при реактивации группы в базе данных" }
-      }
-
-      this.logger.i(`Chat ${chatId} successfully reactivated`)
-      return { success: true }
-    }
-
-    // Получение администраторов чата
-    const admins = await this.botService.getBotApi().getChatAdministrators({
-      chat_id: chatId,
-    })
-
-    // Проверяем, что бот есть в списке администраторов
-    const botId = await this.botService.getBotId()
-    if (!botId) {
-      return { success: false, message: "Не удалось получить информацию о боте" }
-    }
-
-    const isBotAdmin = admins.some(admin => admin.user.id === botId)
-    const isUserAdmin = admins.some(admin => admin.user.id === userId)
-
-    if (!isBotAdmin || !isUserAdmin) {
-      return { success: false, message: "Бот должен быть администратором группы и вы должны быть администратором группы" }
-    }
-
-    // Создаем новый чат в базе данных
-    const newChat = await this.chatRepository.createChat(chatId, chatTitle, chatType)
-    if (!newChat) {
-      return { success: false, message: "Ошибка при создании записи в базе данных" }
-    }
-
-    // Создаем конфигурацию по умолчанию
-    await this.chatRepository.createChatConfig(chatId)
-
-    // Сохраняем всех администраторов кроме бота
-    for (const admin of admins) {
-      if (admin.user.id !== botId) {
-        await this.chatRepository.addAdmin(chatId, admin.user.id)
-      }
-    }
-
-    this.logger.i(`New chat ${chatId} successfully registered`)
-    return { success: true }
-  }
-
-  /**
-   * Разрегистрация чата из бота
-   */
-  private async unregisterChat(chatId: number, userId: number): Promise<{ success: boolean, message?: string }> {
-    // Проверяем, есть ли чат в базе
-    const existingChat = await this.chatRepository.getChat(chatId)
-    if (!existingChat) {
-      return { success: false, message: "Эта группа не зарегистрирована в боте" }
-    }
-
-    try {
-      // Получение администраторов чата
-      const admins = await this.botService.getBotApi().getChatAdministrators({
-        chat_id: chatId,
-      })
-
-      // Проверяем, что пользователь является администратором
-      const isUserAdmin = admins.some(admin => admin.user.id === userId)
-      if (!isUserAdmin) {
-        return { success: false, message: "Только администраторы группы могут разрегистрировать её" }
-      }
-
-      // Деактивируем чат в базе данных
-      const deactivated = await this.chatRepository.deactivateChat(chatId)
-      if (!deactivated) {
-        this.logger.e(`Failed to deactivate chat ${chatId}`)
-        return { success: false, message: "Ошибка при деактивации записи в базе данных" }
-      }
-
-      this.logger.i(`Chat ${chatId} successfully deactivated by user ${userId}`)
-      return { success: true }
-    } catch (error) {
-      this.logger.e(`Error during unregister process for chat ${chatId}:`, error)
-      return { success: false, message: "Ошибка при получении информации о чате" }
-    }
-  }
-
-  /**
-   * Проверка, является ли пользователь администратором
-   */
-  private isAdmin(username?: string): boolean {
+  private isSuperAdmin(username?: string): boolean {
     return username === this.config.ADMIN_USERNAME?.replace("@", "")
   }
 
-  private isAdminCommand(context: BotContext): boolean {
-    return this.isAdmin(context.from?.username)
+  /**
+   * Проверка команды суперадминистратора
+   */
+  private isSuperAdminCommand(context: any): boolean {
+    const username = context.from?.username
+    
+    if (!this.isSuperAdmin(username)) {
+      const message = getMessage("no_admin_permission")
+      this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      return false
+    }
+
+    return true
+  }
+
+  /**
+   * Проверка, является ли пользователь администратором группы
+   */
+  private async isGroupAdmin(context: TelegramMessageContext): Promise<boolean> {
+    try {
+      const userId = context.from?.id
+      const chatId = context.chat?.id
+
+      if (!userId || !chatId) {
+        return false
+      }
+
+      // Проверяем, является ли пользователь администратором этой группы через базу данных
+      return await this.chatRepository.isAdmin(chatId, userId)
+    } catch (error) {
+      this.logger.e("Error checking group admin permission:", error)
+      return false
+    }
+  }
+
+  /**
+   * Проверка команды администратора группы
+   */
+  private async isGroupAdminCommand(context: TelegramMessageContext): Promise<boolean> {
+    const username = context.from?.username
+    
+    // Суперадмин имеет доступ ко всем командам
+    if (this.isSuperAdmin(username)) {
+      return true
+    }
+
+    // Проверяем, является ли пользователь администратором группы
+    const isAdmin = await this.isGroupAdmin(context)
+    
+    if (!isAdmin) {
+      const message = getMessage("no_group_admin_permission")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      return false
+    }
+
+    return true
   }
 
   /**

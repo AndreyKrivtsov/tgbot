@@ -1,67 +1,72 @@
 import type { Logger } from "../../../helpers/Logger.js"
+import type { TelegramBot } from "../types/index.js"
 import type { CaptchaManager } from "../features/CaptchaManager.js"
+import { getMessage } from "../utils/Messages.js"
 
 /**
  * Обработчик callback запросов (inline кнопки)
  */
 export class CallbackHandler {
   private logger: Logger
-  private captchaManager: CaptchaManager
+  private bot: TelegramBot
+  private captchaManager?: CaptchaManager
 
-  constructor(
-    logger: Logger,
-    captchaManager: CaptchaManager,
-  ) {
+  constructor(logger: Logger, bot: TelegramBot, captchaManager?: CaptchaManager) {
     this.logger = logger
+    this.bot = bot
     this.captchaManager = captchaManager
   }
 
   /**
    * Основной обработчик callback запросов
    */
-  async handleCallback(context: any): Promise<void> {
-    this.logger.i("🔘 Processing callback query...")
-
+  async handleCallbackQuery(context: any): Promise<void> {
     try {
-      const callbackData = context.data
       const userId = context.from?.id
+      const callbackData = context.data
 
       if (!userId) {
-        this.logger.w("No user ID in callback context")
-        await this.answerCallback(context, "❌ Ошибка определения пользователя")
+        await this.answerCallback(context, getMessage("callback_user_error"))
         return
       }
 
-      // Определяем тип callback'a по префиксу
-      if (callbackData.startsWith("captcha_")) {
-        await this.handleCaptchaCallback(context, callbackData)
+      // Обработка капчи
+      if (callbackData?.startsWith("captcha_")) {
+        if (!this.captchaManager) {
+          await this.answerCallback(context, getMessage("callback_captcha_unavailable"))
+          return
+        }
+
+        const result = await this.captchaManager.handleCaptchaCallback(context, callbackData)
+        if (!result) {
+          await this.answerCallback(context, getMessage("callback_unknown_command"))
+        }
       } else {
-        this.logger.w(`Unknown callback data format: ${callbackData}`)
-        await this.answerCallback(context, "❌ Неизвестная команда")
+        await this.answerCallback(context, getMessage("callback_unknown_command"))
       }
     } catch (error) {
       this.logger.e("❌ Error handling callback query:", error)
-      await this.answerCallback(context, "❌ Произошла ошибка")
+      await this.answerCallback(context, getMessage("callback_general_error"))
     }
   }
 
   /**
-   * Обработка callback'ов капчи
+   * Обработка callback с капчей (legacy)
    */
-  private async handleCaptchaCallback(context: any, callbackData: string): Promise<void> {
+  async handleCaptchaCallback(context: any, callbackData: string): Promise<boolean> {
     try {
       const userId = context.from?.id
       if (!userId) {
-        await this.answerCallback(context, "❌ Ошибка определения пользователя")
-        return
+        await this.answerCallback(context, getMessage("callback_user_error"))
+        return false
       }
 
       // Парсим callback data в формате: captcha_${userId}_${optionIndex}_${correct|wrong}
       const callbackParts = callbackData.split("_")
       if (callbackParts.length !== 4 || callbackParts[0] !== "captcha") {
         this.logger.e(`❌ Invalid callback data format: ${callbackData}`)
-        await this.answerCallback(context, "❌ Неверный формат данных")
-        return
+        await this.answerCallback(context, getMessage("callback_invalid_format"))
+        return false
       }
 
       const callbackUserId = Number.parseInt(callbackParts[1] || "0")
@@ -70,25 +75,21 @@ export class CallbackHandler {
       // Проверяем, что пользователь отвечает на свою капчу
       if (callbackUserId !== userId) {
         this.logger.w(`❌ User ${userId} trying to answer captcha for user ${callbackUserId}`)
-        await this.answerCallback(context, "Это не ваша капча!")
-        return
+        return false
       }
 
-      const success = await this.captchaManager.handleCaptchaCallback(context, callbackData)
+      // Отвечаем на callback
+      const callbackResponse = isCorrect
+        ? getMessage("callback_captcha_correct")
+        : getMessage("callback_captcha_wrong")
 
-      if (success) {
-        // Определяем результат по callback data
-        const message = isCorrect
-          ? "✅ Правильно!"
-          : "❌ Неправильный ответ!"
+      await this.answerCallback(context, callbackResponse)
 
-        await this.answerCallback(context, message)
-      } else {
-        await this.answerCallback(context, "⚠️ Капча не найдена")
-      }
+      return true
     } catch (error) {
       this.logger.e("Error handling captcha callback:", error)
-      await this.answerCallback(context, "❌ Произошла ошибка")
+      await this.answerCallback(context, getMessage("callback_general_error"))
+      return false
     }
   }
 

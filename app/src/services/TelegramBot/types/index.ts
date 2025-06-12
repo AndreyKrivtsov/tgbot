@@ -3,14 +3,15 @@ import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { AIChatService } from "../../AIChatService/index.js"
 import type { RedisService } from "../../RedisService/index.js"
-import type { ChatAiRepository } from "../../../repository/ChatAiRepository.js"
+import type { ChatRepository } from "../../../repository/ChatRepository.js"
+import type { GramioBot } from "../core/GramioBot.js"
 
 export interface TelegramBotDependencies {
   captchaService?: CaptchaService
   antiSpamService?: AntiSpamService
   chatService?: AIChatService
   redisService?: RedisService
-  chatRepository?: ChatAiRepository
+  chatRepository?: ChatRepository
 }
 
 export interface TelegramBotSettings {
@@ -71,6 +72,6 @@ export interface BotContext {
   message?: any
 }
 
-export type TelegramBot = Bot
+export type TelegramBot = GramioBot
 export type TelegramMessageContext = MessageContext<Bot>
 export type TelegramNewMembersContext = NewChatMembersContext<Bot>

@@ -111,10 +111,10 @@ export class Application {
 
     // Chat Repository
     this.container.register("chatRepository", async () => {
-      const { ChatAiRepository } = await import("../repository/ChatAiRepository.js")
+      const { ChatRepository } = await import("../repository/ChatRepository.js")
       const database = await this.container.getAsync("database") as any
       const cache = await this.container.getAsync("cache") as any
-      return new ChatAiRepository(database, cache)
+              return new ChatRepository(database, cache)
     })
 
     // Chat Config Service

@@ -55,100 +55,80 @@ export class GeminiAdapter {
     systemPrompt?: string,
     customConfig?: Partial<typeof this.defaultConfig>,
   ): Promise<string> {
-    try {
-      // Подготавливаем содержимое запроса
-      const contents: GeminiMessage[] = []
+    // Подготавливаем содержимое запроса
+    const contents: GeminiMessage[] = []
 
-      // Добавляем системный промпт если есть (как первое user сообщение)
-      if (systemPrompt) {
-        contents.push({
-          role: "user",
-          parts: [{ text: systemPrompt }],
-        })
-      }
-
-      // Добавляем историю разговора если есть
-      if (conversationHistory && conversationHistory.length > 0) {
-        contents.push(...conversationHistory)
-      }
-
-      // Добавляем новый промпт пользователя
+    // Добавляем системный промпт если есть (как первое user сообщение)
+    if (systemPrompt) {
       contents.push({
         role: "user",
-        parts: [{ text: prompt }],
+        parts: [{ text: systemPrompt }],
       })
+    }
 
-      // Объединяем конфигурацию по умолчанию с пользовательской
-      const generationConfig = {
-        ...this.defaultConfig,
-        ...customConfig,
-      }
+    // Добавляем историю разговора если есть
+    if (conversationHistory && conversationHistory.length > 0) {
+      contents.push(...conversationHistory)
+    }
 
-      const requestBody: GeminiRequest = {
-        contents,
-        generationConfig,
-      }
+    // Добавляем новый промпт пользователя
+    contents.push({
+      role: "user",
+      parts: [{ text: prompt }],
+    })
 
-      // Валидация API ключа
-      if (!apiKey) {
-        throw new Error("Gemini API key is required")
-      }
+    // Объединяем конфигурацию по умолчанию с пользовательской
+    const generationConfig = {
+      ...this.defaultConfig,
+      ...customConfig,
+    }
 
-      // Формируем URL с API ключом
-      const url = `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`
+    const requestBody: GeminiRequest = {
+      contents,
+      generationConfig,
+    }
 
-      // Логируем детали HTTP запроса
-      console.log(`🌐 [GEMINI HTTP] Making request to: ${this.baseUrl}/${this.model}:generateContent?key=${apiKey.substring(0, 12)}...${apiKey.slice(-4)}`)
-      console.log(`📊 [GEMINI HTTP] Request method: POST`)
-      console.log(`📋 [GEMINI HTTP] Contents array length: ${contents.length}`)
-      console.log(`⚙️ [GEMINI HTTP] Generation config:`, JSON.stringify(generationConfig, null, 2))
-      console.log(`📤 [GEMINI HTTP] Full request body:`, JSON.stringify(requestBody, null, 2))
+    // Валидация API ключа
+    if (!apiKey) {
+      throw new Error("Gemini API key is required")
+    }
 
-      // Выполняем запрос
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      })
+    // Формируем URL с API ключом
+    const url = `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`
 
-      console.log(`📡 [GEMINI HTTP] Response status: ${response.status} ${response.statusText}`)
+    // Выполняем запрос
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`❌ [GEMINI HTTP] Error response body:`, errorText)
-        throw new Error(`Gemini API error (${response.status}): ${errorText}`)
-      }
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Gemini API error (${response.status}): ${errorText}`)
+    }
 
-      const data = await response.json() as GeminiResponse
+    const data = await response.json() as GeminiResponse
 
-      console.log(`📥 [GEMINI HTTP] Response data:`, JSON.stringify(data, null, 2))
+    // Проверяем на ошибки в ответе
+    if (data.error) {
+      throw new Error(`Gemini API error: ${data.error.message} (code: ${data.error.code})`)
+    }
 
-      // Проверяем на ошибки в ответе
-      if (data.error) {
-        console.error(`❌ [GEMINI HTTP] API error in response:`, data.error)
-        throw new Error(`Gemini API error: ${data.error.message} (code: ${data.error.code})`)
-      }
-
-      // Извлекаем текст ответа
-      if (data.candidates && data.candidates.length > 0) {
-        const candidate = data.candidates[0]
-        if (candidate && candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-          const part = candidate.content.parts[0]
-          if (part && part.text) {
-            console.log(`✅ [GEMINI HTTP] Successfully extracted response text (${part.text.length} characters)`)
-            return part.text
-          }
+    // Извлекаем текст ответа
+    if (data.candidates && data.candidates.length > 0) {
+      const candidate = data.candidates[0]
+      if (candidate && candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+        const part = candidate.content.parts[0]
+        if (part && part.text) {
+          return part.text
         }
       }
-
-      console.error(`❌ [GEMINI HTTP] No valid response structure found`)
-      throw new Error("No valid response from Gemini API")
-    } catch (error) {
-      console.error("Gemini API request failed:", error)
-      throw error
     }
+
+    throw new Error("No valid response from Gemini API")
   }
 
   /**
@@ -159,7 +139,6 @@ export class GeminiAdapter {
       const response = await this.generateContent(apiKey, "Hello")
       return response.length > 0
     } catch (error) {
-      console.error("Gemini API connection test failed:", error)
       return false
     }
   }

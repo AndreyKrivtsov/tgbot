@@ -1,7 +1,7 @@
-import type { ChatAiRepository } from "../../repository/ChatAiRepository.js"
+import type { ChatRepository } from "../../repository/ChatRepository.js"
 
 export class ChatConfigService {
-  constructor(private chatAiRepository: ChatAiRepository) {}
+  constructor(private chatRepository: ChatRepository) {}
 
   /**
    * Получить API ключ для чата
@@ -9,7 +9,7 @@ export class ChatConfigService {
    */
   async getApiKey(chatId: number): Promise<string> {
     try {
-      const config = await this.chatAiRepository.getChatConfig(chatId)
+      const config = await this.chatRepository.getChatConfig(chatId)
 
       // Если есть настройка в базе и она не пустая
       if (config?.geminiApiKey) {
@@ -30,7 +30,7 @@ export class ChatConfigService {
    */
   async getThrottleDelay(chatId: number): Promise<number> {
     try {
-      const config = await this.chatAiRepository.getChatConfig(chatId)
+      const config = await this.chatRepository.getChatConfig(chatId)
 
       // Если есть настройка в базе
       if (config?.throttleDelay !== null && config?.throttleDelay !== undefined) {
@@ -61,10 +61,10 @@ export class ChatConfigService {
   async setApiKey(chatId: number, apiKey: string): Promise<boolean> {
     try {
       // Создаем чат и конфиг если их нет
-      await this.chatAiRepository.getOrCreateChat(chatId)
+      await this.chatRepository.getOrCreateChat(chatId)
 
       // Обновляем API ключ
-      return await this.chatAiRepository.setApiKey(chatId, apiKey)
+      return await this.chatRepository.setApiKey(chatId, apiKey)
     } catch (error) {
       console.error("Error setting API key for chat:", chatId, error)
       return false
@@ -77,10 +77,10 @@ export class ChatConfigService {
   async setThrottleDelay(chatId: number, delay: number): Promise<boolean> {
     try {
       // Создаем чат и конфиг если их нет
-      await this.chatAiRepository.getOrCreateChat(chatId)
+      await this.chatRepository.getOrCreateChat(chatId)
 
       // Обновляем задержку
-      return await this.chatAiRepository.setThrottleDelay(chatId, delay)
+      return await this.chatRepository.setThrottleDelay(chatId, delay)
     } catch (error) {
       console.error("Error setting throttle delay for chat:", chatId, error)
       return false

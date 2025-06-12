@@ -31,8 +31,11 @@ setTimeout(callback, BOT_CONFIG.CAPTCHA_TIMEOUT_MS)
 ### 🤖 BOT_CONFIG
 Основные настройки Telegram бота:
 - `CAPTCHA_TIMEOUT_MS` - Таймаут капчи (60 сек)
-- `ERROR_MESSAGE_DELETE_TIMEOUT_MS` - Удаление ошибок (60 сек)
+- `CAPTCHA_CHECK_INTERVAL_MS` - Проверка капчи (5 сек)
+- `MESSAGE_DELETE_TIMEOUT_MS` - Автоудаление сообщений: ошибки, команды в группах (60 сек)
 - `TEMPORARY_BAN_DURATION_SEC` - Временный бан (40 сек)
+- `AUTO_UNBAN_DELAY_MS` - Задержка разбана (5 сек)
+- `USER_OPERATION_DELAY_MS` - Задержка операций (5 сек)
 - `MAX_MESSAGES_FOR_SPAM_CHECK` - Лимит сообщений для спама (5)
 
 ### 🧠 AI_CHAT_CONFIG

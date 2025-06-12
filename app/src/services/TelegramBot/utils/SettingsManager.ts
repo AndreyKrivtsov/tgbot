@@ -22,7 +22,7 @@ export class SettingsManager {
     this.settings = {
       captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
       captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
-      errorMessageDeleteTimeoutMs: BOT_CONFIG.ERROR_MESSAGE_DELETE_TIMEOUT_MS,
+      errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS,
       deleteSystemMessages: true, // Удалять системные сообщения
       temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
       autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,
@@ -114,7 +114,7 @@ export class SettingsManager {
     this.settings = {
       captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
       captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
-      errorMessageDeleteTimeoutMs: BOT_CONFIG.ERROR_MESSAGE_DELETE_TIMEOUT_MS,
+      errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS,
       deleteSystemMessages: true,
       temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
       autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,

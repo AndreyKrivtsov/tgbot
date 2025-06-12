@@ -5,6 +5,7 @@ import type { TelegramBot, UserMessageCounter } from "../types/index.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import type { UserManager } from "./UserManager.js"
 import type { Bot, MessageContext } from "gramio"
+import { getMessage } from "../utils/Messages.js"
 
 /**
  * Детектор и обработчик спама
@@ -102,18 +103,19 @@ export class SpamDetector {
   private async sendSpamWarning(chatId: number, firstName: string, count: number, username?: string): Promise<void> {
     try {
       const displayName = username ? `${firstName}, @${username}` : firstName
-      const textModificator = count > 1 ? "Повторное c" : ""
-      const warningText = `Хмм... 🧐\n${textModificator || "С"}ообщение от [${displayName}] похоже на спам.\n\nСообщение удалено. \n\n${this.config.ADMIN_USERNAME || ""}`
+      const modifier = count > 1 ? "Повторное c" : ""
+      const admin = this.config.ADMIN_USERNAME || ""
+      
+      const warningText = getMessage("spam_warning", {
+        modifier,
+        name: displayName,
+        admin,
+      })
 
-      const messageResult = await this.bot.api.sendMessage({
+      const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: chatId,
         text: warningText,
         parse_mode: "HTML",
-      })
-
-      // Удаляем предупреждение через заданное время
-      setTimeout(() => {
-        this.userRestrictions.deleteMessage(chatId, messageResult.message_id)
       }, this.deleteTimeoutMs)
     } catch (error) {
       this.logger.e("Error sending spam warning:", error)
@@ -126,22 +128,22 @@ export class SpamDetector {
   private async kickUserForSpam(chatId: number, userId: number, firstName: string, username?: string): Promise<void> {
     try {
       const displayName = username ? `${firstName}, @${username}` : firstName
-      const kickText = `Ну вот... 🤓\n[${displayName}] исключен из чата за спам.\n\n${this.config.ADMIN_USERNAME || ""}`
+      const admin = this.config.ADMIN_USERNAME || ""
+      
+      const kickText = getMessage("spam_kick", {
+        name: displayName,
+        admin,
+      })
 
       // Отправляем сообщение о кике
-      const messageResult = await this.bot.api.sendMessage({
+      const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: chatId,
         text: kickText,
         parse_mode: "HTML",
-      })
+      }, this.deleteTimeoutMs)
 
       // Кикаем пользователя
       await this.userRestrictions.kickUserFromChat(chatId, userId, firstName)
-
-      // Удаляем сообщение о кике через заданное время
-      setTimeout(() => {
-        this.userRestrictions.deleteMessage(chatId, messageResult.message_id)
-      }, this.deleteTimeoutMs)
 
       // Очищаем счетчик пользователя
       this.userManager.clearUserCounter(userId)
@@ -153,15 +155,15 @@ export class SpamDetector {
   /**
    * Сброс счетчика спама для пользователя
    */
-  resetSpamCounter(userId: number): boolean {
-    return this.userManager.resetSpamCounter(userId)
+  async resetSpamCounter(userId: number): Promise<boolean> {
+    return await this.userManager.resetSpamCounter(userId)
   }
 
   /**
    * Получение статистики спама
    */
-  getSpamStats(): { totalUsers: number, spamUsers: number, totalMessages: number, totalSpam: number } {
-    return this.userManager.getSpamStats()
+  async getSpamStats(): Promise<{ totalUsers: number, spamUsers: number, totalMessages: number, totalSpam: number }> {
+    return await this.userManager.getSpamStats()
   }
 
   /**

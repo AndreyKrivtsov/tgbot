@@ -4,7 +4,7 @@ import type { CaptchaManager } from "../features/CaptchaManager.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import type { UserManager } from "../features/UserManager.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
-import type { ChatAiRepository } from "../../../repository/ChatAiRepository.js"
+import type { ChatRepository } from "../../../repository/ChatRepository.js"
 
 /**
  * Обработчик событий участников группы
@@ -15,7 +15,7 @@ export class MemberHandler {
   private captchaManager: CaptchaManager
   private userRestrictions: UserRestrictions
   private userManager: UserManager
-  private chatRepository: ChatAiRepository
+  private chatRepository: ChatRepository
   private captchaService?: CaptchaService
 
   constructor(
@@ -24,7 +24,7 @@ export class MemberHandler {
     captchaManager: CaptchaManager,
     userRestrictions: UserRestrictions,
     userManager: UserManager,
-    chatRepository: ChatAiRepository,
+    chatRepository: ChatRepository,
     captchaService?: CaptchaService,
   ) {
     this.logger = logger
@@ -41,8 +41,6 @@ export class MemberHandler {
    */
   async handleNewChatMembers(context: TelegramNewMembersContext): Promise<void> {
     try {
-      this.logger.i("🎯 Processing new chat members...")
-
       const chatId = context.chat.id
 
       // Проверяем, есть ли чат в базе данных
@@ -60,29 +58,23 @@ export class MemberHandler {
         await this.userRestrictions.deleteMessage(chatId, messageId)
       }
 
-      // Детальное логирование для отладки
-      this.logger.i("=== NEW CHAT MEMBERS EVENT ===")
-      this.logger.i(`Chat ID: ${chatId}`)
-      this.logger.i(`Message ID: ${messageId}`)
-      this.logger.i(`New members count: ${newMembers?.length || 0}`)
-      this.logger.i(`CaptchaManager available: ${this.captchaManager.isAvailable()}`)
-
+      // Обрабатываем новых участников
       if (newMembers?.length) {
-        newMembers.forEach((user: any, index: number) => {
-          this.logger.i(`Member ${index + 1}: ${user.firstName} (ID: ${user.id}, isBot: ${user.isBot()})`)
-        })
+        const realUsers = newMembers.filter((user: any) => !user.isBot())
+        const bots = newMembers.filter((user: any) => user.isBot())
+        
+        if (realUsers.length > 0) {
+          this.logger.i(`🎯 Processing ${realUsers.length} new members in chat ${chatId}`)
+        }
+        
+        if (bots.length > 0) {
+          this.logger.d(`🤖 Skipping ${bots.length} bots`)
+        }
 
-        for (const user of newMembers) {
-          if (!user.isBot()) {
-            this.logger.i(`🔐 Processing captcha for new member: ${user.firstName} (ID: ${user.id})`)
-            await this.captchaManager.initiateUserCaptcha(chatId, user)
-          } else {
-            this.logger.i(`🤖 Skipping captcha for bot: ${user.firstName} (ID: ${user.id})`)
-          }
+        for (const user of realUsers) {
+          await this.captchaManager.initiateUserCaptcha(chatId, user)
         }
       }
-
-      this.logger.i("✅ New chat members processing completed")
     } catch (error) {
       this.logger.e("❌ Error handling new chat members:", error)
     }
@@ -102,12 +94,8 @@ export class MemberHandler {
         return
       }
 
-      this.logger.i(`👋 User left chat: ${leftUser?.firstName} (ID: ${leftUser?.id})`)
-      this.logger.i(`💬 Chat ID: ${chatId}, Message ID: ${messageId}`)
-
       // Удаляем системное сообщение о покидании/исключении
       if (this.settings.deleteSystemMessages && messageId) {
-        this.logger.i("🗑️ Deleting left chat member system message...")
         await this.userRestrictions.deleteMessage(chatId, messageId)
       }
 
@@ -115,8 +103,6 @@ export class MemberHandler {
       if (leftUser?.id) {
         await this.cleanupUserData(leftUser.id)
       }
-
-      this.logger.i("✅ Left chat member processing completed")
     } catch (error) {
       this.logger.e("❌ Error handling left chat member:", error)
     }
@@ -127,8 +113,6 @@ export class MemberHandler {
    */
   async handleChatMember(context: any): Promise<void> {
     try {
-      this.logger.i("🔄 Processing chat member update...")
-
       const chatId = context.chat?.id
       const newChatMember = context.newChatMember
       const oldChatMember = context.oldChatMember
@@ -138,19 +122,13 @@ export class MemberHandler {
         return
       }
 
-      this.logger.i(`Chat member update - Chat ID: ${chatId}`)
-      this.logger.i(`Old status: ${oldChatMember?.status}, New status: ${newChatMember?.status}`)
-
       // Если пользователь покинул чат или был исключен
       if (newChatMember?.status === "left" || newChatMember?.status === "kicked") {
         const userId = newChatMember.user?.id
         if (userId) {
-          this.logger.i(`👋 User ${userId} left/kicked from chat ${chatId}`)
           await this.cleanupUserData(userId)
         }
       }
-
-      this.logger.i("✅ Chat member update processing completed")
     } catch (error) {
       this.logger.e("❌ Error handling chat member update:", error)
     }
@@ -161,17 +139,23 @@ export class MemberHandler {
    */
   private async cleanupUserData(userId: number): Promise<void> {
     try {
+      let cleanedItems = 0
+
       // Удаляем пользователя из ограниченных (капча)
       if (this.captchaService && this.captchaService.isUserRestricted(userId)) {
-        this.logger.i(`🧹 Removing user ${userId} from captcha restrictions`)
         this.captchaService.removeRestrictedUser(userId)
+        cleanedItems++
       }
 
       // Удаляем счетчик сообщений пользователя
       const hasCounter = await this.userManager.hasMessageCounter(userId)
       if (hasCounter) {
         await this.userManager.deleteMessageCounter(userId)
-        this.logger.i(`🧹 Removed message counter for user ${userId}`)
+        cleanedItems++
+      }
+
+      if (cleanedItems > 0) {
+        this.logger.d(`🧹 Cleaned ${cleanedItems} items for user ${userId}`)
       }
     } catch (error) {
       this.logger.e(`Error cleaning up data for user ${userId}:`, error)
@@ -208,7 +192,7 @@ export class MemberHandler {
   async forceCleanupUser(userId: number): Promise<boolean> {
     try {
       await this.cleanupUserData(userId)
-      this.logger.i(`Force cleanup completed for user ${userId}`)
+      this.logger.i(`🧹 Force cleanup completed for user ${userId}`)
       return true
     } catch (error) {
       this.logger.e(`Error in force cleanup for user ${userId}:`, error)

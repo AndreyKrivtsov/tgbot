@@ -1,17 +1,17 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
-import { ChatAiRepository } from "../../repository/ChatAiRepository.js"
+import { ChatRepository } from "../../repository/ChatRepository.js"
 import type { GeminiMessage } from "../AI/providers/GeminiAdapter.js"
 import { GeminiAdapter } from "../AI/providers/GeminiAdapter.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
-import type { NodePgDatabase } from "drizzle-orm/node-postgres"
-import { AI_CHAT_CONFIG } from "../../constants.js"
-import { MessageFormatter } from "../TelegramBot/utils/MessageFormatter.js"
+import type { DatabaseService } from "../DatabaseService/index.js"
+import { AI_CHAT_CONFIG, AI_SERVICE_CONFIG } from "../../constants.js"
+import { getMessage } from "../TelegramBot/utils/Messages.js"
 
 interface AIChatDependencies {
   aiService?: any
-  database?: NodePgDatabase<any>
+  database?: DatabaseService
 }
 
 interface ChatContext {
@@ -47,7 +47,7 @@ export class AIChatService implements IService {
   private isProcessingQueue = false
   private nextMessageId = 1
   private throttleDelay = AI_CHAT_CONFIG.THROTTLE_DELAY_MS
-  private chatAiRepository?: ChatAiRepository
+  private chatRepository?: ChatRepository
   private chatSettings: Map<number, { chat: Chat | null, config: ChatConfig | null }> = new Map() // Кэш настроек чатов
 
   constructor(config: AppConfig, logger: Logger, dependencies: AIChatDependencies = {}) {
@@ -56,7 +56,7 @@ export class AIChatService implements IService {
     this.dependencies = dependencies
 
     if (dependencies.database) {
-      this.chatAiRepository = new ChatAiRepository(dependencies.database)
+      this.chatRepository = new ChatRepository(dependencies.database)
     }
   }
 
@@ -210,7 +210,7 @@ export class AIChatService implements IService {
 
       this.messageQueue.push(queueItem)
 
-      this.logger.d(`Added message to queue from ${firstName} (${userId}): ${cleanedMessage}`)
+      this.logger.d(`Added message to queue from ${firstName} (${userId})`)
 
       return {
         success: true,
@@ -320,65 +320,50 @@ export class AIChatService implements IService {
   }
 
   /**
-   * Запрос к AI с ограничением скорости
+   * Выполнение AI запроса с ограничением скорости
    */
   private async throttledAIRequest(queueItem: MessageQueue): Promise<void> {
     try {
-      // Эмитируем typing индикатор
       this.onTypingStart?.(queueItem.contextId)
 
       const chatId = Number.parseInt(queueItem.contextId)
 
-      // Получаем API ключ и проверяем его наличие
+      // Получаем API ключ для чата
       const apiKeyResult = await this.getApiKeyForChat(chatId)
       if (!apiKeyResult) {
-        // API ключ отсутствует - отправляем сообщение об ошибке
-        const errorMessage = MessageFormatter.formatApiKeyMissingMessage()
-        this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id)
-        return
+        throw new Error("No API key available for this chat")
       }
 
+      // Получаем системный промпт и лимиты для чата
+      const systemPrompt = await this.getSystemPromptForChat(chatId)
       const chatLimits = await this.getChatLimits(chatId)
 
-      // Получаем контекст и добавляем новое сообщение пользователя
+      // Получаем или создаем контекст для этого чата
       const context = this.getOrCreateContext(queueItem.contextId)
 
-      // Добавляем новое сообщение пользователя в контекст
+      // Добавляем сообщение пользователя в контекст
       context.messages.push({
         role: "user",
         content: queueItem.message,
         timestamp: Date.now(),
       })
-
-      // Преобразуем историю в формат Gemini
-      const conversationHistory: GeminiMessage[] = context.messages.map(msg => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }],
-      }))
-
-      // Логируем детали запроса к AI
-      this.logger.i(`🤖 [AI REQUEST] Sending request to Gemini API`)
-      this.logger.i(`📝 [AI REQUEST] Message: "${queueItem.message}"`)
-      this.logger.i(`🔑 [AI REQUEST] API Key: ${apiKeyResult.key.substring(0, 12)}...${apiKeyResult.key.slice(-4)} (real: ${apiKeyResult.isReal})`)
-      this.logger.i(`📚 [AI REQUEST] Conversation history length: ${conversationHistory.length} messages`)
-      this.logger.i(`⏱️ [AI REQUEST] Throttle delay: ${chatLimits.throttleDelay}ms`)
-
-      if (conversationHistory.length > 0) {
-        this.logger.d(`📜 [AI REQUEST] Full conversation history:`)
-        conversationHistory.forEach((msg, index) => {
-          const text = msg.parts[0]?.text || ""
-          this.logger.d(`  ${index + 1}. [${msg.role}]: "${text.substring(0, 100)}${text.length > 100 ? "..." : ""}"`)
-        })
-      }
+      // Подготавливаем историю разговора для Gemini (исключаем текущее сообщение)
+      const conversationHistory: GeminiMessage[] = context.messages
+        .slice(0, -1) // исключаем последнее сообщение (текущее)
+        .map(msg => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }],
+        }))
 
       // Создаем адаптер (без API ключа в конструкторе)
       const geminiAdapter = new GeminiAdapter()
 
-      // Делаем запрос к Gemini API, передавая API ключ и историю
+      // Делаем запрос к Gemini API, передавая API ключ, историю и системный промпт
       const response = await geminiAdapter.generateContent(
         apiKeyResult.key,
         queueItem.message,
         conversationHistory,
+        systemPrompt,
       )
 
       if (response && response.trim()) {
@@ -389,15 +374,13 @@ export class AIChatService implements IService {
           timestamp: Date.now(),
         })
 
-        // Простая обрезка контекста - оставляем только последние 10 сообщений
-        if (context.messages.length > 10) {
-          context.messages = context.messages.slice(-10)
+        // Простая обрезка контекста - оставляем только последние сообщения
+        if (context.messages.length > AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES) {
+          context.messages = context.messages.slice(-AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES)
         }
 
         // Отправляем ответ
         this.onMessageResponse?.(queueItem.contextId, response, queueItem.id)
-
-        this.logger.d(`AI response sent for message ${queueItem.id}`)
       } else {
         this.logger.w(`Empty AI response for message ${queueItem.id}`)
       }
@@ -407,8 +390,8 @@ export class AIChatService implements IService {
     } catch (error) {
       this.logger.e("AI request error:", error)
 
-      // Отправляем сообщение об ошибке в чат
-      const errorMessage = MessageFormatter.formatAIServiceErrorMessage()
+      // Отправляем сообщение об ошибке пользователю
+      const errorMessage = getMessage("ai_service_error")
       this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id)
 
       throw error
@@ -421,15 +404,17 @@ export class AIChatService implements IService {
    * Загрузка контекстов из БД
    */
   private async loadChatContexts(): Promise<void> {
-    if (!this.chatAiRepository) {
+    if (!this.chatRepository) {
       this.logger.d("No database connection, skipping context loading")
       return
     }
 
     try {
-      const activeChats = await this.chatAiRepository.getActiveAiChats()
+      const activeChats = await this.chatRepository.getActiveAiChats()
       for (const chat of activeChats) {
-        this.chatSettings.set(chat.id, { chat, config: null })
+        // Извлекаем config из chat.config если он там есть
+        const config = (chat as any).config || null
+        this.chatSettings.set(chat.id, { chat, config })
       }
       this.logger.i(`Loaded ${activeChats.length} active AI chats`)
     } catch (error) {
@@ -441,7 +426,7 @@ export class AIChatService implements IService {
    * Сохранение контекстов в БД (упрощенная версия)
    */
   private async saveChatContexts(): Promise<void> {
-    if (!this.chatAiRepository) {
+    if (!this.chatRepository) {
       this.logger.d("No database connection, skipping context saving")
       return
     }
@@ -483,39 +468,30 @@ export class AIChatService implements IService {
    * Получить настройки чата
    */
   async getChatSettings(chatId: number): Promise<{ chat: Chat | null, config: ChatConfig | null }> {
-    this.logger.i(`⚙️ [DEBUG] Getting settings for chat ${chatId}`)
-    
     // Сначала проверяем кэш
     if (this.chatSettings.has(chatId)) {
       const cached = this.chatSettings.get(chatId)!
-      this.logger.i(`⚙️ [DEBUG] Found cached settings for chat ${chatId}: ${JSON.stringify({
-        chat: !!cached.chat,
-        config: !!cached.config
-      })}`)
       return { chat: cached.chat, config: cached.config }
     }
 
-    this.logger.i(`⚙️ [DEBUG] No cache for chat ${chatId}, loading from database`)
-    
     // Загружаем из БД
-    if (this.chatAiRepository) {
-      const result = await this.chatAiRepository.getChatWithConfig(chatId)
-      this.logger.i(`⚙️ [DEBUG] Database result for chat ${chatId}: ${JSON.stringify({
-        chat: !!result.chat,
-        config: !!result.config,
-        chatTitle: result.chat?.title,
-        hasApiKey: !!result.config?.geminiApiKey
-      })}`)
-      
-      if (result.chat && result.config) {
-        this.chatSettings.set(chatId, result)
-        return result
+    if (this.chatRepository) {
+      const result = await this.chatRepository.getChatWithConfig(chatId)
+
+      if (result.chat) {
+        // Извлекаем config из chat.config если он там есть
+        const config = result.config || (result.chat as any).config || null
+        const normalizedResult = {
+          chat: result.chat,
+          config: config
+        }
+        
+        // Кешируем нормализованный результат
+        this.chatSettings.set(chatId, normalizedResult)
+        return normalizedResult
       }
-    } else {
-      this.logger.w(`⚙️ [DEBUG] No chatAiRepository available for chat ${chatId}`)
     }
 
-    this.logger.w(`⚙️ [DEBUG] No settings found for chat ${chatId}`)
     return { chat: null, config: null }
   }
 
@@ -523,25 +499,16 @@ export class AIChatService implements IService {
    * Получить API ключ для чата (или вернуть null если отсутствует)
    */
   async getApiKeyForChat(chatId: number): Promise<{ key: string, isReal: boolean } | null> {
-    this.logger.i(`🔑 [DEBUG] Getting API key for chat ${chatId}`)
     const { config } = await this.getChatSettings(chatId)
 
-    this.logger.i(`🔑 [DEBUG] Chat config for ${chatId}: ${JSON.stringify({
-      exists: !!config,
-      geminiApiKey: config?.geminiApiKey ? `${config.geminiApiKey.substring(0, 12)}...${config.geminiApiKey.slice(-4)}` : null,
-      aiEnabled: config?.aiEnabled
-    })}`)
-
     // Если есть настоящий API ключ в конфиге чата, используем его
-    if (config?.geminiApiKey && config.geminiApiKey !== "mock_gemini_api_key_for_development") {
-      this.logger.i(`🔑 [DEBUG] Found real API key for chat ${chatId}`)
+    if (config?.geminiApiKey) {
       return {
         key: config.geminiApiKey,
         isReal: true,
       }
     }
 
-    this.logger.w(`🔑 [DEBUG] No API key found for chat ${chatId}`)
     // API ключ отсутствует
     return null
   }
@@ -549,12 +516,16 @@ export class AIChatService implements IService {
   /**
    * Получить системный промпт для чата
    */
-  async getSystemPromptForChat(chatId: number): Promise<string | null> {
+  async getSystemPromptForChat(chatId: number): Promise<string> {
     const { config } = await this.getChatSettings(chatId)
-    if (!config?.systemPrompt)
-      return null
-
-    return this.chatAiRepository?.buildSystemPromptString(config.systemPrompt) || null
+    
+    // Если есть кастомный системный промпт в конфигурации чата, используем его
+    if (config?.systemPrompt) {
+      return this.chatRepository?.buildSystemPromptString(config.systemPrompt) || AI_SERVICE_CONFIG.DEFAULT_SYSTEM_PROMPT
+    }
+    
+    // Иначе возвращаем дефолтный системный промпт
+    return AI_SERVICE_CONFIG.DEFAULT_SYSTEM_PROMPT
   }
 
   /**
@@ -581,9 +552,9 @@ export class AIChatService implements IService {
    * Проверить является ли пользователь администратором чата
    */
   async isChatAdmin(chatId: number, userId: number): Promise<boolean> {
-    if (!this.chatAiRepository)
+    if (!this.chatRepository)
       return false
-    return await this.chatAiRepository.isAdmin(chatId, userId)
+    return await this.chatRepository.isAdmin(chatId, userId)
   }
 
   /**
@@ -599,7 +570,7 @@ export class AIChatService implements IService {
       throttleDelay: number
     }>,
   ): Promise<boolean> {
-    if (!this.chatAiRepository)
+    if (!this.chatRepository)
       return false
 
     // Проверяем права администратора
@@ -609,7 +580,7 @@ export class AIChatService implements IService {
       return false
     }
 
-    const success = await this.chatAiRepository.updateChatConfig(chatId, updates)
+    const success = await this.chatRepository.updateChatConfig(chatId, updates)
     if (success) {
       // Обновляем кэш
       this.chatSettings.delete(chatId)
@@ -623,7 +594,7 @@ export class AIChatService implements IService {
    * Очистить кэш настроек для конкретного чата
    */
   clearChatCache(chatId: number): void {
-    this.logger.i(`🔄 [CACHE] Clearing cache for chat ${chatId}`)
+    this.logger.d(`🔄 Cache cleared for chat ${chatId}`)
     this.chatSettings.delete(chatId)
   }
 

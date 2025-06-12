@@ -19,25 +19,21 @@ export class UserRestrictions {
    */
   async restrictUser(chatId: number, userId: number): Promise<void> {
     try {
-      await this.bot.api.restrictChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        permissions: {
-          can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false,
-          can_manage_topics: false,
-        },
+      await this.bot.restrictUser(chatId, userId, {
+        can_send_messages: false,
+        can_send_audios: false,
+        can_send_documents: false,
+        can_send_photos: false,
+        can_send_videos: false,
+        can_send_video_notes: false,
+        can_send_voice_notes: false,
+        can_send_polls: false,
+        can_send_other_messages: false,
+        can_add_web_page_previews: false,
+        can_change_info: false,
+        can_invite_users: false,
+        can_pin_messages: false,
+        can_manage_topics: false,
       })
 
       this.logger.i(`🔇 User ${userId} restricted in chat ${chatId}`)
@@ -52,26 +48,7 @@ export class UserRestrictions {
    */
   async unrestrictUser(chatId: number, userId: number): Promise<void> {
     try {
-      await this.bot.api.restrictChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        permissions: {
-          can_send_messages: true,
-          can_send_audios: true,
-          can_send_documents: true,
-          can_send_photos: true,
-          can_send_videos: true,
-          can_send_video_notes: true,
-          can_send_voice_notes: true,
-          can_send_polls: true,
-          can_send_other_messages: true,
-          can_add_web_page_previews: true,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false,
-          can_manage_topics: false,
-        },
-      })
+      await this.bot.unrestrictUser(chatId, userId)
 
       this.logger.i(`✅ User ${userId} unrestricted in chat ${chatId}`)
     } catch (error) {
@@ -84,14 +61,8 @@ export class UserRestrictions {
    * Временный бан пользователя
    */
   async temporaryBanUser(chatId: number, userId: number, durationSec: number): Promise<void> {
-    const untilDate = Math.floor(Date.now() / HTTP_CONFIG.UNIX_TIMESTAMP_DIVIDER) + durationSec
-
     try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-        until_date: untilDate,
-      })
+      await this.bot.temporaryBanUser(chatId, userId, durationSec)
 
       this.logger.i(`⏰ User ${userId} temporarily banned in chat ${chatId} for ${durationSec} seconds`)
     } catch (error) {
@@ -105,10 +76,7 @@ export class UserRestrictions {
    */
   async deleteUserFromChat(chatId: number, userId: number): Promise<void> {
     try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
+      await this.bot.banUser(chatId, userId)
 
       this.logger.i(`🗑️ User ${userId} deleted from chat ${chatId}`)
     } catch (error) {
@@ -122,23 +90,7 @@ export class UserRestrictions {
    */
   async kickUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
     try {
-      await this.bot.api.banChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
-
-      // Автоматически разбаниваем через небольшую задержку
-      setTimeout(async () => {
-        try {
-          await this.bot.api.unbanChatMember({
-            chat_id: chatId,
-            user_id: userId,
-          })
-          this.logger.i(`✅ User ${userName} (${userId}) unbanned after kick`)
-        } catch (unbanError) {
-          this.logger.e(`Failed to unban user ${userId} after kick:`, unbanError)
-        }
-      }, BOT_CONFIG.AUTO_UNBAN_DELAY_MS)
+      await this.bot.kickUser(chatId, userId, BOT_CONFIG.AUTO_UNBAN_DELAY_MS)
 
       this.logger.i(`👢 User ${userName} (${userId}) kicked from chat ${chatId}`)
     } catch (error) {
@@ -152,10 +104,7 @@ export class UserRestrictions {
    */
   async unbanUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
     try {
-      await this.bot.api.unbanChatMember({
-        chat_id: chatId,
-        user_id: userId,
-      })
+      await this.bot.unbanUser(chatId, userId)
 
       this.logger.i(`✅ User ${userName} (${userId}) unbanned from chat ${chatId}`)
     } catch (error) {
@@ -169,7 +118,7 @@ export class UserRestrictions {
    */
   async sendMessage(chatId: number, text: string): Promise<void> {
     try {
-      await this.bot.api.sendMessage({
+      await this.bot.sendMessage({
         chat_id: chatId,
         text,
         parse_mode: "Markdown",
@@ -181,14 +130,28 @@ export class UserRestrictions {
   }
 
   /**
+   * Отправка сообщения с автоудалением в групповых чатах
+   * В приватных чатах сообщения остаются, в групповых - удаляются автоматически
+   */
+  async sendGroupMessage(chatId: number, text: string, parseMode: "HTML" | "Markdown" | "MarkdownV2" = "Markdown"): Promise<void> {
+    try {
+      await this.bot.sendGroupMessage({
+        chat_id: chatId,
+        text,
+        parse_mode: parseMode,
+      }, BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS)
+    } catch (error) {
+      this.logger.e("Failed to send group message:", error)
+      throw error
+    }
+  }
+
+  /**
    * Удаление сообщения
    */
   async deleteMessage(chatId: number, messageId: number): Promise<void> {
     try {
-      await this.bot.api.deleteMessage({
-        chat_id: chatId,
-        message_id: messageId,
-      })
+      await this.bot.deleteMessage(chatId, messageId)
     } catch (error) {
       this.logger.e("Failed to delete message:", error)
       throw error
@@ -200,10 +163,7 @@ export class UserRestrictions {
    */
   async sendTypingAction(chatId: number): Promise<void> {
     try {
-      await this.bot.api.sendChatAction({
-        chat_id: chatId,
-        action: "typing",
-      })
+      await this.bot.sendChatAction(chatId, "typing")
     } catch (error) {
       this.logger.e("Failed to send typing action:", error)
     }

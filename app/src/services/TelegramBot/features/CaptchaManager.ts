@@ -2,8 +2,8 @@ import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { BotContext, TelegramBot } from "../types/index.js"
-import { MessageFormatter } from "../utils/MessageFormatter.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
+import { getMessage } from "../utils/Messages.js"
 
 /**
  * Менеджер капчи для новых пользователей
@@ -103,7 +103,7 @@ export class CaptchaManager {
       const captchaText = this.formatCaptchaMessage(question)
       const inlineKeyboard = this.createCaptchaKeyboard(user.id, options, correctAnswer)
 
-      const sentMessage = await this.bot.api.sendMessage({
+      const sentMessage = await this.bot.sendMessage({
         chat_id: chatId,
         text: captchaText,
         parse_mode: "HTML",
@@ -199,17 +199,12 @@ export class CaptchaManager {
       await this.userRestrictions.kickUserFromChat(user.chatId, user.userId, user.username)
 
       const name = user.username ? `@${user.username}` : user.firstName
-      const failText = MessageFormatter.formatErrorMessage(`К сожалению, ${name} выбрал неправильный вариант ответа 😢`)
+      const failText = getMessage("captcha_failed", { name })
 
-      const messageResult = await this.bot.api.sendMessage({
+      const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: failText,
         parse_mode: "HTML",
-      })
-
-      // Удаляем сообщение через заданное время
-      setTimeout(() => {
-        this.userRestrictions.deleteMessage(user.chatId, messageResult.message_id)
       }, 60000) // 60 секунд
 
       this.logger.w(`User ${user.userId} failed captcha`)
@@ -226,17 +221,12 @@ export class CaptchaManager {
       await this.userRestrictions.temporaryBanUser(user.chatId, user.userId, 40) // 40 секунд бан
 
       const name = user.username ? `@${user.username}` : user.firstName
-      const timeoutText = MessageFormatter.formatErrorMessage(`К сожалению, ${name} не выбрал ни один вариант ответа 🧐`)
+      const timeoutText = getMessage("captcha_timeout", { name })
 
-      const messageResult = await this.bot.api.sendMessage({
+      const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: timeoutText,
         parse_mode: "HTML",
-      })
-
-      // Удаляем сообщение через заданное время
-      setTimeout(() => {
-        this.userRestrictions.deleteMessage(user.chatId, messageResult.message_id)
       }, 60000) // 60 секунд
 
       this.logger.w(`User ${user.userId} captcha timeout`)
@@ -259,11 +249,9 @@ export class CaptchaManager {
    * Форматирование сообщения капчи
    */
   private formatCaptchaMessage(question: number[]): string {
-    return `Добро пожаловать! Решите несложный пример:
-
-${question[0]} + ${question[1]} = ?
-
-Выберите правильный ответ:`
+    return getMessage("captcha_welcome", {
+      question: `${question[0]} + ${question[1]}`,
+    })
   }
 
   /**

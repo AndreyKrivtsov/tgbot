@@ -5,7 +5,7 @@ import type { DatabaseService } from "../services/DatabaseService/index.js"
 import type { CacheService } from "../services/CacheService/index.js"
 import { CACHE_CONFIG } from "../constants.js"
 
-export class ChatAiRepository {
+export class ChatRepository {
   private databaseService: DatabaseService
   private cacheService?: CacheService
 
@@ -483,6 +483,70 @@ export class ChatAiRepository {
     } catch (error) {
       console.error("Error deleting chat:", error)
       return false
+    }
+  }
+
+  /**
+   * Зарегистрировать чат (создать или активировать)
+   */
+  async registerChat(chatId: number, title?: string): Promise<{ success: boolean, message: string }> {
+    try {
+      // Проверяем, существует ли чат
+      const existingChat = await this.getChat(chatId)
+      
+      if (existingChat) {
+        if (existingChat.active) {
+          return { success: false, message: "Группа уже зарегистрирована" }
+        }
+        
+        // Активируем существующий чат
+        const success = await this.activateChat(chatId)
+        if (success) {
+          return { success: true, message: "Группа успешно активирована" }
+        } else {
+          return { success: false, message: "Ошибка при активации группы" }
+        }
+      } else {
+        // Создаем новый чат с конфигурацией
+        const result = await this.getOrCreateChat(chatId, title, "group")
+        if (result) {
+          return { success: true, message: "Группа успешно зарегистрирована" }
+        } else {
+          return { success: false, message: "Ошибка при создании группы" }
+        }
+      }
+    } catch (error) {
+      console.error("Error registering chat:", error)
+      return { success: false, message: "Внутренняя ошибка при регистрации" }
+    }
+  }
+
+  /**
+   * Отменить регистрацию чата (деактивировать)
+   */
+  async unregisterChat(chatId: number): Promise<{ success: boolean, message: string }> {
+    try {
+      // Проверяем, существует ли чат
+      const existingChat = await this.getChat(chatId)
+      
+      if (!existingChat) {
+        return { success: false, message: "Группа не найдена" }
+      }
+      
+      if (!existingChat.active) {
+        return { success: false, message: "Группа уже неактивна" }
+      }
+      
+      // Деактивируем чат
+      const success = await this.deactivateChat(chatId)
+      if (success) {
+        return { success: true, message: "Группа успешно отключена" }
+      } else {
+        return { success: false, message: "Ошибка при отключении группы" }
+      }
+    } catch (error) {
+      console.error("Error unregistering chat:", error)
+      return { success: false, message: "Внутренняя ошибка при отключении" }
     }
   }
 }
