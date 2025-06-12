@@ -92,7 +92,7 @@ export class AIChatService implements IService {
 
     // Запускаем обработчик очереди
     this.startQueueProcessor()
-    
+
     // Запускаем автосохранение контекстов
     this.startContextAutoSave()
 
@@ -105,7 +105,7 @@ export class AIChatService implements IService {
   async stop(): Promise<void> {
     this.logger.i("🛑 Stopping AI chat service...")
     this.isProcessingQueue = false
-    
+
     // Останавливаем автосохранение
     if (this.contextSaveTimer) {
       clearInterval(this.contextSaveTimer)
@@ -285,15 +285,15 @@ export class AIChatService implements IService {
   private async getOrCreateContext(contextId: string): Promise<ChatContext> {
     let context = this.chatContexts.get(contextId)
 
-          if (!context) {
-        // Пытаемся загрузить из кэша
-        const cachedContext = await this.loadContextFromCache(contextId)
-        
-        if (cachedContext) {
-          // Восстанавливаем из кэша
-          context = cachedContext
-          this.chatContexts.set(contextId, context)
-        } else {
+    if (!context) {
+      // Пытаемся загрузить из кэша
+      const cachedContext = await this.loadContextFromCache(contextId)
+
+      if (cachedContext) {
+        // Восстанавливаем из кэша
+        context = cachedContext
+        this.chatContexts.set(contextId, context)
+      } else {
         // Создаем новый контекст
         const now = Date.now()
         context = {
@@ -367,8 +367,8 @@ export class AIChatService implements IService {
     try {
       const context = await this.getOrCreateContext(queueItem.contextId)
 
-      // Делаем запрос к AI с throttling
-      await this.throttledAIRequest(queueItem)
+      // Делаем запрос к AI с throttling, передаем retryCount для уменьшения контекста
+      await this.throttledAIRequest(queueItem, queueItem.retryCount)
 
       context.requestCount++
     } catch (error) {
@@ -378,7 +378,7 @@ export class AIChatService implements IService {
       if (queueItem.retryCount < 2) {
         queueItem.retryCount++
         this.messageQueue.push(queueItem)
-        this.logger.w(`Retrying message ${queueItem.id}, attempt ${queueItem.retryCount}`)
+        this.logger.w(`Retrying message ${queueItem.id}, attempt ${queueItem.retryCount} (context will be reduced)`)
       } else {
         // Все попытки исчерпаны - отправляем сообщение об ошибке
         const errorMessage = getMessage("ai_service_error")
@@ -398,7 +398,7 @@ export class AIChatService implements IService {
   /**
    * Выполнение AI запроса с адаптивным ограничением скорости
    */
-  private async throttledAIRequest(queueItem: MessageQueue): Promise<void> {
+  private async throttledAIRequest(queueItem: MessageQueue, retryCount: number = 0): Promise<void> {
     try {
       // 1. Ждем разрешения от token bucket (перед запросом)
       await this.throttleManager.waitForRequestPermission(queueItem.contextId)
@@ -424,13 +424,8 @@ export class AIChatService implements IService {
         timestamp: Date.now(),
       })
       
-      // Подготавливаем историю разговора для Gemini (исключаем текущее сообщение)
-      const conversationHistory: GeminiMessage[] = context.messages
-        .slice(0, -1) // исключаем последнее сообщение (текущее)
-        .map(msg => ({
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }],
-        }))
+      // Подготавливаем историю разговора для Gemini с учетом retry
+      const conversationHistory = this.prepareConversationHistory(context, retryCount)
 
       // Создаем адаптер и делаем запрос к Gemini API
       const geminiAdapter = new GeminiAdapter()
@@ -454,8 +449,8 @@ export class AIChatService implements IService {
           context.messages = context.messages.slice(-AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES)
         }
 
-        // Сохраняем обновленный контекст в кэш
-        await this.saveContextToCache(queueItem.contextId, context)
+        // Обновляем время последней активности контекста
+        context.lastActivity = Date.now()
 
         // 2. Применяем адаптивную задержку после получения ответа
         await this.throttleManager.applyPostResponseDelay(queueItem.contextId, response.length)
@@ -477,6 +472,37 @@ export class AIChatService implements IService {
       this.logger.e("AI request error:", error)
       throw error
     }
+  }
+
+  /**
+   * Подготовка истории разговора с уменьшением контекста при retry
+   */
+  private prepareConversationHistory(context: ChatContext, retryCount: number): GeminiMessage[] {
+    // Получаем все сообщения кроме последнего (текущее сообщение пользователя)
+    const allMessages = context.messages.slice(0, -1)
+    
+    // Если это первая попытка, используем весь контекст
+    if (retryCount === 0) {
+      this.logger.d(`Chat ${context.chatId}: Using full context (${allMessages.length} messages)`)
+      return allMessages.map(msg => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      }))
+    }
+
+    // Для retry попыток уменьшаем контекст в 2^retryCount раз
+    const reductionFactor = 2 ** retryCount
+    const reducedLength = Math.max(1, Math.floor(allMessages.length / reductionFactor))
+    
+    // Берем последние сообщения (более релевантные)
+    const reducedMessages = allMessages.slice(-reducedLength)
+    
+    this.logger.i(`Chat ${context.chatId}: Retry attempt ${retryCount}, reducing context from ${allMessages.length} to ${reducedMessages.length} messages (reduction factor: ${reductionFactor})`)
+    
+    return reducedMessages.map(msg => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }))
   }
 
   /**
@@ -505,7 +531,8 @@ export class AIChatService implements IService {
    * Загрузка контекста из кэша
    */
   private async loadContextFromCache(contextId: string): Promise<ChatContext | null> {
-    if (!this.redisService) return null
+    if (!this.redisService)
+      return null
 
     try {
       const cached = await this.redisService.get<ChatContext>(`ai:context:${contextId}`)
@@ -524,7 +551,8 @@ export class AIChatService implements IService {
    * Сохранение контекста в кэш
    */
   private async saveContextToCache(contextId: string, context: ChatContext): Promise<void> {
-    if (!this.redisService) return
+    if (!this.redisService)
+      return
 
     try {
       await this.redisService.set(
@@ -612,7 +640,7 @@ export class AIChatService implements IService {
         const config = result.config || (result.chat as any).config || null
         const normalizedResult = {
           chat: result.chat,
-          config: config
+          config,
         }
         
         // Кешируем нормализованный результат
@@ -664,8 +692,6 @@ export class AIChatService implements IService {
     const { config } = await this.getChatSettings(chatId)
     return config?.aiEnabled ?? true
   }
-
-
 
   /**
    * Проверить является ли пользователь администратором чата
