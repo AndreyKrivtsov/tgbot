@@ -8,5 +8,5 @@ RUN npm i
 COPY . .
 ENV NODE_ENV=production
 RUN npm run build
-
-ENTRYPOINT [ "npm", "start" ]
+COPY entrypoint.sh ./
+ENTRYPOINT ["sh", "./entrypoint.sh"]
