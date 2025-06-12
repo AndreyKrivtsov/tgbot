@@ -226,6 +226,13 @@ export class GramioBot {
   }
 
   /**
+   * Получить администраторов чата
+   */
+  async getChatAdministrators(chatId: number): Promise<any[]> {
+    return await this.bot.api.getChatAdministrators({ chat_id: chatId })
+  }
+
+  /**
    * Получение прямого доступа к API (для случаев, не покрытых оберткой)
    */
   get api() {

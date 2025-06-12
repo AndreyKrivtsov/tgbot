@@ -520,7 +520,14 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context)
-    
+
+    // Проверяем, есть ли группа в базе
+    const existingChat = await this.chatRepository.getChat(chat.id)
+    if (!existingChat) {
+      // Группа не найдена — получаем админов через Telegram API и добавляем в базу
+      await this.fetchAndSaveGroupAdmins(chat.id)
+    }
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context)) {
       return
@@ -538,6 +545,25 @@ export class CommandHandler {
     } catch (error) {
       this.logger.e("Error registering chat:", error)
       await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_error"))
+    }
+  }
+
+  /**
+   * Получить админов группы через Telegram API и добавить их в базу
+   */
+  private async fetchAndSaveGroupAdmins(chatId: number): Promise<void> {
+    try {
+      // Получаем список админов через TelegramBotService (адаптер)
+      const admins = await this.botService.getChatAdministrators(chatId)
+      if (Array.isArray(admins)) {
+        for (const admin of admins) {
+          if (admin.user && admin.user.id) {
+            await this.chatRepository.addAdmin(chatId, admin.user.id)
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.e(`Не удалось получить или сохранить админов для чата ${chatId}:`, error)
     }
   }
 
