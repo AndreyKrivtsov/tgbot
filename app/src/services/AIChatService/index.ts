@@ -711,7 +711,6 @@ export class AIChatService implements IService {
       geminiApiKey: string | null
       systemPrompt: SystemPromptData | null
       aiEnabled: boolean
-      throttleDelay: number
     }>,
   ): Promise<boolean> {
     if (!this.chatRepository)

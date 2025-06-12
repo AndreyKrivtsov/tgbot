@@ -37,7 +37,6 @@ export const chatConfigs = pgTable("chat_configs", {
     "пол"?: string
   }>(), // Системный промпт в формате JSON
   aiEnabled: boolean("ai_enabled").default(true), // Включен ли ИИ в чате
-  throttleDelay: integer("throttle_delay").default(3000), // Задержка между запросами в мс
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, table => ({

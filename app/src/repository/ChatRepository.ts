@@ -281,13 +281,6 @@ export class ChatRepository {
   }
 
   /**
-   * Установить задержку между запросами
-   */
-  async setThrottleDelay(chatId: number, delay: number): Promise<boolean> {
-    return await this.updateChatConfig(chatId, { throttleDelay: delay })
-  }
-
-  /**
    * Получить системный промпт как строку
    */
   buildSystemPromptString(promptData: SystemPromptData | null): string | null {

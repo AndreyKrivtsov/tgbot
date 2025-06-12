@@ -25,27 +25,6 @@ export class ChatConfigService {
   }
 
   /**
-   * Получить задержку между запросами для чата
-   * Сначала проверяем базу данных, если нет - возвращаем моковое значение
-   */
-  async getThrottleDelay(chatId: number): Promise<number> {
-    try {
-      const config = await this.chatRepository.getChatConfig(chatId)
-
-      // Если есть настройка в базе
-      if (config?.throttleDelay !== null && config?.throttleDelay !== undefined) {
-        return config.throttleDelay
-      }
-
-      // Моковое значение для разработки (5 секунд)
-      return 5000
-    } catch (error) {
-      console.error("Error getting throttle delay for chat:", chatId, error)
-      return 5000
-    }
-  }
-
-  /**
    * Получить ID чата по умолчанию (для обратной совместимости)
    * Возвращает моковое значение, так как в мультичатовом боте это не используется
    */
@@ -71,19 +50,15 @@ export class ChatConfigService {
     }
   }
 
-  /**
-   * Установить задержку между запросами для чата
-   */
-  async setThrottleDelay(chatId: number, delay: number): Promise<boolean> {
-    try {
-      // Создаем чат и конфиг если их нет
-      await this.chatRepository.getOrCreateChat(chatId)
-
-      // Обновляем задержку
-      return await this.chatRepository.setThrottleDelay(chatId, delay)
-    } catch (error) {
-      console.error("Error setting throttle delay for chat:", chatId, error)
-      return false
-    }
-  }
+  // async setThrottleDelay(chatId: number, delay: number): Promise<boolean> {
+  //   try {
+  //     // Создаем чат и конфиг если их нет
+  //     await this.chatRepository.getOrCreateChat(chatId)
+  //     // Обновляем задержку
+  //     return await this.chatRepository.setThrottleDelay(chatId, delay)
+  //   } catch (error) {
+  //     console.error("Error setting throttle delay for chat:", chatId, error)
+  //     return false
+  //   }
+  // }
 }

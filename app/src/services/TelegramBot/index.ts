@@ -447,4 +447,12 @@ export class TelegramBotService implements IService {
     }
     return await this.dependencies.redisService.getBotInfo()
   }
+
+  /**
+   * Получить администраторов чата через адаптер GramioBot
+   */
+  public async getChatAdministrators(chatId: number): Promise<any[]> {
+    if (!this.bot) return [];
+    return await this.bot.getChatAdministrators(chatId);
+  }
 }
