@@ -19,9 +19,7 @@ services:
     command: >
       postgres 
       -c config_file=/etc/postgresql/postgresql.conf
-      -c ssl=on
-      -c ssl_cert_file=/var/lib/postgresql/server.crt
-      -c ssl_key_file=/var/lib/postgresql/server.key
+      -c ssl=off
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tgbot}"]
       interval: 10s
