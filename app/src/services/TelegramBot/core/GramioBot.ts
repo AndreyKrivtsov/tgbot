@@ -54,7 +54,7 @@ export class GramioBot {
    * Отправка обычного сообщения
    */
   async sendMessage(params: SendMessageParams): Promise<MessageResult> {
-    return await this.bot.api.sendMessage(params)
+    return await this.bot.api.sendMessage({ ...params, disable_notification: true, link_preview_options: { is_disabled: true } })
   }
 
   /**
@@ -64,7 +64,7 @@ export class GramioBot {
     params: SendMessageParams,
     deleteAfterMs: number,
   ): Promise<MessageResult> {
-    const result = await this.bot.api.sendMessage(params)
+    const result = await this.bot.api.sendMessage({ ...params, disable_notification: true, link_preview_options: { is_disabled: true } })
 
     // Устанавливаем таймер автоудаления
     const timer = setTimeout(() => {

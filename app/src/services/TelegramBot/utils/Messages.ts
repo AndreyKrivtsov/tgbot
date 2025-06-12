@@ -24,7 +24,7 @@ const MESSAGES = {
 ⚡ \`/addAltronKey @group_name API_KEY\` — подключить чатбота для группы`,
 
   // Капча
-  captcha_welcome: `Добро пожаловать! Решите несложный пример:
+  captcha_welcome: `Добро пожаловать, {userMention}! Решите несложный пример:
 
 {question} = ?
 

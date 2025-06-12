@@ -4,6 +4,7 @@ import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { BotContext, TelegramBot } from "../types/index.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import { getMessage } from "../utils/Messages.js"
+import { User } from "gramio"
 
 /**
  * Менеджер капчи для новых пользователей
@@ -32,7 +33,7 @@ export class CaptchaManager {
   /**
    * Инициация капчи для пользователя
    */
-  async initiateUserCaptcha(chatId: number, user: any): Promise<void> {
+  async initiateUserCaptcha(chatId: number, user: User): Promise<void> {
     if (!this.captchaService) {
       this.logger.w("❌ Captcha service not available")
       return
@@ -85,7 +86,7 @@ export class CaptchaManager {
    */
   private async sendCaptchaMessage(
     chatId: number,
-    user: any,
+    user: User,
     question: number[],
     options: number[],
   ): Promise<any> {
@@ -100,7 +101,7 @@ export class CaptchaManager {
     const correctAnswer = question[0] + question[1]
 
     try {
-      const captchaText = this.formatCaptchaMessage(question)
+      const captchaText = this.formatCaptchaMessage(question, user)
       const inlineKeyboard = this.createCaptchaKeyboard(user.id, options, correctAnswer)
 
       const sentMessage = await this.bot.sendMessage({
@@ -225,14 +226,14 @@ export class CaptchaManager {
 
       await this.userRestrictions.kickUserFromChat(user.chatId, user.userId, user.username)
 
-      const name = user.username ? `@${user.username}` : user.firstName
+      const name = this.formatUserMention(user)
       const failText = getMessage("captcha_failed", { name })
 
       const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: failText,
         parse_mode: "HTML",
-      }, 60000) // 60 секунд
+      }, 10000) // 60 секунд
 
       this.logger.w(`User ${user.userId} failed captcha`)
     } catch (error) {
@@ -250,14 +251,14 @@ export class CaptchaManager {
 
       await this.userRestrictions.temporaryBanUser(user.chatId, user.userId, 40) // 40 секунд бан
 
-      const name = user.username ? `@${user.username}` : user.firstName
+      const name = this.formatUserMention(user)
       const timeoutText = getMessage("captcha_timeout", { name })
 
       const messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: timeoutText,
         parse_mode: "HTML",
-      }, 60000) // 60 секунд
+      }, 10000) // 60 секунд
 
       this.logger.w(`User ${user.userId} captcha timeout`)
     } catch (error) {
@@ -278,10 +279,55 @@ export class CaptchaManager {
   /**
    * Форматирование сообщения капчи
    */
-  private formatCaptchaMessage(question: number[]): string {
+  private formatCaptchaMessage(question: number[], user: User): string {
+    const userMention = this.formatUserMention(user)
+    
     return getMessage("captcha_welcome", {
       question: `${question[0]} + ${question[1]}`,
+      userMention,
     })
+  }
+
+  /**
+   * Форматирование упоминания пользователя
+   */
+  private formatUserMention(user: User): string {
+    // Пробуем разные варианты получения имени
+    const firstName = user.firstName || "unk"
+    
+    // Укорачиваем имя если оно длиннее 10 символов
+    let displayName = firstName
+    if (displayName.length > 10) {
+      displayName = displayName.substring(0, 10) + "..."
+    }
+
+    let displayUsername = user.username
+    if (displayUsername && displayUsername.length > 10) {
+      displayUsername = displayUsername.substring(0, 10) + "..."
+    }
+
+    // Экранируем HTML символы в имени
+    displayName = this.escapeHtml(displayName)
+
+    // Создаем HTML-ссылку на пользователя
+    if (user.username) {
+      return `<a href="https://t.me/${user.username}">@${displayUsername}</a>`
+    } else {
+      // Если нет username, создаем ссылку через user ID
+      return `<a href="tg://user?id=${user.id}">${displayName}</a>`
+    }
+  }
+
+  /**
+   * Экранирование HTML символов
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
   }
 
   /**

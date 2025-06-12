@@ -40,7 +40,7 @@ export class RedisService implements IService {
           keepAlive: true, // Включаем keep-alive
           noDelay: true, // Отключаем алгоритм Nagle для меньшей задержки
           reconnectStrategy: (retries) => {
-            if (retries > 10) {
+            if (retries > 100) {
               this.logger.e("Redis: Maximum reconnection attempts reached")
               return false
             }

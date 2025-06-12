@@ -89,8 +89,8 @@ export class SpamDetector {
       if (userCounter.spamCount < 2) {
         await this.sendSpamWarning(chatId, firstName, userCounter.spamCount, username)
       } else {
-        await this.sendSpamWarning(chatId, firstName, userCounter.spamCount, username)
-        // await this.kickUserForSpam(chatId, userId, firstName, username)
+        // await this.sendSpamWarning(chatId, firstName, userCounter.spamCount, username)
+        await this.kickUserForSpam(chatId, userId, firstName, username)
       }
     } catch (error) {
       this.logger.e("Error handling spam message:", error)
