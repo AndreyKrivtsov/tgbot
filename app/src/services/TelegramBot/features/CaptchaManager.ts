@@ -196,6 +196,9 @@ export class CaptchaManager {
    */
   private async handleCaptchaFailed(user: any): Promise<void> {
     try {
+      // Удаляем исходное сообщение с капчей
+      await this.userRestrictions.deleteMessage(user.chatId, user.questionId)
+
       await this.userRestrictions.kickUserFromChat(user.chatId, user.userId, user.username)
 
       const name = user.username ? `@${user.username}` : user.firstName
@@ -218,6 +221,9 @@ export class CaptchaManager {
    */
   async handleCaptchaTimeout(user: any): Promise<void> {
     try {
+      // Удаляем исходное сообщение с капчей
+      await this.userRestrictions.deleteMessage(user.chatId, user.questionId)
+
       await this.userRestrictions.temporaryBanUser(user.chatId, user.userId, 40) // 40 секунд бан
 
       const name = user.username ? `@${user.username}` : user.firstName
