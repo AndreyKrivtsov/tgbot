@@ -172,16 +172,12 @@ export class MemberHandler {
   /**
    * Получение статистики обработки участников
    */
-  async getMemberStats(): Promise<{ totalUsers: number, restrictedUsers: number }> {
-    const messageCounters = await this.userManager.getMessageCounters()
-    const totalUsers = messageCounters.size
+  async getMemberStats(): Promise<{ restrictedUsers: number }> {
     const restrictedUsers = this.captchaService
-      ? Array.from(messageCounters.keys()).filter(userId =>
-        this.captchaService!.isUserRestricted(userId)).length
+      ? this.captchaService.getAllRestrictedUsers().length
       : 0
 
     return {
-      totalUsers,
       restrictedUsers,
     }
   }

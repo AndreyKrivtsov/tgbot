@@ -358,8 +358,6 @@ export class TelegramBotService implements IService {
    * Получение информации о сервисе
    */
   async getServiceInfo(): Promise<object> {
-    const userStats = await this.userManager.getAllUserCounters()
-    const spamStats = await this.spamDetector?.getSpamStats()
     const memberStats = await this.memberHandler?.getMemberStats()
 
     return {
@@ -383,8 +381,6 @@ export class TelegramBotService implements IService {
         callbackHandler: !!this.callbackHandler,
       },
       statistics: {
-        totalUsers: userStats.length,
-        ...spamStats,
         ...memberStats,
       },
     }
@@ -405,13 +401,6 @@ export class TelegramBotService implements IService {
   }
 
   /**
-   * Получение счетчиков сообщений пользователей
-   */
-  async getUserMessageCounters(): Promise<UserMessageCounter[]> {
-    return await this.userManager.getAllUserCounters()
-  }
-
-  /**
    * Очистка счетчика сообщений для пользователя
    */
   async clearUserMessageCounter(userId: number): Promise<boolean> {
@@ -422,12 +411,10 @@ export class TelegramBotService implements IService {
    * Получение статистики модулей
    */
   async getModuleStats(): Promise<object> {
-    const userCounters = await this.userManager.getAllUserCounters()
     return {
       captcha: this.captchaManager?.isAvailable() || false,
       spam: this.spamDetector?.isAvailable() || false,
       ai: this.messageHandler?.hasAIService() || false,
-      userCount: userCounters.length,
     }
   }
 

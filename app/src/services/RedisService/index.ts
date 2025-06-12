@@ -36,7 +36,6 @@ export class RedisService implements IService {
         url: this.config.REDIS_URL,
         socket: {
           connectTimeout: 10000, // 10 секунд таймаут подключения
-          lazyConnect: true, // Не подключаться сразу при создании
           keepAlive: true, // Включаем keep-alive
           noDelay: true, // Отключаем алгоритм Nagle для меньшей задержки
           reconnectStrategy: (retries) => {

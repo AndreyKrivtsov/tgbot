@@ -268,37 +268,6 @@ export class UserManager {
   }
 
   /**
-   * Получение всех счетчиков пользователей (для обратной совместимости)
-   * ВНИМАНИЕ: Этот метод может быть медленным в Redis!
-   */
-  async getAllUserCounters(): Promise<UserMessageCounter[]> {
-    this.logger.w("getAllUserCounters() - expensive operation in Redis version!")
-
-    try {
-      // Это неэффективно для больших объемов данных
-      // В продакшене лучше избегать этого метода
-      const keys = await this.redisService.keys("counter:user:*")
-      const counters: UserMessageCounter[] = []
-
-      for (const key of keys) {
-        const userIdMatch = key.match(/counter:user:(\d+)/)
-        if (userIdMatch) {
-          const userId = Number.parseInt(userIdMatch[1])
-          const userCounter = await this.getUserCounter(userId)
-          if (userCounter) {
-            counters.push(userCounter)
-          }
-        }
-      }
-
-      return counters
-    } catch (error) {
-      this.logger.e("Error getting all user counters:", error)
-      return []
-    }
-  }
-
-  /**
    * Очистка счетчика для конкретного пользователя
    */
   async clearUserCounter(userId: number): Promise<boolean> {
@@ -451,33 +420,6 @@ export class UserManager {
   }
 
   /**
-   * Получение статистики спама
-   * ВНИМАНИЕ: Может быть медленным для больших объемов данных!
-   */
-  async getSpamStats(): Promise<{ totalUsers: number, spamUsers: number, totalMessages: number, totalSpam: number }> {
-    this.logger.w("getSpamStats() - expensive operation in Redis version!")
-
-    try {
-      const counters = await this.getAllUserCounters()
-
-      return {
-        totalUsers: counters.length,
-        spamUsers: counters.filter(c => c.spamCount > 0).length,
-        totalMessages: counters.reduce((sum, c) => sum + c.messageCount, 0),
-        totalSpam: counters.reduce((sum, c) => sum + c.spamCount, 0),
-      }
-    } catch (error) {
-      this.logger.e("Error getting spam stats:", error)
-      return {
-        totalUsers: 0,
-        spamUsers: 0,
-        totalMessages: 0,
-        totalSpam: 0,
-      }
-    }
-  }
-
-  /**
    * Проверка существования счетчика для пользователя
    */
   async hasMessageCounter(userId: number): Promise<boolean> {
@@ -497,28 +439,6 @@ export class UserManager {
    */
   async deleteMessageCounter(userId: number): Promise<boolean> {
     return await this.clearUserCounter(userId)
-  }
-
-  /**
-   * Получение всех счетчиков как Map (для обратной совместимости)
-   * ВНИМАНИЕ: Очень медленный метод в Redis версии!
-   */
-  async getMessageCounters(): Promise<Map<number, UserMessageCounter>> {
-    this.logger.w("getMessageCounters() - very expensive operation in Redis version!")
-
-    try {
-      const counters = await this.getAllUserCounters()
-      const map = new Map<number, UserMessageCounter>()
-
-      for (const counter of counters) {
-        map.set(counter.userId, counter)
-      }
-
-      return map
-    } catch (error) {
-      this.logger.e("Error getting message counters map:", error)
-      return new Map()
-    }
   }
 
   /**

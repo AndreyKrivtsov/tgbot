@@ -160,14 +160,7 @@ export class SpamDetector {
   }
 
   /**
-   * Получение статистики спама
-   */
-  async getSpamStats(): Promise<{ totalUsers: number, spamUsers: number, totalMessages: number, totalSpam: number }> {
-    return await this.userManager.getSpamStats()
-  }
-
-  /**
-   * Проверка доступности антиспам сервиса
+   * Проверка доступности детектора спама
    */
   isAvailable(): boolean {
     return !!this.antiSpamService
