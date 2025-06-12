@@ -12,7 +12,8 @@ export const BOT_CONFIG = {
   // Таймауты и интервалы (в миллисекундах)
   CAPTCHA_TIMEOUT_MS: 60_000, // 60 секунд - таймаут капчи
   CAPTCHA_CHECK_INTERVAL_MS: 5_000, // 5 секунд - интервал проверки капчи
-  MESSAGE_DELETE_TIMEOUT_MS: 20_000, // 60 секунд - автоудаление сообщений (ошибки, команды в группах)
+  MESSAGE_DELETE_SHORT_TIMEOUT_MS: 10_000, // 10 секунд - короткий таймаут удаления сообщений
+  MESSAGE_DELETE_LONG_TIMEOUT_MS: 60_000, // 60 секунд - длинный таймаут удаления сообщений
   TEMPORARY_BAN_DURATION_SEC: 40, // 40 секунд - временный бан
   AUTO_UNBAN_DELAY_MS: 5_000, // 5 секунд - задержка разбана
   USER_OPERATION_DELAY_MS: 5_000, // 5 секунд - задержка операций с пользователями

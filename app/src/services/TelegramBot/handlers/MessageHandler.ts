@@ -8,6 +8,7 @@ import type { CommandHandler } from "./CommandHandler.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import { getMessage } from "../utils/Messages.js"
 import { MessageFormatter } from "../utils/MessageFormatter.js"
+import { BOT_CONFIG } from "../../../constants.js"
 
 /**
  * Обработчик сообщений для Telegram бота
@@ -145,7 +146,7 @@ export class MessageHandler {
       // Отправляем ответ AI в чат
       if (isError) {
         // Для сообщений об ошибках используем автоудаление (20 секунд)
-        await this.bot.sendGroupMessage(messageParams, 10_000)
+        await this.bot.sendGroupMessage(messageParams, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS)
       } else {
         // Обычные ответы отправляем без автоудаления
         await this.bot.sendMessage(messageParams)

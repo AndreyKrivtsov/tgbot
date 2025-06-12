@@ -5,6 +5,7 @@ import type { BotContext, TelegramBot } from "../types/index.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import { getMessage } from "../utils/Messages.js"
 import { User } from "gramio"
+import { BOT_CONFIG } from "../../../constants.js"
 
 /**
  * Менеджер капчи для новых пользователей
@@ -233,7 +234,7 @@ export class CaptchaManager {
         chat_id: user.chatId,
         text: failText,
         parse_mode: "HTML",
-      }, 10000) // 60 секунд
+      }, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS) // 60 секунд
 
       this.logger.w(`User ${user.userId} failed captcha`)
     } catch (error) {
@@ -258,7 +259,7 @@ export class CaptchaManager {
         chat_id: user.chatId,
         text: timeoutText,
         parse_mode: "HTML",
-      }, 10000) // 60 секунд
+      }, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS) // 60 секунд
 
       this.logger.w(`User ${user.userId} captcha timeout`)
     } catch (error) {

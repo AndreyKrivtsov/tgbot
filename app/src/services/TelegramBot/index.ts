@@ -134,7 +134,7 @@ export class TelegramBotService implements IService {
       this.bot,
       this.userRestrictions,
       this.userManager,
-      settings.errorMessageDeleteTimeoutMs,
+      BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS,
       this.dependencies.antiSpamService,
     )
 

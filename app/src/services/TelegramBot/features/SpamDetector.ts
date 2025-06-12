@@ -6,6 +6,7 @@ import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import type { UserManager } from "./UserManager.js"
 import type { Bot, MessageContext } from "gramio"
 import { getMessage } from "../utils/Messages.js"
+import { BOT_CONFIG } from "../../../constants.js"
 
 /**
  * Детектор и обработчик спама
@@ -25,7 +26,7 @@ export class SpamDetector {
     bot: TelegramBot,
     userRestrictions: UserRestrictions,
     userManager: UserManager,
-    deleteTimeoutMs: number = 20000,
+    deleteTimeoutMs: number = BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS,
     antiSpamService?: AntiSpamService,
   ) {
     this.logger = logger

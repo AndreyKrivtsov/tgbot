@@ -10,6 +10,16 @@ export class SettingsManager {
   private logger: Logger
   private dependencies: TelegramBotDependencies
 
+  private defaultSettings: TelegramBotSettings = {
+    captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
+    captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
+    errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_LONG_TIMEOUT_MS,
+    deleteSystemMessages: true, // Удалять системные сообщения
+    temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
+    autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,
+    maxMessagesForSpamCheck: BOT_CONFIG.MAX_MESSAGES_FOR_SPAM_CHECK,
+  }
+
   constructor(
     initialSettings: Partial<TelegramBotSettings>,
     logger: Logger,
@@ -20,13 +30,7 @@ export class SettingsManager {
 
     // Настройки по умолчанию
     this.settings = {
-      captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
-      captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
-      errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS,
-      deleteSystemMessages: true, // Удалять системные сообщения
-      temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
-      autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,
-      maxMessagesForSpamCheck: BOT_CONFIG.MAX_MESSAGES_FOR_SPAM_CHECK,
+      ...this.defaultSettings,
       ...initialSettings,
     }
   }
@@ -111,15 +115,7 @@ export class SettingsManager {
    * Сброс настроек к значениям по умолчанию
    */
   resetToDefault(): void {
-    this.settings = {
-      captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
-      captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
-      errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS,
-      deleteSystemMessages: true,
-      temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
-      autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,
-      maxMessagesForSpamCheck: BOT_CONFIG.MAX_MESSAGES_FOR_SPAM_CHECK,
-    }
+    this.settings = { ...this.defaultSettings }
     this.logger.i("Settings reset to default values")
   }
 

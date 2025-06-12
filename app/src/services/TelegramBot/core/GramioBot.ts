@@ -1,6 +1,6 @@
-import { Bot } from "gramio"
-import type { MessageContext, NewChatMembersContext } from "gramio"
+import { Bot, MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
+import { BOT_CONFIG } from "../../../constants.js"
 
 /**
  * Обертка для библиотеки GramIO с минималистичным API
@@ -214,7 +214,7 @@ export class GramioBot {
    */
   async sendGroupMessage(
     params: SendMessageParams,
-    deleteAfterMs: number = 60_000, // 60 секунд по умолчанию
+    deleteAfterMs: number = BOT_CONFIG.MESSAGE_DELETE_LONG_TIMEOUT_MS, // 60 секунд по умолчанию
   ): Promise<MessageResult> {
     // Если это приватный чат (положительный ID), отправляем обычное сообщение
     if (params.chat_id > 0) {

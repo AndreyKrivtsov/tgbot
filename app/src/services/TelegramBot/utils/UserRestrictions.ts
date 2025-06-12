@@ -139,7 +139,7 @@ export class UserRestrictions {
         chat_id: chatId,
         text,
         parse_mode: parseMode,
-      }, BOT_CONFIG.MESSAGE_DELETE_TIMEOUT_MS)
+      }, BOT_CONFIG.MESSAGE_DELETE_LONG_TIMEOUT_MS)
     } catch (error) {
       this.logger.e("Failed to send group message:", error)
       throw error
