@@ -94,12 +94,6 @@ export class Application {
       return new RedisService(this.config, this.logger)
     })
 
-    // AI Service
-    this.container.register("aiService", async () => {
-      const { AIService } = await import("../services/AI/index.js")
-      return new AIService(this.config, this.logger)
-    })
-
     this.logger.i("✅ Infrastructure services registered")
   }
 
@@ -157,12 +151,10 @@ export class Application {
     // Chat Service
     this.container.register("chat", async () => {
       const { AIChatService } = await import("../services/AIChatService/index.js")
-      const aiService = await this.container.getAsync("aiService")
       const database = await this.container.getAsync("database") as any
       const redis = await this.container.getAsync("redis") as any
 
       return new AIChatService(this.config, this.logger, {
-        aiService,
         database,
         redis,
       })

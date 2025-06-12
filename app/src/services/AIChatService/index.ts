@@ -1,18 +1,17 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
+import type { GeminiMessage } from "./providers/GeminiAdapter.js"
+import { GeminiAdapter } from "./providers/GeminiAdapter.js"
 import { ChatRepository } from "../../repository/ChatRepository.js"
-import type { GeminiMessage } from "../AI/providers/GeminiAdapter.js"
-import { GeminiAdapter } from "../AI/providers/GeminiAdapter.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 import type { DatabaseService } from "../DatabaseService/index.js"
 import type { RedisService } from "../RedisService/index.js"
-import { AI_CHAT_CONFIG, AI_SERVICE_CONFIG } from "../../constants.js"
+import { AI_CHAT_CONFIG } from "../../constants.js"
 import { getMessage } from "../TelegramBot/utils/Messages.js"
 import { AdaptiveChatThrottleManager } from "./AdaptiveThrottleManager.js"
 
 interface AIChatDependencies {
-  aiService?: any
   database?: DatabaseService
   redis?: RedisService
 }
@@ -134,7 +133,7 @@ export class AIChatService implements IService {
    * Проверка состояния сервиса
    */
   isHealthy(): boolean {
-    return this.dependencies.aiService !== undefined
+    return this.dependencies.redis !== undefined
   }
 
   /**
@@ -678,11 +677,11 @@ export class AIChatService implements IService {
     
     // Если есть кастомный системный промпт в конфигурации чата, используем его
     if (config?.systemPrompt) {
-      return this.chatRepository?.buildSystemPromptString(config.systemPrompt) || AI_SERVICE_CONFIG.DEFAULT_SYSTEM_PROMPT
+      return this.chatRepository?.buildSystemPromptString(config.systemPrompt) || AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
     }
     
     // Иначе возвращаем дефолтный системный промпт
-    return AI_SERVICE_CONFIG.DEFAULT_SYSTEM_PROMPT
+    return AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
   }
 
   /**

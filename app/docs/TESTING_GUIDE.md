@@ -1,421 +1,404 @@
 # 🧪 Руководство по тестированию
 
-Полное руководство по настройке и использованию юнит-тестов в проекте Telegram Bot.
-
 ## 📋 Содержание
 
 - [Обзор](#обзор)
-- [Настройка](#настройка)
+- [Структура тестов](#структура-тестов)
+- [Настройка окружения](#настройка-окружения)
+- [Типы тестов](#типы-тестов)
 - [Запуск тестов](#запуск-тестов)
-- [Существующие тесты](#существующие-тесты)
-- [Написание новых тестов](#написание-новых-тестов)
-- [Архитектура тестирования](#архитектура-тестирования)
+- [Написание тестов](#написание-тестов)
+- [Моки и утилиты](#моки-и-утилиты)
+- [Покрытие кода](#покрытие-кода)
+- [CI/CD интеграция](#cicd-интеграция)
 
 ## 🎯 Обзор
 
-Проект использует **Jest** для создания и запуска тестов. Система тестирования включает:
+Проект использует **Jest** в качестве основного фреймворка для тестирования с полной поддержкой TypeScript. Система тестирования включает unit-тесты для отдельных компонентов и integration-тесты для проверки взаимодействия между сервисами.
 
-### Типы тестов:
-- **🔧 Юнит-тесты** - изолированное тестирование отдельных модулей
-- **🔄 Интеграционные тесты** - тестирование взаимодействия между компонентами
+### Технологический стек:
+- **Jest** - основной фреймворк тестирования
+- **ts-jest** - поддержка TypeScript
+- **@types/jest** - типы для Jest
+- **Node.js Test Environment** - окружение для выполнения тестов
 
-### Текущее покрытие:
-- **CaptchaService** ✅ (Юнит)
-- **AntiSpamService** ✅ (Юнит)
-- **AntiSpam Flow** ✅ (Интеграционный)
-- **Captcha Flow** ✅ (Интеграционный)
-- **Container** 🔄 (В планах)
-- **Configuration** 🔄 (В планах)
+### Принципы тестирования:
+- **DI-friendly testing** - использование Dependency Injection для изоляции компонентов
+- **Mocking external dependencies** - изоляция от внешних сервисов
+- **Comprehensive coverage** - максимальное покрытие критической логики
+- **Fast execution** - быстрое выполнение тестов
 
-## ⚙️ Настройка
+## 🏗️ Структура тестов
 
-### Зависимости
-
-Все необходимые зависимости уже установлены:
-
-```json
-{
-  "@types/jest": "^29.5.12",
-  "jest": "^29.7.0",
-  "ts-jest": "^29.1.2"
-}
+```
+app/src/__tests__/
+├── setup.ts                        # Глобальная настройка тестовой среды
+├── unit/                           # Unit-тесты отдельных компонентов
+│   ├── core/                       # Тесты архитектурных компонентов
+│   │   └── Container.test.ts       # DI контейнер
+│   └── services/                   # Тесты бизнес-сервисов
+│       ├── CaptchaService.test.ts  # Система капчи
+│       ├── AntiSpamService.test.ts # Антиспам сервис
+│       └── AIChatService.test.ts   # ИИ чат сервис
+├── integration/                    # Integration-тесты
+│   ├── database.test.ts           # Интеграционные тесты БД
+│   └── telegram-bot.test.ts       # Тесты Telegram бота
+└── README.md                      # Документация тестов
 ```
 
-### Конфигурация
+### Соглашения по именованию:
+- **Unit-тесты**: `ComponentName.test.ts`
+- **Integration-тесты**: `feature-name.test.ts`
+- **Mock файлы**: `__mocks__/ModuleName.ts`
+- **Утилиты**: `test-utils/UtilityName.ts`
 
-Настройка Jest находится в `jest.config.js`:
+## ⚙️ Настройка окружения
+
+### Конфигурация Jest (`jest.config.js`):
 
 ```javascript
 export default {
-  preset: "ts-jest",
-  testEnvironment: "node",
-  testMatch: [
-    "**/__tests__/**/*.test.ts",
-    "**/__tests__/**/*.test.js"
-  ],
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  moduleNameMapping: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  extensionsToTreatAsEsm: ['.ts'],
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
+      useESM: true,
+    }],
+  },
   collectCoverageFrom: [
-    "src/**/*.ts",
-    "!src/**/*.d.ts",
-    "!src/index.ts",
-    "!src/**/__tests__/**"
-  ]
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/__tests__/**',
+    '!src/**/index.ts',
+  ],
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html'],
 }
+```
+
+### Глобальная настройка (`setup.ts`):
+
+```typescript
+import { beforeEach, afterEach } from 'jest'
+
+// Глобальные утилиты для тестов
+declare global {
+  var testUtils: {
+    mockTime: (timestamp: number) => void
+    restoreTime: () => void
+    createFakeUser: (id: number) => any
+    createFakeChat: (id: number) => any
+    createFakeMessage: (text: string) => any
+    sleep: (ms: number) => Promise<void>
+  }
+}
+
+// Реализация утилит
+global.testUtils = {
+  mockTime: (timestamp: number) => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date(timestamp))
+  },
+  
+  restoreTime: () => {
+    jest.useRealTimers()
+  },
+  
+  createFakeUser: (id: number) => ({
+    id,
+    first_name: 'Test User',
+    username: `testuser${id}`,
+  }),
+  
+  // ... другие утилиты
+}
+```
+
+## 🧩 Типы тестов
+
+### 1. Unit-тесты
+
+Тестируют отдельные компоненты в изоляции:
+
+```typescript
+// src/__tests__/unit/services/CaptchaService.test.ts
+import { CaptchaService } from '../../../services/CaptchaService/index.js'
+
+describe('CaptchaService', () => {
+  let service: CaptchaService
+  
+  beforeEach(() => {
+    const mockConfig = { /* mock config */ }
+    const mockLogger = { /* mock logger */ }
+    service = new CaptchaService(mockConfig, mockLogger)
+  })
+  
+  test('должен генерировать математическую задачу', () => {
+    const challenge = service.generateChallenge()
+    
+    expect(challenge.question).toMatch(/\d+ [+\-*/] \d+ = \?/)
+    expect(challenge.options).toHaveLength(4)
+    expect(challenge.options).toContain(challenge.correctAnswer)
+  })
+})
+```
+
+### 2. Integration-тесты
+
+Тестируют взаимодействие между компонентами:
+
+```typescript
+// src/__tests__/integration/database.test.ts
+import { Container } from '../../core/Container.js'
+import { Application } from '../../core/Application.js'
+
+describe('Database Integration', () => {
+  let container: Container
+  let app: Application
+  
+  beforeEach(async () => {
+    container = new Container(mockLogger)
+    app = new Application(container, mockLogger, testConfig)
+    await app.initialize()
+  })
+  
+  afterEach(async () => {
+    await container.dispose()
+  })
+  
+  test('должен сохранять и получать конфигурацию чата', async () => {
+    const chatRepo = await container.getAsync('chatRepository')
+    
+    await chatRepo.saveChatConfig(123, { aiEnabled: true })
+    const config = await chatRepo.getChatConfig(123)
+    
+    expect(config.aiEnabled).toBe(true)
+  })
+})
 ```
 
 ## 🚀 Запуск тестов
 
-### Основные команды
+### Основные команды:
 
 ```bash
-# Все тесты
+# Запуск всех тестов
 npm test
 
-# Только юнит-тесты
-npm run test:unit
-
-# Только интеграционные тесты
-npm run test:integration
-
-# Режим наблюдения
+# Тесты в режиме watch (для разработки)
 npm run test:watch
 
-# С покрытием кода
+# Запуск с покрытием кода
 npm run test:coverage
 
-# CI режим
+# Только unit-тесты
+npm run test:unit
+
+# Только integration-тесты
+npm run test:integration
+
+# Для CI/CD (без watch)
 npm run test:ci
 ```
 
-### Запуск конкретных тестов
+### Фильтрация тестов:
 
 ```bash
-# Запуск тестов определенного сервиса
-npm test CaptchaService.test.js
-npm test AntiSpamService.test.js
+# Запуск конкретного файла
+npm test CaptchaService.test.ts
 
-# Запуск тестов с определенным паттерном
-npm test -- --testNamePattern="генерация"
+# Запуск тестов по паттерну названия
+npm test -- --testNamePattern="Captcha"
+
+# Запуск тестов в определенной папке
+npm test src/__tests__/unit/services/
+
+# Запуск только измененных тестов
+npm test -- --onlyChanged
 ```
 
-## 📝 Существующие тесты
+### Режимы отладки:
 
-### CaptchaService Tests
+```bash
+# Запуск с дополнительной информацией
+npm test -- --verbose
 
-**Файл**: `src/__tests__/unit/services/CaptchaService.test.js`
+# Отладка через Node.js инспектор
+npm test -- --runInBand --inspect-brk
 
-**Что тестируется**:
-- ✅ Генерация корректных математических задач
-- ✅ Создание уникальных вариантов ответов
-- ✅ Структура объекта капчи (question, answer, options)
+# Запуск с помощью VS Code debugger
+npm test -- --runInBand --no-coverage
+```
 
-**Пример теста**:
-```javascript
-test("должен генерировать корректную математическую задачу", () => {
-  const captcha = generateCaptcha()
+## ✍️ Написание тестов
 
-  expect(captcha.question).toHaveLength(2)
-  expect(captcha.answer).toBe(captcha.question[0] + captcha.question[1])
-  expect(captcha.options).toContain(captcha.answer)
+### 1. Архитектура теста (AAA Pattern):
+
+```typescript
+describe('AntiSpamService', () => {
+  test('должен определять спам сообщения', async () => {
+    // Arrange - подготовка
+    const service = new AntiSpamService(mockConfig, mockLogger)
+    const spamMessage = 'Купи криптовалюту! Ссылка: example.com'
+    
+    // Act - выполнение
+    const result = await service.checkMessage(123, spamMessage)
+    
+    // Assert - проверка
+    expect(result.isSpam).toBe(true)
+    expect(result.confidence).toBeGreaterThan(0.5)
+  })
 })
 ```
 
-### AntiSpamService Tests
+### 2. Тестирование асинхронного кода:
 
-**Файл**: `src/__tests__/unit/services/AntiSpamService.test.js`
-
-**Что тестируется**:
-- ✅ Обработка нормальных сообщений
-- ✅ Обработка спам сообщений
-- ✅ Обработка пустых сообщений
-- ✅ Создание записей пользователей
-- ✅ Счетчик сообщений (лимит 5)
-- ✅ Мок API ответов
-
-**Пример мок API**:
-```javascript
-const mockResponse = {
-  isSpam: true,
-  confidence: 0.95,
-  reason: "Содержит спам слова"
-}
-
-const result = checkMessageForSpam(message, mockResponse)
-expect(result.action).toBe("block")
-```
-
-### 🔄 Интеграционные тесты
-
-#### AntiSpam Flow Test (9 тестов)
-
-**Файл**: `src/__tests__/integration/AntiSpamFlow.test.js`
-
-**Что тестируется:**
-- 📨 Получение сообщения ботом → AntiSpamService → AI API → действие
-- ✅ Обработка нормальных сообщений (разрешение)
-- 🚫 Обнаружение спама с мок API ответами
-- 🔤 Автоматическое определение спама по ключевым словам
-- 🔢 Лимит проверки (5 сообщений на пользователя)
-- ❌ Обработка ошибок AI API
-- 📊 Отслеживание статистики пользователей
-- 🎯 Различные уровни уверенности AI (0.05 - 0.98)
-
-**Основные сценарии:**
-```javascript
-// Полный флоу: нормальное сообщение
-test("должен обрабатывать нормальное сообщение", async () => {
-  const message = createMockMessage("Привет всем! Как дела?")
-  const result = await botService.handleNewMessage(message)
-
-  expect(result.action).toBe("allow")
-  expect(result.isSpam).toBe(false)
-  expect(botService.deletedMessages).toHaveLength(0)
-})
-
-// Полный флоу: спам с мок API
-test("должен обнаруживать спам с мок API", async () => {
-  const mockResponse = {
-    isSpam: true,
-    confidence: 0.85,
-    reason: "Обнаружены подозрительные паттерны"
-  }
-
-  const result = await antiSpamService.checkMessage(message, mockResponse)
-  expect(result.isSpam).toBe(true)
-  expect(result.action).toBe("delete")
-})
-```
-
-#### Captcha Flow Test (10 тестов)
-
-**Файл**: `src/__tests__/integration/CaptchaFlow.test.js`
-
-**Что тестируется:**
-- 👋 Вход нового пользователя → ограничение → капча → ответ → результат
-- 🔐 Генерация математических капч с 4 вариантами ответов
-- ✅ Правильный ответ → снятие ограничений → приветствие
-- ❌ Неправильный ответ → повторная попытка (3 попытки максимум)
-- 👢 Превышение лимита попыток → кик пользователя
-- ⏰ Таймаут капчи (1 минута) → кик пользователя
-- 👥 Обработка нескольких пользователей одновременно
-- 🧹 Очистка просроченных капч
-- 🔍 Обработка несуществующих капч
-
-**Основные сценарии:**
-```javascript
-// Полный флоу: новый пользователь
-test("должен обрабатывать вход нового пользователя", async () => {
-  const joinEvent = createMockJoinEvent()
-  const result = await botService.handleNewMember(joinEvent)
-
-  expect(result.action).toBe("captcha_generated")
-  expect(result.captcha.question).toMatch(/\d+ \+ \d+ = \?/)
-  expect(result.captcha.options).toHaveLength(4)
-  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(true)
-})
-
-// Полный флоу: правильный ответ
-test("должен обрабатывать правильный ответ на капчу", async () => {
-  const callbackQuery = createMockCallbackQuery(
-    mockNewUser.id,
-    `captcha_answer_${mockNewUser.id}_${captcha.correctIndex}`,
-    messageId
+```typescript
+test('должен обрабатывать таймауты API', async () => {
+  // Мокируем медленный API
+  const slowApiMock = jest.fn().mockImplementation(
+    () => new Promise(resolve => setTimeout(resolve, 10000))
   )
-
-  const result = await botService.handleCallbackQuery(callbackQuery)
-
-  expect(result.success).toBe(true)
-  expect(result.action).toBe("allow")
-  expect(botService.restrictedUsers.has(mockNewUser.id)).toBe(false)
-})
-
-// Полный флоу: превышение лимита попыток
-test("должен кикать пользователя после 3 неправильных ответов", async () => {
-  // ... 3 неправильных ответа подряд
-
-  expect(botService.kickedUsers).toHaveLength(1)
-  expect(botService.kickedUsers[0].reason).toContain("Превышено количество попыток")
+  
+  service.setApiClient(slowApiMock)
+  
+  // Проверяем, что таймаут срабатывает
+  const result = await service.checkMessage(123, 'test')
+  
+  expect(result.error).toContain('timeout')
 })
 ```
 
-**Мок-компоненты:**
-- `MockCaptchaService` - генерация капч, проверка ответов, таймауты
-- `MockTelegramBotService` - ограничения, кик, отправка сообщений
-- Полная симуляция callback query и inline клавиатур
+### 3. Тестирование ошибок:
 
-## ✍️ Написание новых тестов
+```typescript
+test('должен выбрасывать ошибку при неверной конфигурации', () => {
+  expect(() => {
+    new CaptchaService(invalidConfig, mockLogger)
+  }).toThrow('Invalid configuration')
+})
 
-### Структура теста
-
-```javascript
-describe("ServiceName", () => {
-  describe("Группа тестов", () => {
-    test("должен выполнять определенное действие", () => {
-      // Arrange - подготовка данных
-      const input = "test data"
-
-      // Act - выполнение действия
-      const result = serviceFunction(input)
-
-      // Assert - проверка результата
-      expect(result).toBe("expected")
-    })
-  })
+test('должен обрабатывать ошибки API', async () => {
+  const failingApiMock = jest.fn().mockRejectedValue(
+    new Error('API unavailable')
+  )
+  
+  service.setApiClient(failingApiMock)
+  
+  await expect(service.checkMessage(123, 'test'))
+    .rejects.toThrow('API unavailable')
 })
 ```
 
-### Рекомендации
+## 🎭 Моки и утилиты
 
-1. **Файлы тестов**: размещайте в `src/__tests__/unit/services/`
-2. **Именование**: используйте суффикс `.test.js`
-3. **Описания**: пишите на русском языке для понятности
-4. **Моки**: используйте простые функции вместо сложных моков
-5. **Изоляция**: каждый тест должен быть независимым
+### 1. Мокирование внешних зависимостей:
 
-### Создание мока сервиса
-
-```javascript
-// Простая функция для тестирования логики
-function serviceFunction(input, mockApiResponse) {
-  // Базовая валидация
-  if (!input) {
-    return { error: "Нет входных данных" }
+```typescript
+// Мокирование модуля
+jest.mock('../../../config.js', () => ({
+  config: {
+    BOT_TOKEN: 'test-token',
+    DATABASE_URL: 'test-db-url',
+    ANTISPAM_URL: 'http://test-antispam-api',
   }
+}))
 
-  // Использование мока или дефолтного значения
-  const response = mockApiResponse || { success: true }
+// Мокирование класса
+jest.mock('../../../services/RedisService/index.js', () => ({
+  RedisService: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+  }))
+}))
+```
 
-  return {
-    input,
-    processed: true,
-    response
-  }
+### 2. Создание test doubles:
+
+```typescript
+// Stub - простая заглушка
+const loggerStub = {
+  i: jest.fn(),
+  w: jest.fn(),
+  e: jest.fn(),
+  d: jest.fn(),
 }
+
+// Mock - контролируемая заглушка
+const apiClientMock = {
+  post: jest.fn().mockResolvedValue({ 
+    ok: true, 
+    json: () => Promise.resolve({ is_spam: false })
+  })
+}
+
+// Spy - слежение за вызовами
+const originalMethod = service.processMessage
+const processMessageSpy = jest.spyOn(service, 'processMessage')
 ```
 
-### Создание интеграционного теста
+### 3. Работа с временем:
 
-```javascript
-// src/__tests__/integration/NewFlow.test.js
-describe("New Integration Flow", () => {
-  // Мок классы для симуляции сервисов
-  class MockService1 {
-    constructor() {
-      this.events = []
-      this.onEventProcessed = null
-    }
+```typescript
+beforeEach(() => {
+  jest.useFakeTimers()
+  jest.setSystemTime(new Date('2024-01-01'))
+})
 
-    async processEvent(eventData) {
-      this.events.push(eventData)
-      const result = { processed: true, eventData }
+afterEach(() => {
+  jest.useRealTimers()
+})
 
-      if (this.onEventProcessed) {
-        this.onEventProcessed(result)
-      }
-
-      return result
-    }
-  }
-
-  class MockService2 {
-    constructor(service1) {
-      this.service1 = service1
-      this.processedResults = []
-
-      // Подписываемся на события первого сервиса
-      this.service1.onEventProcessed = (result) => {
-        this.handleProcessedEvent(result)
-      }
-    }
-
-    handleProcessedEvent(result) {
-      console.log(`📨 Получен результат: ${result.eventData.name}`)
-      this.processedResults.push(result)
-    }
-  }
-
-  describe("Полный флоу обработки", () => {
-    let service1, service2
-
-    beforeEach(() => {
-      service1 = new MockService1()
-      service2 = new MockService2(service1)
-    })
-
-    test("должен обрабатывать полный флоу", async () => {
-      // Arrange - подготовка данных
-      const eventData = { name: "test-event", data: "test-data" }
-
-      // Act - выполнение действия
-      const result = await service1.processEvent(eventData)
-
-      // Assert - проверка результата
-      expect(result.processed).toBe(true)
-      expect(service2.processedResults).toHaveLength(1)
-      expect(service2.processedResults[0].eventData).toEqual(eventData)
-    })
-  })
+test('должен удалять просроченные капчи', () => {
+  service.createCaptcha(123)
+  
+  // Продвигаем время на 2 минуты
+  jest.advanceTimersByTime(120000)
+  
+  service.cleanupExpiredCaptchas()
+  
+  expect(service.getCaptcha(123)).toBeNull()
 })
 ```
-
-## 🏗️ Архитектура тестирования
-
-### Принципы
-
-1. **Простота** - используем JavaScript вместо TypeScript для тестов
-2. **Изоляция** - каждый тест независим от других
-3. **Моки** - простые функции вместо сложных библиотек моков
-4. **Читаемость** - понятные имена и описания на русском
-
-### Структура папок
-
-```
-src/__tests__/
-├── unit/                    # Юнит-тесты
-│   ├── services/            # Тесты сервисов
-│   │   ├── CaptchaService.test.js
-│   │   └── AntiSpamService.test.js
-│   └── core/                # Тесты архитектурных компонентов
-├── integration/             # Интеграционные тесты
-│   ├── AntiSpamFlow.test.js # Полный флоу антиспама
-│   └── CaptchaFlow.test.js  # Полный флоу капчи
-├── setup.ts                 # Глобальная настройка тестов
-└── README.md                # Подробная документация
-```
-
-### Планы расширения
-
-**Ближайшие цели**:
-- [ ] Container.test.js - тестирование DI контейнера
-- [ ] Config.test.js - тестирование конфигурации
-- [ ] Database.test.js - тестирование подключения к БД
-- [ ] Redis.test.js - тестирование кэша
-
-**Будущие планы**:
-- [ ] Интеграционные тесты для TelegramBot + CaptchaService
-- [ ] Интеграционные тесты для полного флоу модерации
-- [ ] E2E тесты с реальным Telegram API
-- [ ] Performance тесты для нагруженных чатов
-- [ ] Тесты безопасности
 
 ## 📊 Покрытие кода
 
-### Текущие показатели
+### Настройка покрытия:
 
+```javascript
+// jest.config.js
+module.exports = {
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/__tests__/**',
+    '!src/index.ts',
+    '!src/**/__mocks__/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+    './src/core/': {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90,
+    },
+  },
+}
 ```
-Test Suites: 2 passed, 2 total
-Tests:       19 passed, 19 total
-Time:        ~2.8s
-Coverage:    AntiSpam Flow ✅ + Captcha Flow ✅
-```
 
-### Цели покрытия
-
-- **Statements**: > 80%
-- **Branches**: > 75%
-- **Functions**: > 85%
-- **Lines**: > 80%
-
-### Просмотр отчета
+### Анализ покрытия:
 
 ```bash
 # Генерация отчета о покрытии
@@ -423,60 +406,86 @@ npm run test:coverage
 
 # Просмотр HTML отчета
 open coverage/lcov-report/index.html
+
+# Проверка порогов покрытия
+npm run test:ci
 ```
 
-## 🔧 Отладка тестов
+### Типы метрик покрытия:
+- **Lines**: процент выполненных строк
+- **Functions**: процент вызванных функций  
+- **Branches**: процент пройденных веток условий
+- **Statements**: процент выполненных выражений
 
-### Полезные команды
+## 🔄 CI/CD интеграция
+
+### GitHub Actions workflow:
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm run test:ci
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+```
+
+### Локальная проверка перед коммитом:
 
 ```bash
-# Запуск только одного теста
-npm test -- --testNamePattern="конкретный тест"
-
-# Verbose режим для детальной информации
-npm test -- --verbose
-
-# Запуск с детектором открытых хендлов
-npm test -- --detectOpenHandles
+# package.json scripts
+{
+  "scripts": {
+    "precommit": "npm run lint && npm run test:ci",
+    "prepush": "npm run test:coverage"
+  }
+}
 ```
 
-### Типичные проблемы
+## 🛠️ Лучшие практики
 
-**Проблема**: Jest не находит тесты
-**Решение**: Проверьте `testMatch` в `jest.config.js`
+### 1. Структура тестов:
+- Группируйте связанные тесты в `describe` блоки
+- Используйте понятные названия тестов
+- Следуйте принципу AAA (Arrange, Act, Assert)
 
-**Проблема**: Таймауты тестов
-**Решение**: Используйте `jest.setTimeout(10000)` в тесте
+### 2. Изоляция тестов:
+- Каждый тест должен быть независимым
+- Используйте `beforeEach`/`afterEach` для настройки/очистки
+- Мокируйте все внешние зависимости
 
-**Проблема**: Моки не работают
-**Решение**: Используйте простые функции вместо сложных моков
+### 3. Читаемость:
+- Пишите тесты как живую документацию
+- Используйте осмысленные данные для тестов
+- Добавляйте комментарии для сложной логики
 
-## 🎯 Best Practices
-
-### DO ✅
-
-- Пишите понятные описания тестов
-- Используйте AAA pattern (Arrange, Act, Assert)
-- Делайте тесты независимыми
-- Тестируйте граничные случаи
-- Используйте простые моки
-
-### DON'T ❌
-
-- Не тестируйте внешние библиотеки
-- Не делайте тесты зависимыми друг от друга
-- Не используйте реальные API в тестах
-- Не забывайте очищать моки после тестов
-- Не пишите слишком сложные тесты
+### 4. Производительность:
+- Избегайте реальных HTTP запросов
+- Используйте in-memory базы данных для тестов
+- Группируйте медленные тесты отдельно
 
 ---
 
-## 📚 Дополнительные ресурсы
-
-- **[Jest Documentation](https://jestjs.io/docs/getting-started)** - официальная документация
-- **[Testing Best Practices](https://github.com/goldbergyoni/javascript-testing-best-practices)** - лучшие практики
-- **[Основной README](../src/__tests__/README.md)** - подробная документация по тестам
-
----
-
-> 💡 **Совет**: Начинайте с простых тестов и постепенно добавляйте сложность. Хорошие тесты - это инвестиция в стабильность проекта!
+> 💡 **Следующие разделы**: [Настройка БД](./DATABASE_SETUP.md) | [Архитектура](./ARCHITECTURE_OVERVIEW.md)
