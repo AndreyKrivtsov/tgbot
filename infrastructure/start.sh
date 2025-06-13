@@ -21,9 +21,12 @@ fi
 echo "🌐 Creating Docker network..."
 docker network create tgbot-network 2>/dev/null || echo "📌 Network already exists"
 
-# Запуск основных сервисов
-echo "🗄️ Starting PostgreSQL, Redis and AntiSpam..."
-docker-compose up -d postgres redis antispam
+# Запуск сервисов в правильном порядке
+echo "🔧 Starting AntiSpam first..."
+docker-compose up -d antispam
+
+echo "🗄️ Starting PostgreSQL and Redis..."
+docker-compose up -d postgres redis
 
 # Ожидание готовности PostgreSQL
 echo "⏳ Waiting for PostgreSQL to be ready..."

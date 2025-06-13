@@ -4,6 +4,7 @@ WORKDIR /app
 
 FROM base AS install
 COPY package.json package-lock.json ./
+RUN npm config set registry https://registry.npmjs.com/
 RUN npm cache clean --force
 RUN npm i
 COPY . .

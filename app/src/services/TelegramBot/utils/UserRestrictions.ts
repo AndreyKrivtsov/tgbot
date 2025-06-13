@@ -3,6 +3,46 @@ import type { TelegramBot } from "../types/index.js"
 import { BOT_CONFIG, HTTP_CONFIG } from "../../../constants.js"
 
 /**
+ * Константы для ограничений пользователей
+ */
+const USER_RESTRICTIONS = {
+  // Полные ограничения (для капчи)
+  RESTRICTED: {
+    can_send_messages: false,
+    can_send_audios: false,
+    can_send_documents: false,
+    can_send_photos: false,
+    can_send_videos: false,
+    can_send_video_notes: false,
+    can_send_voice_notes: false,
+    can_send_polls: false,
+    can_send_other_messages: false,
+    can_add_web_page_previews: false,
+    can_change_info: false,
+    can_invite_users: false,
+    can_pin_messages: false,
+    can_manage_topics: false,
+  },
+  // Полные права (для снятия ограничений)
+  UNRESTRICTED: {
+    can_send_messages: true,
+    can_send_audios: true,
+    can_send_documents: true,
+    can_send_photos: true,
+    can_send_videos: true,
+    can_send_video_notes: true,
+    can_send_voice_notes: true,
+    can_send_polls: true,
+    can_send_other_messages: true,
+    can_add_web_page_previews: true,
+    can_change_info: false, // Обычные пользователи не могут менять инфо группы
+    can_invite_users: true, // Обычные пользователи могут приглашать
+    can_pin_messages: false, // Обычные пользователи не могут закреплять
+    can_manage_topics: false, // Обычные пользователи не могут управлять топиками
+  },
+} as const
+
+/**
  * Утилиты для управления ограничениями пользователей в Telegram чате
  */
 export class UserRestrictions {
@@ -15,28 +55,16 @@ export class UserRestrictions {
   }
 
   /**
-   * Ограничение пользователя (мьютинг)
+   * Ограничение пользователя (мьютинг для капчи)
    */
   async restrictUser(chatId: number, userId: number): Promise<void> {
     try {
-      await this.bot.restrictUser(chatId, userId, {
-        can_send_messages: false,
-        can_send_audios: false,
-        can_send_documents: false,
-        can_send_photos: false,
-        can_send_videos: false,
-        can_send_video_notes: false,
-        can_send_voice_notes: false,
-        can_send_polls: false,
-        can_send_other_messages: false,
-        can_add_web_page_previews: false,
-        can_change_info: false,
-        can_invite_users: false,
-        can_pin_messages: false,
-        can_manage_topics: false,
-      })
+      // Устанавливаем ограничения на 5 минут (время на прохождение капчи)
+      const untilDate = Math.floor(Date.now() / 1000) + (1 * 60) // +1 минута в секундах
 
-      this.logger.i(`🔇 User ${userId} restricted in chat ${chatId}`)
+      await this.bot.restrictUser(chatId, userId, USER_RESTRICTIONS.RESTRICTED, untilDate)
+
+      this.logger.i(`🔇 User ${userId} restricted in chat ${chatId} for 5 minutes`)
     } catch (error) {
       this.logger.e(`Failed to restrict user ${userId}:`, error)
       throw error
@@ -44,11 +72,12 @@ export class UserRestrictions {
   }
 
   /**
-   * Снятие ограничений с пользователя
+   * Снятие ограничений с пользователя (после прохождения капчи)
    */
   async unrestrictUser(chatId: number, userId: number): Promise<void> {
     try {
-      await this.bot.unrestrictUser(chatId, userId)
+      // Используем единые ограничения для снятия
+      await this.bot.restrictUser(chatId, userId, USER_RESTRICTIONS.UNRESTRICTED)
 
       this.logger.i(`✅ User ${userId} unrestricted in chat ${chatId}`)
     } catch (error) {
@@ -72,27 +101,32 @@ export class UserRestrictions {
   }
 
   /**
-   * Удаление пользователя из чата
+   * Постоянный бан пользователя из чата
+   * ВНИМАНИЕ: Это постоянный бан! Используйте kickUserFromChat для временного удаления.
    */
-  async deleteUserFromChat(chatId: number, userId: number): Promise<void> {
+  async banUserFromChat(chatId: number, userId: number): Promise<void> {
     try {
       await this.bot.banUser(chatId, userId)
 
-      this.logger.i(`🗑️ User ${userId} deleted from chat ${chatId}`)
+      this.logger.i(`🚫 User ${userId} permanently banned from chat ${chatId}`)
     } catch (error) {
-      this.logger.e(`Failed to delete user ${userId}:`, error)
+      this.logger.e(`Failed to ban user ${userId}:`, error)
       throw error
     }
   }
 
   /**
-   * Кик пользователя из чата
+   * Кик пользователя из чата (временный бан с автоматическим разбаном)
+   * Используется для временного удаления (например, за спам)
    */
   async kickUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
     try {
-      await this.bot.kickUser(chatId, userId, BOT_CONFIG.AUTO_UNBAN_DELAY_MS)
+      // Используем временный бан вместо kickUser для большей надежности
+      // Бан на 1 минуту с автоматическим разбаном
+      const kickDurationSec = Math.floor(BOT_CONFIG.AUTO_UNBAN_DELAY_MS / 1000) // Конвертируем мс в секунды
+      await this.bot.temporaryBanUser(chatId, userId, kickDurationSec)
 
-      this.logger.i(`👢 User ${userName} (${userId}) kicked from chat ${chatId}`)
+      this.logger.i(`👢 User ${userName} (${userId}) kicked from chat ${chatId} for ${kickDurationSec} seconds`)
     } catch (error) {
       this.logger.e(`Failed to kick user ${userId}:`, error)
       throw error

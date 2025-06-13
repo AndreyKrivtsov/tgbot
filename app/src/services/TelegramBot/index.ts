@@ -138,11 +138,11 @@ export class TelegramBotService implements IService {
       this.dependencies.antiSpamService,
     )
 
-            // Проверяем наличие ChatRepository
-        if (!this.dependencies.chatRepository) {
-          this.logger.e("❌ ChatRepository is required for TelegramBot handlers")
-          throw new Error("ChatRepository is required")
-        }
+    // Проверяем наличие ChatRepository
+    if (!this.dependencies.chatRepository) {
+      this.logger.e("❌ ChatRepository is required for TelegramBot handlers")
+      throw new Error("ChatRepository is required")
+    }
 
     // Инициализируем обработчики
     this.commandHandler = new CommandHandler(
@@ -290,8 +290,12 @@ export class TelegramBotService implements IService {
    */
   private setupEventHandlers(): void {
     if (!this.bot || !this.messageHandler || !this.memberHandler || !this.callbackHandler) {
+      this.logger.w("❌ Cannot setup event handlers - missing required components")
+      this.logger.w(`Bot: ${!!this.bot}, MessageHandler: ${!!this.messageHandler}, MemberHandler: ${!!this.memberHandler}, CallbackHandler: ${!!this.callbackHandler}`)
       return
     }
+
+    this.logger.i("🔧 Setting up event handlers...")
 
     // Обработка сообщений
     this.bot.on("message", (context: TelegramMessageContext) => {
@@ -300,16 +304,19 @@ export class TelegramBotService implements IService {
 
     // Обработка новых участников
     this.bot.on("new_chat_members", (context: TelegramNewMembersContext) => {
+      this.logger.i("🔥 NEW_CHAT_MEMBERS event received in TelegramBotService!")
       this.memberHandler!.handleNewChatMembers(context)
     })
 
     // Обработка ушедших участников
     this.bot.on("left_chat_member", (context: any) => {
+      this.logger.i("👋 LEFT_CHAT_MEMBER event received")
       this.memberHandler!.handleLeftChatMember(context)
     })
 
     // Обработка изменений участников
     this.bot.on("chat_member", (context: any) => {
+      this.logger.i("👥 CHAT_MEMBER event received")
       this.memberHandler!.handleChatMember(context)
     })
 
@@ -317,6 +324,8 @@ export class TelegramBotService implements IService {
     this.bot.on("callback_query", (context: any) => {
       this.callbackHandler!.handleCallbackQuery(context)
     })
+
+    this.logger.i("✅ Event handlers setup completed")
   }
 
   /**
@@ -452,7 +461,8 @@ export class TelegramBotService implements IService {
    * Получить администраторов чата через адаптер GramioBot
    */
   public async getChatAdministrators(chatId: number): Promise<any[]> {
-    if (!this.bot) return [];
-    return await this.bot.getChatAdministrators(chatId);
+    if (!this.bot)
+      return []
+    return await this.bot.getChatAdministrators(chatId)
   }
 }

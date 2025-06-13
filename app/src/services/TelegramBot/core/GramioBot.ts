@@ -1,4 +1,5 @@
-import { Bot, MessageContext, NewChatMembersContext } from "gramio"
+import { Bot } from "gramio"
+import type { MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import { BOT_CONFIG } from "../../../constants.js"
 
@@ -24,10 +25,40 @@ export class GramioBot {
   }
 
   /**
-   * Запуск бота
+   * Запуск бота с настройкой allowed_updates для получения событий участников
    */
   async start(): Promise<void> {
-    await this.bot.start()
+    try {
+      // Настраиваем allowed_updates для получения всех необходимых событий
+      const allowedUpdates = [
+        "message",
+        "edited_message",
+        "callback_query",
+        "chat_member",
+        "new_chat_members",
+        "left_chat_member",
+        "my_chat_member",
+      ]
+
+      this.logger.i("🔧 Configuring bot with allowed_updates:", allowedUpdates)
+
+      // Очищаем webhook и настраиваем getUpdates с allowed_updates
+      await this.bot.api.deleteWebhook({ drop_pending_updates: true })
+
+      // Настраиваем allowed_updates через getUpdates
+      await this.bot.api.getUpdates({
+        allowed_updates: allowedUpdates as any,
+        limit: 1,
+        timeout: 1,
+      })
+
+      this.logger.i("✅ Bot configured with allowed_updates successfully")
+
+      await this.bot.start()
+    } catch (error) {
+      this.logger.e("❌ Failed to start bot with allowed_updates:", error)
+      throw error
+    }
   }
 
   /**
@@ -108,39 +139,25 @@ export class GramioBot {
   }
 
   /**
-   * Ограничение пользователя (мьют)
+   * Ограничение пользователя (мьют) с обязательными параметрами
    */
-  async restrictUser(chatId: number, userId: number, permissions: ChatPermissions): Promise<void> {
+  async restrictUser(chatId: number, userId: number, permissions: ChatPermissions, untilDate?: number): Promise<void> {
     await this.bot.api.restrictChatMember({
       chat_id: chatId,
       user_id: userId,
       permissions,
+      until_date: untilDate,
     })
   }
 
   /**
-   * Снятие ограничений с пользователя
+   * Снятие ограничений с пользователя с обязательными параметрами
    */
-  async unrestrictUser(chatId: number, userId: number): Promise<void> {
+  async unrestrictUser(chatId: number, userId: number, permissions: ChatPermissions): Promise<void> {
     await this.bot.api.restrictChatMember({
       chat_id: chatId,
       user_id: userId,
-      permissions: {
-        can_send_messages: true,
-        can_send_audios: true,
-        can_send_documents: true,
-        can_send_photos: true,
-        can_send_videos: true,
-        can_send_video_notes: true,
-        can_send_voice_notes: true,
-        can_send_polls: true,
-        can_send_other_messages: true,
-        can_add_web_page_previews: true,
-        can_change_info: false,
-        can_invite_users: false,
-        can_pin_messages: false,
-        can_manage_topics: false,
-      },
+      permissions,
     })
   }
 
@@ -169,8 +186,13 @@ export class GramioBot {
    * Кик пользователя (бан + автоматический разбан)
    */
   async kickUser(chatId: number, userId: number, autoUnbanDelayMs = 5000): Promise<void> {
-    // Баним пользователя
-    await this.banUser(chatId, userId)
+    // Расчет страховочного времени: максимум из autoUnbanDelayMs и 40 секунд
+    const minSafetyMs = 40 * 1000 // 40 секунд в миллисекундах
+    const safetyDelayMs = Math.max(autoUnbanDelayMs, minSafetyMs)
+    const safetyUntilDate = Math.floor(Date.now() / 1000) + Math.floor(safetyDelayMs / 1000)
+
+    // Баним пользователя со страховочным until_date
+    await this.banUser(chatId, userId, safetyUntilDate)
 
     // Автоматически разбаниваем через задержку
     setTimeout(async () => {
@@ -220,7 +242,7 @@ export class GramioBot {
     if (params.chat_id > 0) {
       return await this.sendMessage(params)
     }
-    
+
     // Если это групповой чат (отрицательный ID), отправляем с автоудалением
     return await this.sendAutoDeleteMessage(params, deleteAfterMs)
   }

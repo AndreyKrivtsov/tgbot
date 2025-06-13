@@ -107,13 +107,13 @@ const MESSAGES = {
 
   // Callback ответы
   callback_user_error: "👤 Ошибка определения пользователя",
-  callback_captcha_unavailable: "🧮 Капча недоступна", 
+  callback_captcha_unavailable: "🧮 Капча недоступна",
   callback_unknown_command: "❓ Неизвестная команда",
   callback_general_error: "⚠️ Ошибка обработки",
   callback_invalid_format: "📋 Неверный формат данных",
   callback_captcha_correct: "✅ Правильно!",
-  callback_captcha_wrong: "❌ Неверно. Попробуйте еще",
-  
+  callback_captcha_wrong: "❌ Неверно. Попробуйте еще раз через 2 минуты",
+
   // Общие тексты
   reason_not_specified: "Не указана",
   unknown_user: "неизвестный",
@@ -128,13 +128,13 @@ const MESSAGES = {
  */
 export function getMessage(key: keyof typeof MESSAGES, params: Record<string, string | number> = {}): string {
   let message = MESSAGES[key] as string
-  
+
   // Простая подстановка переменных {variable}
   Object.entries(params).forEach(([paramKey, value]) => {
     const placeholder = `{${paramKey}}`
-    message = message.replace(new RegExp(placeholder, 'g'), String(value))
+    message = message.replace(new RegExp(placeholder, "g"), String(value))
   })
-  
+
   return message
 }
 
@@ -150,4 +150,4 @@ export function hasMessage(key: string): key is keyof typeof MESSAGES {
  */
 export function getMessageKeys(): string[] {
   return Object.keys(MESSAGES)
-} 
+}
