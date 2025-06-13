@@ -4,7 +4,7 @@ import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { BotContext, TelegramBot } from "../types/index.js"
 import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import { getMessage } from "../utils/Messages.js"
-import { User } from "gramio"
+import type { User } from "gramio"
 import { BOT_CONFIG } from "../../../constants.js"
 
 /**
@@ -42,6 +42,7 @@ export class CaptchaManager {
 
     // Проверяем, не создана ли уже капча для этого пользователя
     if (this.captchaService.isUserRestricted(user.id)) {
+      this.logger.i(`🔄 Captcha already exists for user ${user.id} (@${user.username || "no_username"}), skipping`)
       return
     }
 
@@ -73,6 +74,9 @@ export class CaptchaManager {
           user.username,
           user.firstName,
         )
+
+        // Диагностика: капча показана пользователю
+        this.logger.i(`🧩 Captcha shown to user ${user.id} (@${user.username || "no_username"}) in chat ${chatId}`)
       }
 
       // Ограничиваем права пользователя
@@ -211,7 +215,8 @@ export class CaptchaManager {
   private async handleCaptchaSuccess(user: any): Promise<void> {
     try {
       await this.userRestrictions.unrestrictUser(user.chatId, user.userId)
-      this.logger.i(`User ${user.userId} passed captcha`)
+      // Диагностика: правильный ответ на капчу
+      this.logger.i(`✅ User ${user.userId} (@${user.username || "no_username"}) passed captcha in chat ${user.chatId}`)
     } catch (error) {
       this.logger.e("Error handling captcha success:", error)
     }
@@ -230,13 +235,14 @@ export class CaptchaManager {
       const name = this.formatUserMention(user)
       const failText = getMessage("captcha_failed", { name })
 
-      const messageResult = await this.bot.sendAutoDeleteMessage({
+      const _messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: failText,
         parse_mode: "HTML",
       }, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS) // 60 секунд
 
-      this.logger.w(`User ${user.userId} failed captcha`)
+      // Диагностика: неправильный ответ на капчу
+      this.logger.w(`❌ User ${user.userId} (@${user.username || "no_username"}) failed captcha in chat ${user.chatId}`)
     } catch (error) {
       this.logger.e("Error handling captcha failure:", error)
     }
@@ -255,13 +261,14 @@ export class CaptchaManager {
       const name = this.formatUserMention(user)
       const timeoutText = getMessage("captcha_timeout", { name })
 
-      const messageResult = await this.bot.sendAutoDeleteMessage({
+      const _messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: user.chatId,
         text: timeoutText,
         parse_mode: "HTML",
       }, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS) // 60 секунд
 
-      this.logger.w(`User ${user.userId} captcha timeout`)
+      // Диагностика: таймаут капчи
+      this.logger.w(`⏰ User ${user.userId} (@${user.username || "no_username"}) captcha timeout in chat ${user.chatId}`)
     } catch (error) {
       this.logger.e("Error handling captcha timeout:", error)
     }
@@ -282,7 +289,7 @@ export class CaptchaManager {
    */
   private formatCaptchaMessage(question: number[], user: User): string {
     const userMention = this.formatUserMention(user)
-    
+
     return getMessage("captcha_welcome", {
       question: `${question[0]} + ${question[1]}`,
       userMention,
@@ -295,16 +302,16 @@ export class CaptchaManager {
   private formatUserMention(user: User): string {
     // Пробуем разные варианты получения имени
     const firstName = user.firstName || "unk"
-    
+
     // Укорачиваем имя если оно длиннее 10 символов
     let displayName = firstName
     if (displayName.length > 10) {
-      displayName = displayName.substring(0, 10) + "..."
+      displayName = `${displayName.substring(0, 10)}...`
     }
 
     let displayUsername = user.username
     if (displayUsername && displayUsername.length > 10) {
-      displayUsername = displayUsername.substring(0, 10) + "..."
+      displayUsername = `${displayUsername.substring(0, 10)}...`
     }
 
     // Экранируем HTML символы в имени

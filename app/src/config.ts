@@ -11,7 +11,7 @@ export interface AppConfig {
   LLAMA_URL: string
 
   // Опциональные сервисы
-  REDIS_URL?: string
+  REDIS_URL: string
 
   // Веб-сервер
   PORT: number
@@ -41,7 +41,7 @@ export const config: AppConfig = {
   LLAMA_URL: env.get("LLAMA_URL").required().asString(),
 
   // Опциональные сервисы
-  REDIS_URL: env.get("REDIS_URL").asString(),
+  REDIS_URL: env.get("REDIS_URL").required().asString(),
 
   // Веб-сервер
   PORT: env.get("PORT").default(3000).asPortNumber(),

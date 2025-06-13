@@ -1,4 +1,4 @@
-import type { Bot, MessageContext, NewChatMembersContext } from "gramio"
+import type { Bot, ChatMemberContext, LeftChatMemberContext, MessageContext, NewChatMembersContext } from "gramio"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { AIChatService } from "../../AIChatService/index.js"
@@ -75,3 +75,5 @@ export interface BotContext {
 export type TelegramBot = GramioBot
 export type TelegramMessageContext = MessageContext<Bot>
 export type TelegramNewMembersContext = NewChatMembersContext<Bot>
+export type TelegramChatMemberContext = ChatMemberContext<Bot>
+export type TelegramLeftMemberContext = LeftChatMemberContext<Bot>
