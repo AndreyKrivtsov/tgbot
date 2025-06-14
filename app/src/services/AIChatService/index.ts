@@ -65,7 +65,7 @@ export class AIChatService implements IService {
     if (dependencies.database) {
       this.chatRepository = new ChatRepository(dependencies.database)
     }
-    
+
     if (dependencies.redis) {
       this.redisService = dependencies.redis
     }
@@ -373,6 +373,28 @@ export class AIChatService implements IService {
     } catch (error) {
       this.logger.e("Error processing queued message:", error)
 
+      // Проверка на отсутствие ключа или приватный чат
+      if (
+        error instanceof Error
+        && (error.message.includes("No API key available for this chat") || error.message.includes("приватном чате"))
+      ) {
+        const noKeyMessage
+          = "❗️ Для этого чата не настроен API-ключ."
+        this.onMessageResponse?.(queueItem.contextId, noKeyMessage, queueItem.id, queueItem.userMessageId, true)
+
+        // Удаляем все сообщения этого чата из очереди
+        this.messageQueue = this.messageQueue.filter(item => item.contextId !== queueItem.contextId)
+
+        // Проверяем, есть ли еще сообщения для этого чата в очереди
+        const hasMoreMessages = this.messageQueue.some(item => item.contextId === queueItem.contextId)
+        if (!hasMoreMessages && this.activeTypingChats.has(queueItem.contextId)) {
+          // Больше нет сообщений для этого чата - выключаем typing
+          this.activeTypingChats.delete(queueItem.contextId)
+          this.onTypingStop?.(queueItem.contextId)
+        }
+        return
+      }
+
       // Retry logic
       if (queueItem.retryCount < 2) {
         queueItem.retryCount++
@@ -425,7 +447,7 @@ export class AIChatService implements IService {
         content: queueItem.message,
         timestamp: Date.now(),
       })
-      
+
       // Подготавливаем историю разговора для Gemini с учетом retry
       const conversationHistory = this.prepareConversationHistory(context, retryCount)
 
@@ -482,7 +504,7 @@ export class AIChatService implements IService {
   private prepareConversationHistory(context: ChatContext, retryCount: number): GeminiMessage[] {
     // Получаем все сообщения кроме последнего (текущее сообщение пользователя)
     const allMessages = context.messages.slice(0, -1)
-    
+
     // Если это первая попытка, используем весь контекст
     if (retryCount === 0) {
       this.logger.d(`Chat ${context.chatId}: Using full context (${allMessages.length} messages)`)
@@ -495,12 +517,12 @@ export class AIChatService implements IService {
     // Для retry попыток уменьшаем контекст в 2^retryCount раз
     const reductionFactor = 2 ** retryCount
     const reducedLength = Math.max(1, Math.floor(allMessages.length / reductionFactor))
-    
+
     // Берем последние сообщения (более релевантные)
     const reducedMessages = allMessages.slice(-reducedLength)
-    
+
     this.logger.i(`Chat ${context.chatId}: Retry attempt ${retryCount}, reducing context from ${allMessages.length} to ${reducedMessages.length} messages (reduction factor: ${reductionFactor})`)
-    
+
     return reducedMessages.map(msg => ({
       role: msg.role === "assistant" ? "model" : "user",
       parts: [{ text: msg.content }],
@@ -545,7 +567,7 @@ export class AIChatService implements IService {
     } catch (error) {
       this.logger.e(`Error loading context ${contextId} from cache:`, error)
     }
-    
+
     return null
   }
 
@@ -558,9 +580,9 @@ export class AIChatService implements IService {
 
     try {
       await this.redisService.set(
-        `ai:context:${contextId}`, 
-        context, 
-        AI_CHAT_CONFIG.CONTEXT_TTL_SECONDS
+        `ai:context:${contextId}`,
+        context,
+        AI_CHAT_CONFIG.CONTEXT_TTL_SECONDS,
       )
       this.logger.d(`Saved context for chat ${contextId} to cache`)
     } catch (error) {
@@ -579,9 +601,9 @@ export class AIChatService implements IService {
 
     try {
       const savePromises = Array.from(this.chatContexts.entries()).map(([contextId, context]) =>
-        this.saveContextToCache(contextId, context)
+        this.saveContextToCache(contextId, context),
       )
-      
+
       await Promise.all(savePromises)
       this.logger.i(`Saved ${this.chatContexts.size} contexts to cache`)
     } catch (error) {
@@ -644,7 +666,7 @@ export class AIChatService implements IService {
           chat: result.chat,
           config,
         }
-        
+
         // Кешируем нормализованный результат
         this.chatSettings.set(chatId, normalizedResult)
         return normalizedResult
@@ -683,12 +705,12 @@ export class AIChatService implements IService {
    */
   async getSystemPromptForChat(chatId: number): Promise<string> {
     const { config } = await this.getChatSettings(chatId)
-    
+
     // Если есть кастомный системный промпт в конфигурации чата, используем его
     if (config?.systemPrompt) {
       return this.chatRepository?.buildSystemPromptString(config.systemPrompt) || AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
     }
-    
+
     // Иначе возвращаем дефолтный системный промпт
     return AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
   }
