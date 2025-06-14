@@ -240,7 +240,6 @@ export class AIChatService implements IService {
       // Включаем typing для этого чата если еще не включен
       if (!this.activeTypingChats.has(queueItem.contextId)) {
         this.activeTypingChats.add(queueItem.contextId)
-        this.onTypingStart?.(queueItem.contextId)
       }
 
       this.logger.d(`Added message to queue from ${firstName} (${userId})`)
@@ -368,6 +367,7 @@ export class AIChatService implements IService {
 
       // Делаем запрос к AI с throttling, передаем retryCount для уменьшения контекста
       await this.throttledAIRequest(queueItem, queueItem.retryCount)
+      this.onTypingStart?.(queueItem.contextId)
 
       context.requestCount++
     } catch (error) {
@@ -434,6 +434,8 @@ export class AIChatService implements IService {
       if (!apiKeyResult) {
         throw new Error("No API key available for this chat")
       }
+
+      this.onTypingStart?.(queueItem.contextId)
 
       // Получаем системный промпт для чата
       const systemPrompt = await this.getSystemPromptForChat(chatId)
