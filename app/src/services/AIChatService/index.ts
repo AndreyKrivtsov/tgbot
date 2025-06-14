@@ -383,6 +383,9 @@ export class AIChatService implements IService {
         const errorMessage = getMessage("ai_service_error")
         this.onMessageResponse?.(queueItem.contextId, errorMessage, queueItem.id, queueItem.userMessageId, true)
 
+        // Удаляем все сообщения этого чата из очереди
+        this.messageQueue = this.messageQueue.filter(item => item.contextId !== queueItem.contextId)
+
         // Проверяем, есть ли еще сообщения для этого чата в очереди
         const hasMoreMessages = this.messageQueue.some(item => item.contextId === queueItem.contextId)
         if (!hasMoreMessages && this.activeTypingChats.has(queueItem.contextId)) {
