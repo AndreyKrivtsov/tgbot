@@ -43,20 +43,20 @@ fi
 # Проверка здоровья Redis
 echo ""
 echo "🔄 Redis Health:"
-if docker exec tgbot-redis redis-cli ping | grep -q PONG 2>/dev/null; then
+if docker exec app-redis-prod redis-cli ping | grep -q PONG 2>/dev/null; then
     echo "✅ Redis is healthy"
     
     # Информация о памяти
-    REDIS_MEMORY=$(docker exec tgbot-redis redis-cli info memory | grep used_memory_human | cut -d: -f2 | tr -d '\r')
+    REDIS_MEMORY=$(docker exec app-redis-prod redis-cli info memory | grep used_memory_human | cut -d: -f2 | tr -d '\r')
     echo "   Memory usage: $REDIS_MEMORY"
     
     # Количество ключей
-    REDIS_KEYS=$(docker exec tgbot-redis redis-cli dbsize 2>/dev/null)
+    REDIS_KEYS=$(docker exec app-redis-prod redis-cli dbsize 2>/dev/null)
     echo "   Total keys: $REDIS_KEYS"
     
     # Hit ratio
-    HITS=$(docker exec tgbot-redis redis-cli info stats | grep keyspace_hits | cut -d: -f2 | tr -d '\r')
-    MISSES=$(docker exec tgbot-redis redis-cli info stats | grep keyspace_misses | cut -d: -f2 | tr -d '\r')
+    HITS=$(docker exec app-redis-prod redis-cli info stats | grep keyspace_hits | cut -d: -f2 | tr -d '\r')
+    MISSES=$(docker exec app-redis-prod redis-cli info stats | grep keyspace_misses | cut -d: -f2 | tr -d '\r')
     if [ "$HITS" != "" ] && [ "$MISSES" != "" ] && [ $((HITS + MISSES)) -gt 0 ]; then
         HIT_RATIO=$(echo "scale=2; $HITS * 100 / ($HITS + $MISSES)" | bc -l 2>/dev/null || echo "N/A")
         echo "   Hit ratio: $HIT_RATIO%"
@@ -70,11 +70,11 @@ fi
 # Проверка сети
 echo ""
 echo "🌐 Network Status:"
-NETWORK_EXISTS=$(docker network ls | grep tgbot-network | wc -l)
+NETWORK_EXISTS=$(docker network ls | grep app-network-prod | wc -l)
 if [ "$NETWORK_EXISTS" -eq 1 ]; then
-    echo "✅ tgbot-network exists"
+    echo "✅ app-network-prod exists"
 else
-    echo "❌ tgbot-network not found"
+    echo "❌ app-network-prod not found"
 fi
 
 # Проверка томов
@@ -88,12 +88,15 @@ echo "📋 Recent Logs (last 5 lines):"
 echo "PostgreSQL:"
 docker-compose logs --tail=5 postgres 2>/dev/null | sed 's/^/   /' || echo "   No logs available"
 echo "Redis:"
-docker-compose logs --tail=5 redis 2>/dev/null | sed 's/^/   /' || echo "   No logs available"
+docker-compose logs --tail=5 app-redis-prod 2>/dev/null | sed 's/^/   /' || echo "   No logs available"
+echo "App:"
+docker-compose logs --tail=5 app 2>/dev/null | sed 's/^/   /' || echo "   No logs available"
 
 echo ""
 echo "🔗 Quick Commands:"
 echo "   View logs: docker-compose logs -f [service]"
 echo "   Connect to PostgreSQL: docker exec -it tgbot-postgres psql -U postgres -d tgbot"
-echo "   Connect to Redis: docker exec -it tgbot-redis redis-cli"
+echo "   Connect to Redis: docker exec -it app-redis-prod redis-cli"
+echo "   Connect to App: docker exec -it app sh"
 echo "   pgAdmin: http://localhost:8080"
 echo "   Redis Commander: http://localhost:8081 (if tools profile is running)" 

@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix",
     "generate": "npx drizzle-kit generate",
     "push": "npx drizzle-kit push",
-    "migrate": "node migrate.js migrate",
+    "migrate": "node drizzle/migrate.js migrate",
     "studio": "npx drizzle-kit studio",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -20,7 +20,7 @@
     "test:unit": "jest src/__tests__/unit",
     "test:integration": "jest src/__tests__/integration",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node migrate.js migrate",
+    "db:migrate": "node drizzle/migrate.js migrate",
     "db:studio": "drizzle-kit studio",
     "db:drop": "drizzle-kit drop",
     "db:push": "drizzle-kit push"

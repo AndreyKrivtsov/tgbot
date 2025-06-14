@@ -448,4 +448,30 @@ export class UserManager {
     this.stopCleanupTimer()
     this.logger.i("UserManager disposed")
   }
+
+  /**
+   * Сохраняет соответствие userId <-> username для чата
+   */
+  async saveUserMapping(chatId: number, userId: number, username?: string) {
+    if (!username)
+      return
+
+    await this.redisService.set(`user:${chatId}:${username.toLowerCase()}`, userId, UserManager.META_TTL)
+    await this.redisService.set(`user:${chatId}:${userId}`, username.toLowerCase(), UserManager.META_TTL)
+  }
+
+  /**
+   * Получить userId по username
+   */
+  async getUserIdByUsername(chatId: number, username: string): Promise<number | null> {
+    const userId = await this.redisService.get<string>(`user:${chatId}:${username.toLowerCase()}`)
+    return userId ? Number(userId) : null
+  }
+
+  /**
+   * Получить username по userId (для логов)
+   */
+  async getUsernameByUserId(chatId: number, userId: number): Promise<string | null> {
+    return await this.redisService.get<string>(`user:${chatId}:${userId}`)
+  }
 }

@@ -50,7 +50,7 @@ export class CommandHandler {
       // В приватных чатах (chatId > 0) - только если forceDeleteInPrivate = true
       if (context.chat && context.id) {
         const shouldDelete = context.chat.id < 0 || forceDeleteInPrivate
-        
+
         if (shouldDelete) {
           await this.userRestrictions.deleteMessage(context.chat.id, context.id)
           this.logger.d(`Deleted user command message ${context.id} in chat ${context.chat.id}`)
@@ -69,7 +69,7 @@ export class CommandHandler {
     try {
       // Удаляем сообщение пользователя с командой
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
-      
+
       const message = getMessage("welcome")
       await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
@@ -163,7 +163,7 @@ export class CommandHandler {
     try {
       // Удаляем сообщение пользователя с командой
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
-      
+
       const message = getMessage("help")
       await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
@@ -171,6 +171,30 @@ export class CommandHandler {
       const errorMessage = getMessage("help_command_error")
       await this.userRestrictions.sendGroupMessage(context.chat!.id, errorMessage)
     }
+  }
+
+  /**
+   * Получить userId по username через Telegram API (если пользователь состоит в чате)
+   */
+  private async findUserIdByUsername(chatId: number, username: string): Promise<{ userId: number, firstName?: string, username?: string } | null> {
+    try {
+      // Telegram API позволяет искать только среди участников чата
+      // user_id может быть строкой ("@username") или числом (userId)
+      const member = await this.botService.getBotApi().getChatMember({
+        chat_id: chatId,
+        user_id: `@${username}` as any, // Telegram API принимает строку с @ для username
+      })
+      if (member && member.user && member.user.id) {
+        return {
+          userId: member.user.id,
+          firstName: member.user.first_name,
+          username: member.user.username,
+        }
+      }
+    } catch (error) {
+      this.logger.d(`Не удалось найти пользователя @${username} в чате ${chatId}:`, error)
+    }
+    return null
   }
 
   /**
@@ -191,7 +215,7 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context as TelegramMessageContext)
-    
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
       return
@@ -199,35 +223,37 @@ export class CommandHandler {
 
     try {
       const args = (context.text || "").split(" ")
-      if (args.length < 2) {
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_usage"))
-        return
-      }
-
       let targetUserId: number | null = null
       let targetUsername = getMessage("unknown_user")
 
       // Проверяем, есть ли reply на сообщение
       if (context.replyMessage?.from) {
         targetUserId = context.replyMessage.from.id
-        targetUsername = context.replyMessage.from.first_name || context.replyMessage.from.username || getMessage("unknown_user")
+        targetUsername = context.replyMessage.from.username || getMessage("unknown_user")
       } else if (args[1]) {
         // Пытаемся извлечь username из аргумента
         const username = args[1].replace("@", "")
         targetUsername = username
-
-        // В реальном боте здесь нужно найти пользователя по username
-        // Пока просто выводим ошибку
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
-        return
+        // Сначала ищем userId в кэше
+        const userIdFromCache = await this.userManager.getUserIdByUsername(chatId, username)
+        if (userIdFromCache) {
+          targetUserId = userIdFromCache
+        } else {
+          // Пробуем найти userId по username через Telegram API
+          const userInfo = await this.findUserIdByUsername(chatId, username)
+          if (!userInfo) {
+            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            return
+          }
+          targetUserId = userInfo.userId
+        }
       } else {
         await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
       if (targetUserId) {
-        // Здесь должна быть логика бана пользователя
-        // await this.userRestrictions.banUser(chatId, targetUserId)
+        await this.userRestrictions.banUserFromChat(chatId, targetUserId)
         await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_success", { username: targetUsername }))
         this.logger.i(`User ${targetUserId} (${targetUsername}) banned by admin`)
       }
@@ -254,16 +280,48 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context as TelegramMessageContext)
-    
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
       return
     }
 
     try {
-      // Здесь должна быть логика разбана
-      const message = getMessage("unban_success", { username: getMessage("generic_user") })
-      await this.userRestrictions.sendGroupMessage(chatId, message)
+      const args = (context.text || "").split(" ")
+      let targetUserId: number | null = null
+      let targetUsername = getMessage("unknown_user")
+
+      // Проверяем, есть ли reply на сообщение
+      if (context.replyMessage?.from) {
+        targetUserId = context.replyMessage.from.id
+        targetUsername = context.replyMessage.from.username || getMessage("unknown_user")
+      } else if (args[1]) {
+        // Пытаемся извлечь username из аргумента
+        const username = args[1].replace("@", "")
+        targetUsername = username
+        // Сначала ищем userId в кэше
+        const userIdFromCache = await this.userManager.getUserIdByUsername(chatId, username)
+        if (userIdFromCache) {
+          targetUserId = userIdFromCache
+        } else {
+          // Пробуем найти userId по username через Telegram API
+          const userInfo = await this.findUserIdByUsername(chatId, username)
+          if (!userInfo) {
+            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            return
+          }
+          targetUserId = userInfo.userId
+        }
+      } else {
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        return
+      }
+
+      if (targetUserId) {
+        await this.userRestrictions.unbanUserFromChat(chatId, targetUserId, targetUsername)
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("unban_success", { username: targetUsername }))
+        this.logger.i(`User ${targetUserId} (${targetUsername}) unbanned by admin`)
+      }
     } catch (error) {
       this.logger.e("Error in unban command:", error)
       const errorMessage = getMessage("unban_error")
@@ -288,16 +346,62 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context as TelegramMessageContext)
-    
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
       return
     }
 
     try {
-      // Здесь должна быть логика mute
-      const message = getMessage("mute_success", { username: getMessage("generic_user") })
-      await this.userRestrictions.sendGroupMessage(chatId, message)
+      const args = (context.text || "").split(" ")
+      let targetUserId: number | null = null
+      let targetUsername = getMessage("unknown_user")
+
+      // Проверяем, есть ли reply на сообщение
+      if (context.replyMessage?.from) {
+        targetUserId = context.replyMessage.from.id
+        targetUsername = context.replyMessage.from.username || getMessage("unknown_user")
+      } else if (args[1]) {
+        // Пытаемся извлечь username из аргумента
+        const username = args[1].replace("@", "")
+        targetUsername = username
+        // Сначала ищем userId в кэше
+        const userIdFromCache = await this.userManager.getUserIdByUsername(chatId, username)
+        if (userIdFromCache) {
+          targetUserId = userIdFromCache
+        } else {
+          // Пробуем найти userId по username через Telegram API
+          const userInfo = await this.findUserIdByUsername(chatId, username)
+          if (!userInfo) {
+            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            return
+          }
+          targetUserId = userInfo.userId
+        }
+      } else {
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        return
+      }
+
+      if (targetUserId) {
+        // Проверяем, состоит ли пользователь в чате
+        let isMember = false
+        try {
+          const member = await this.botService.getBotApi().getChatMember({ chat_id: chatId, user_id: targetUserId })
+          if (member && member.user && member.user.id === targetUserId) {
+            isMember = true
+          }
+        } catch (_e) {
+          isMember = false
+        }
+        if (!isMember) {
+          await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
+          return
+        }
+        await this.userRestrictions.restrictUser(chatId, targetUserId, null)
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("mute_success", { username: targetUsername }))
+        this.logger.i(`User ${targetUserId} (${targetUsername}) muted by admin`)
+      }
     } catch (error) {
       this.logger.e("Error in mute command:", error)
       const errorMessage = getMessage("mute_error")
@@ -322,16 +426,62 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context as TelegramMessageContext)
-    
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context as TelegramMessageContext)) {
       return
     }
 
     try {
-      // Здесь должна быть логика unmute
-      const message = getMessage("unmute_success", { username: getMessage("generic_user") })
-      await this.userRestrictions.sendGroupMessage(chatId, message)
+      const args = (context.text || "").split(" ")
+      let targetUserId: number | null = null
+      let targetUsername = getMessage("unknown_user")
+
+      // Проверяем, есть ли reply на сообщение
+      if (context.replyMessage?.from) {
+        targetUserId = context.replyMessage.from.id
+        targetUsername = context.replyMessage.from.username || getMessage("unknown_user")
+      } else if (args[1]) {
+        // Пытаемся извлечь username из аргумента
+        const username = args[1].replace("@", "")
+        targetUsername = username
+        // Сначала ищем userId в кэше
+        const userIdFromCache = await this.userManager.getUserIdByUsername(chatId, username)
+        if (userIdFromCache) {
+          targetUserId = userIdFromCache
+        } else {
+          // Пробуем найти userId по username через Telegram API
+          const userInfo = await this.findUserIdByUsername(chatId, username)
+          if (!userInfo) {
+            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            return
+          }
+          targetUserId = userInfo.userId
+        }
+      } else {
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        return
+      }
+
+      if (targetUserId) {
+        // Проверяем, состоит ли пользователь в чате
+        let isMember = false
+        try {
+          const member = await this.botService.getBotApi().getChatMember({ chat_id: chatId, user_id: targetUserId })
+          if (member && member.user && member.user.id === targetUserId) {
+            isMember = true
+          }
+        } catch {
+          isMember = false
+        }
+        if (!isMember) {
+          await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
+          return
+        }
+        await this.userRestrictions.unrestrictUser(chatId, targetUserId)
+        await this.userRestrictions.sendGroupMessage(chatId, getMessage("unmute_success", { username: targetUsername }))
+        this.logger.i(`User ${targetUserId} (${targetUsername}) unmuted by admin`)
+      }
     } catch (error) {
       this.logger.e("Error in unmute command:", error)
       const errorMessage = getMessage("unmute_error")
@@ -361,7 +511,7 @@ export class CommandHandler {
     try {
       // Удаляем сообщение пользователя с командой (даже в приватном чате)
       await this.deleteUserCommandMessage(context, true)
-      
+
       const args = (context.text || "").split(" ")
       if (args.length < 3) {
         const helpMessage = getMessage("api_key_usage")
@@ -415,11 +565,6 @@ export class CommandHandler {
       await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_general_error"))
     }
   }
-
-  /**
-   * Проверить права пользователя для работы с чатом
-   */
-
 
   /**
    * Сохранить API ключ для чата
@@ -585,7 +730,7 @@ export class CommandHandler {
 
     // Удаляем сообщение пользователя с командой перед проверкой прав
     await this.deleteUserCommandMessage(context)
-    
+
     // Проверяем права администратора группы
     if (!await this.isGroupAdminCommand(context)) {
       return
@@ -618,7 +763,7 @@ export class CommandHandler {
    */
   private isSuperAdminCommand(context: any): boolean {
     const username = context.from?.username
-    
+
     if (!this.isSuperAdmin(username)) {
       const message = getMessage("no_admin_permission")
       this.userRestrictions.sendGroupMessage(context.chat!.id, message)
@@ -653,7 +798,7 @@ export class CommandHandler {
    */
   private async isGroupAdminCommand(context: TelegramMessageContext): Promise<boolean> {
     const username = context.from?.username
-    
+
     // Суперадмин имеет доступ ко всем командам
     if (this.isSuperAdmin(username)) {
       return true
@@ -661,7 +806,7 @@ export class CommandHandler {
 
     // Проверяем, является ли пользователь администратором группы
     const isAdmin = await this.isGroupAdmin(context)
-    
+
     if (!isAdmin) {
       const message = getMessage("no_group_admin_permission")
       await this.userRestrictions.sendGroupMessage(context.chat!.id, message)

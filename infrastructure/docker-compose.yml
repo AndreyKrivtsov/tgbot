@@ -87,7 +87,7 @@ services:
   # AntiSpam Service - сервис проверки спама на Python/FastAPI
   antispam:
     build:
-      context: ../antispam
+      context: services/antispam
       dockerfile: Dockerfile
     container_name: antispam
     restart: unless-stopped

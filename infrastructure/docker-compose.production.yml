@@ -2,7 +2,7 @@ services:
   # AntiSpam Service - сервис проверки спама на Python/FastAPI (продакшен)
   antispam:
     build:
-      context: ../antispam
+      context: services/antispam
       dockerfile: Dockerfile
     container_name: antispam-prod
     restart: always
@@ -15,7 +15,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - tgbot-network-prod
+      - app-network-prod
     deploy:
       resources:
         limits:
@@ -29,7 +29,7 @@ services:
   # PostgreSQL - основная база данных (продакшен)
   postgres:
     image: postgres:15-alpine
-    container_name: tgbot-postgres-prod
+    container_name: app-postgres-prod
     restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tgbot}
@@ -54,7 +54,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - tgbot-network-prod
+      - app-network-prod
     deploy:
       resources:
         limits:
@@ -67,7 +67,7 @@ services:
   # Redis - кэширование (продакшен)
   redis:
     image: redis:7-alpine
-    container_name: tgbot-redis-prod
+    container_name: app-redis-prod
     restart: always
     ports:
       - "127.0.0.1:6379:6379"  # Только localhost
@@ -82,7 +82,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - tgbot-network-prod
+      - app-network-prod
     deploy:
       resources:
         limits:
@@ -92,27 +92,27 @@ services:
           memory: 256M
           cpus: '0.25'
 
-  bot:
-    build:
-      context: ../app
-      dockerfile: Dockerfile
-    container_name: tgbot-bot-prod
-    restart: always
-    environment:
-      - NODE_ENV=production
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      # antispam:
-      #   condition: service_healthy
-    command: sh -c "sleep 10 && npm start"
-    networks:
-      - tgbot-network-prod
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+  # bot:
+  #   build:
+  #     context: ../app
+  #     dockerfile: Dockerfile
+  #   container_name: tgbot-bot-prod
+  #   restart: always
+  #   environment:
+  #     - NODE_ENV=production
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     # antispam:
+  #     #   condition: service_healthy
+  #   command: sh -c "sleep 10 && npm start"
+  #   networks:
+  #     - app-network-prod
+  #   dns:
+  #     - 8.8.8.8
+  #     - 1.1.1.1
 
 volumes:
   postgres_data_prod:
@@ -131,13 +131,9 @@ volumes:
   #   driver: local
 
 networks:
-  tgbot-network-prod:
+  app-network-prod:
+    name: app-network-prod
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.21.0.0/16
-    driver_opts:
-      com.docker.network.bridge.name: br-tgbot-prod 
 
   # Nginx для reverse proxy (опционально)
   # nginx:

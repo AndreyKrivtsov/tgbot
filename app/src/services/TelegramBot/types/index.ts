@@ -77,3 +77,10 @@ export type TelegramMessageContext = MessageContext<Bot>
 export type TelegramNewMembersContext = NewChatMembersContext<Bot>
 export type TelegramChatMemberContext = ChatMemberContext<Bot>
 export type TelegramLeftMemberContext = LeftChatMemberContext<Bot>
+
+export interface TelegramUser {
+  id: number
+  username?: string
+  firstName: string
+  isBot?: () => boolean
+}

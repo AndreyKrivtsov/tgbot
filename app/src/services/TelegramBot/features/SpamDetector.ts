@@ -7,6 +7,7 @@ import type { UserManager } from "./UserManager.js"
 import type { Bot, MessageContext } from "gramio"
 import { getMessage } from "../utils/Messages.js"
 import { BOT_CONFIG } from "../../../constants.js"
+import { formatUserMentionWithCut } from "../utils/formatUserMention.js"
 
 /**
  * Детектор и обработчик спама
@@ -103,17 +104,18 @@ export class SpamDetector {
    */
   private async sendSpamWarning(chatId: number, firstName: string, count: number, username?: string): Promise<void> {
     try {
-      const displayName = username ? `${firstName}, @${username}` : firstName
+      const user = { id: 0, firstName, username } // id будет подставляться ниже, если нужно
+      const displayName = formatUserMentionWithCut(user)
       const modifier = count > 1 ? "Повторное c" : ""
       const admin = this.config.ADMIN_USERNAME || ""
-      
+
       const warningText = getMessage("spam_warning", {
         modifier,
         name: displayName,
         admin,
       })
 
-      const messageResult = await this.bot.sendAutoDeleteMessage({
+      const _messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: chatId,
         text: warningText,
         parse_mode: "HTML",
@@ -128,16 +130,17 @@ export class SpamDetector {
    */
   private async kickUserForSpam(chatId: number, userId: number, firstName: string, username?: string): Promise<void> {
     try {
-      const displayName = username ? `${firstName}, @${username}` : firstName
+      const user = { id: userId, firstName, username }
+      const displayName = formatUserMentionWithCut(user)
       const admin = this.config.ADMIN_USERNAME || ""
-      
+
       const kickText = getMessage("spam_kick", {
         name: displayName,
         admin,
       })
 
       // Отправляем сообщение о кике
-      const messageResult = await this.bot.sendAutoDeleteMessage({
+      const _messageResult = await this.bot.sendAutoDeleteMessage({
         chat_id: chatId,
         text: kickText,
         parse_mode: "HTML",

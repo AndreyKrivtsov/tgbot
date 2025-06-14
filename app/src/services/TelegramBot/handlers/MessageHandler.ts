@@ -89,6 +89,8 @@ export class MessageHandler {
 
       // Обновляем счетчик пользователя
       await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
+      // Сохраняем соответствие userId <-> username
+      await this.userManager.saveUserMapping(chat.id, from.id, from.username)
 
       // Получаем информацию о боте для проверки упоминаний
       const botInfo = await this.bot.getMe()

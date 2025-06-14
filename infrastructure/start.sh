@@ -19,7 +19,7 @@ fi
 
 # Создание сети если не существует
 echo "🌐 Creating Docker network..."
-docker network create tgbot-network 2>/dev/null || echo "📌 Network already exists"
+docker network create app-network-prod 2>/dev/null || echo "📌 Network already exists"
 
 # Запуск сервисов в правильном порядке
 echo "🔧 Starting AntiSpam first..."
@@ -60,4 +60,7 @@ echo "🎉 Ready to start your Telegram Bot!"
 # Показать логи последних запущенных сервисов
 echo ""
 echo "📋 Recent logs:"
-docker-compose logs --tail=10 
+docker-compose logs --tail=10
+
+# Пример для app (если потребуется):
+# docker exec app sh -c 'npm run some-script' 

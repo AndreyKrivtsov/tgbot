@@ -1,0 +1,25 @@
+services:
+  app:
+    container_name: app
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - app_logs:/app/logs/app_logs
+    networks:
+      - app-network-prod
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app_logs:
+
+networks:
+  app-network-prod:
+    external: true

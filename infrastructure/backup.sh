@@ -16,8 +16,8 @@ mkdir -p "$BACKUP_DIR"
 
 # PostgreSQL Backup
 echo "🐘 Backing up PostgreSQL..."
-if docker exec tgbot-postgres pg_isready -U postgres >/dev/null 2>&1; then
-    docker exec tgbot-postgres pg_dump -U postgres -d tgbot | gzip > "$BACKUP_DIR/postgres_tgbot_$TIMESTAMP.sql.gz"
+if docker exec app-postgres-prod pg_isready -U postgres >/dev/null 2>&1; then
+    docker exec app-postgres-prod pg_dump -U postgres -d tgbot | gzip > "$BACKUP_DIR/postgres_tgbot_$TIMESTAMP.sql.gz"
     echo "✅ PostgreSQL backup saved: postgres_tgbot_$TIMESTAMP.sql.gz"
 else
     echo "❌ PostgreSQL is not running, skipping backup"
@@ -25,18 +25,18 @@ fi
 
 # Redis Backup
 echo "🔄 Backing up Redis..."
-if docker exec tgbot-redis redis-cli ping | grep -q PONG 2>/dev/null; then
+if docker exec app-redis-prod redis-cli ping | grep -q PONG 2>/dev/null; then
     # Создание снапшота
-    docker exec tgbot-redis redis-cli BGSAVE
+    docker exec app-redis-prod redis-cli BGSAVE
     
     # Ожидание завершения снапшота
     echo "⏳ Waiting for Redis background save to complete..."
-    while docker exec tgbot-redis redis-cli LASTSAVE | grep -q $(docker exec tgbot-redis redis-cli LASTSAVE) 2>/dev/null; do
+    while docker exec app-redis-prod redis-cli LASTSAVE | grep -q $(docker exec app-redis-prod redis-cli LASTSAVE) 2>/dev/null; do
         sleep 1
     done
     
     # Копирование файла дампа
-    docker cp tgbot-redis:/data/dump.rdb "$BACKUP_DIR/redis_dump_$TIMESTAMP.rdb"
+    docker cp app-redis-prod:/data/dump.rdb "$BACKUP_DIR/redis_dump_$TIMESTAMP.rdb"
     gzip "$BACKUP_DIR/redis_dump_$TIMESTAMP.rdb"
     echo "✅ Redis backup saved: redis_dump_$TIMESTAMP.rdb.gz"
 else
@@ -70,4 +70,7 @@ echo "📁 Backups location: $BACKUP_DIR"
 echo ""
 echo "🔄 To restore:"
 echo "   PostgreSQL: gunzip -c postgres_tgbot_TIMESTAMP.sql.gz | docker exec -i tgbot-postgres psql -U postgres -d tgbot"
-echo "   Redis: docker cp redis_dump_TIMESTAMP.rdb tgbot-redis:/data/dump.rdb && docker restart tgbot-redis" 
+echo "   Redis: docker cp redis_dump_TIMESTAMP.rdb tgbot-redis:/data/dump.rdb && docker restart tgbot-redis"
+
+# Пример для app (если потребуется):
+# docker exec app sh -c 'cat /app/logs/app.log' 

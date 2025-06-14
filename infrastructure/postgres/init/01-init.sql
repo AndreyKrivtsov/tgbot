@@ -2,6 +2,14 @@
 -- POSTGRESQL INITIALIZATION SCRIPT
 -- ==============================================
 
+-- Создание базы данных, если она не существует
+-- (выполняется от имени postgres пользователя)
+SELECT 'CREATE DATABASE tgbot'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'tgbot')\gexec
+
+-- Подключение к созданной базе данных
+\c tgbot
+
 -- Создание расширений для оптимальной работы
 CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";

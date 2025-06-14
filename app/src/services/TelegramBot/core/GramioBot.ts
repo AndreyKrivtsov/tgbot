@@ -35,7 +35,6 @@ export class GramioBot {
         "edited_message",
         "callback_query",
         "chat_member",
-        "new_chat_members",
         "left_chat_member",
         "my_chat_member",
       ]

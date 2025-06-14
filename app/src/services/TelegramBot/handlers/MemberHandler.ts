@@ -111,6 +111,13 @@ export class MemberHandler {
       this.logger.i(`Message ID: ${messageId}`)
       this.logger.i(`CaptchaManager available: ${this.captchaManager ? "YES" : "NO"}`)
 
+      // Сохраняем соответствие userId <-> username для каждого нового участника
+      if (Array.isArray(newMembers)) {
+        for (const member of newMembers) {
+          await this.userManager.saveUserMapping(chatId, member.id, member.username)
+        }
+      }
+
       // Удаляем системное сообщение о присоединении
       if (this.settings.deleteSystemMessages && messageId) {
         await this.userRestrictions.deleteMessage(chatId, messageId)
@@ -181,51 +188,69 @@ export class MemberHandler {
    */
   async handleChatMember(context: TelegramChatMemberContext): Promise<void> {
     try {
+      const oldMember = context.oldChatMember
+      const newMember = context.newChatMember
       const chatId = context.chat?.id
-      const newChatMember = context.newChatMember
-      const oldChatMember = context.oldChatMember
+
+      const validStatuses = [
+        "creator",
+        "administrator",
+        "member",
+        "restricted",
+        "left",
+        "kicked",
+      ]
+
+      function isValidStatus(status: string | undefined): boolean {
+        return typeof status === "string" && validStatuses.includes(status)
+      }
 
       if (!chatId) {
         this.logger.w("No chat ID in chat member context")
         return
       }
 
-      this.logger.i(`🔄 CHAT_MEMBER event: ${oldChatMember?.status} -> ${newChatMember?.status}`)
-      this.logger.i(`🔄 CHAT_MEMBER event: ${oldChatMember.isMember()} -> ${newChatMember.isMember()}`)
-
-      // Проверяем, есть ли чат в базе данных
-      const chatExists = await this.chatRepository.chatExists(chatId)
-      if (!chatExists) {
-        this.logger.w(`Chat ${chatId} not found in database, skipping chat member processing`)
+      // Проверяем валидность статусов
+      if (!isValidStatus(oldMember?.status) || !isValidStatus(newMember?.status)) {
+        this.logger.w("Некорректные статусы участников:", oldMember?.status, "->", newMember?.status)
         return
       }
 
-      // Если пользователь покинул чат или был исключен
-      if ((newChatMember?.status === "left" || newChatMember?.status === "kicked") || !newChatMember.isMember()) {
-        const userId = newChatMember.user?.id
+      this.logger.i(`🔄 CHAT_MEMBER event: ${oldMember.status} -> ${newMember.status}`)
+
+      // Пользователь вступил в чат
+      if (
+        (oldMember.status === "left" || oldMember.status === "kicked" || !oldMember.isMember())
+        && (newMember.status === "member" || newMember.status === "restricted")
+      ) {
+        const user = newMember.user
+        if (user && !user.isBot()) {
+          this.logger.i(`🎉 Новый участник: ${user.id} (@${user.username || "no_username"})`)
+          await this.initiateUserCaptchaWithDuplicateCheck(chatId, user as any, "CHAT_MEMBER")
+        }
+        return
+      }
+
+      // Пользователь покинул чат
+      if (newMember.status === "left" || newMember.status === "kicked" || !newMember.isMember()) {
+        const userId = newMember.user?.id
         if (userId) {
-          this.logger.i(`👋 User ${userId} left/kicked from chat ${chatId}`)
+          this.logger.i(`👋 Пользователь покинул чат: ${userId}`)
           await this.cleanupUserData(userId)
         }
+        return
       }
-      // Если пользователь присоединился к чату (новый участник)
-      else if (
-        (oldChatMember?.status === "left" || oldChatMember?.status === "kicked")
-        || (!oldChatMember.isMember() && newChatMember.isMember())
-      ) {
-        const user = newChatMember.user
-        if (user && !user.isBot()) {
-          this.logger.i(`🎯 New member detected via chat_member event: ${user.firstName || "NoName"} (ID: ${user.id}, @${user.username || "no_username"})`)
 
-          // Показываем капчу новому пользователю (та же логика что в handleNewChatMembers)
-          this.logger.i(`🔐 Initiating captcha for user ${user.id} via chat_member event`)
-
-          // Передаем пользователя напрямую как в handleNewChatMembers
-          await this.initiateUserCaptchaWithDuplicateCheck(chatId, user as any, "CHAT_MEMBER")
-        } else if (user?.isBot()) {
-          this.logger.d(`🤖 Skipping bot ${user.firstName} (ID: ${user.id})`)
-        }
+      // Изменение прав
+      if (oldMember.status !== newMember.status) {
+        const user = newMember.user
+        this.logger.i(`⚡ Изменение прав: ${oldMember.status} -> ${newMember.status} для пользователя ${user?.id}`)
+        // Здесь можно добавить дополнительную логику для изменения прав
+        return
       }
+
+      // Если ничего из вышеперечисленного — просто логируем
+      this.logger.i("Изменение не требует действий.")
     } catch (error) {
       this.logger.e("❌ Error handling chat member update:", error)
     }

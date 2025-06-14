@@ -9,6 +9,8 @@ interface LogParameters {
   useFile?: boolean
 }
 
+const ENABLE_WRITE_TO_FILE = false
+
 const DEFAULT_LOG_LEVEL = 2
 const DEFAULT_LOG_NAME = "bot.log"
 const DEFAULT_LOG_DIR = process.cwd()
@@ -89,7 +91,7 @@ export class Logger {
   }
 
   writeToFile(level: string, ...data: any) {
-    if (!this.useFile) {
+    if (!this.useFile || !ENABLE_WRITE_TO_FILE) {
       return
     }
 

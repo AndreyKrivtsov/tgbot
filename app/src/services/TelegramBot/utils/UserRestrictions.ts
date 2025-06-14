@@ -55,16 +55,19 @@ export class UserRestrictions {
   }
 
   /**
-   * Ограничение пользователя (мьютинг для капчи)
+   * Ограничение пользователя (мьютинг для капчи или админом)
+   * @param chatId - id чата
+   * @param userId - id пользователя
+   * @param durationSec - длительность ограничения в секундах. null — бессрочно. По умолчанию 60 секунд
    */
-  async restrictUser(chatId: number, userId: number): Promise<void> {
+  async restrictUser(chatId: number, userId: number, durationSec: number | null = 60): Promise<void> {
     try {
-      // Устанавливаем ограничения на 5 минут (время на прохождение капчи)
-      const untilDate = Math.floor(Date.now() / 1000) + (1 * 60) // +1 минута в секундах
-
+      let untilDate: number | undefined
+      if (durationSec !== null) {
+        untilDate = Math.floor(Date.now() / 1000) + durationSec
+      }
       await this.bot.restrictUser(chatId, userId, USER_RESTRICTIONS.RESTRICTED, untilDate)
-
-      this.logger.i(`🔇 User ${userId} restricted in chat ${chatId} for 5 minutes`)
+      this.logger.i(`🔇 User ${userId} restricted in chat ${chatId} for ${durationSec === null ? "unlimited" : `${durationSec} seconds`}`)
     } catch (error) {
       this.logger.e(`Failed to restrict user ${userId}:`, error)
       throw error
@@ -121,12 +124,9 @@ export class UserRestrictions {
    */
   async kickUserFromChat(chatId: number, userId: number, userName: string): Promise<void> {
     try {
-      // Используем временный бан вместо kickUser для большей надежности
-      // Бан на 1 минуту с автоматическим разбаном
-      const kickDurationSec = Math.floor(BOT_CONFIG.AUTO_UNBAN_DELAY_MS / 1000) // Конвертируем мс в секунды
-      await this.bot.temporaryBanUser(chatId, userId, kickDurationSec)
+      await this.bot.kickUser(chatId, userId, BOT_CONFIG.AUTO_UNBAN_DELAY_MS)
 
-      this.logger.i(`👢 User ${userName} (${userId}) kicked from chat ${chatId} for ${kickDurationSec} seconds`)
+      this.logger.i(`👢 User ${userName} (${userId}) kicked from chat ${chatId} for ${BOT_CONFIG.AUTO_UNBAN_DELAY_MS} milliseconds`)
     } catch (error) {
       this.logger.e(`Failed to kick user ${userId}:`, error)
       throw error
