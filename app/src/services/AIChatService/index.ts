@@ -658,7 +658,13 @@ export class AIChatService implements IService {
    * Получить API ключ для чата (или вернуть null если отсутствует)
    */
   async getApiKeyForChat(chatId: number): Promise<{ key: string, isReal: boolean } | null> {
-    const { config } = await this.getChatSettings(chatId)
+    const { chat, config } = await this.getChatSettings(chatId)
+
+    // Если чат приватный — бот не должен работать
+    if (chat?.type === "private") {
+      this.logger.w(`AIChatService: попытка работы в приватном чате ${chatId} — запрещено.`)
+      return null
+    }
 
     // Если есть настоящий API ключ в конфиге чата, используем его
     if (config?.geminiApiKey) {
