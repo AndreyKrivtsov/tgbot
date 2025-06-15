@@ -494,7 +494,6 @@ export class CommandHandler {
    * Формат: /addAltronKey @chat_username API_KEY
    */
   async handleAddAltronKeyCommand(context: TelegramMessageContext): Promise<void> {
-    console.log("handleAddAltronKeyCommand", context)
     const chat = context.chat
     const userId = context.from?.id
 
@@ -528,8 +527,8 @@ export class CommandHandler {
       }
 
       // Валидация API ключа (базовая проверка)
-      if (apiKey.length < 10) {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_too_short"))
+      if (apiKey.length > 50) {
+        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_too_long"))
         return
       }
 
@@ -573,6 +572,7 @@ export class CommandHandler {
     try {
       const success = await this.chatRepository.setApiKey(chatId, apiKey)
       if (success) {
+        this.aiChatService?.clearChatCache(chatId)
         return { success: true }
       } else {
         return { success: false, message: "Ошибка при сохранении API ключа" }

@@ -431,7 +431,8 @@ export class AIChatService implements IService {
 
       // Получаем API ключ для чата
       const apiKeyResult = await this.getApiKeyForChat(chatId)
-      if (!apiKeyResult) {
+
+      if (!apiKeyResult || apiKeyResult.key.toString().length < 10) {
         throw new Error("No API key available for this chat")
       }
 
