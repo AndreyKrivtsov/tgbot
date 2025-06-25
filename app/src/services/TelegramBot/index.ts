@@ -144,6 +144,12 @@ export class TelegramBotService implements IService {
       throw new Error("ChatRepository is required")
     }
 
+    // Проверяем наличие ChatSettingsService
+    if (!this.dependencies.chatSettingsService) {
+      this.logger.e("❌ ChatSettingsService is required for TelegramBot handlers")
+      throw new Error("ChatSettingsService is required")
+    }
+
     // Инициализируем обработчики
     this.commandHandler = new CommandHandler(
       this.logger,
@@ -152,6 +158,7 @@ export class TelegramBotService implements IService {
       this.userManager,
       this.dependencies.chatRepository,
       this,
+      this.dependencies.chatSettingsService,
       this.dependencies.chatService,
     )
 

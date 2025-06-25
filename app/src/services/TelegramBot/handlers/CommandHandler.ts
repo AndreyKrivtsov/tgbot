@@ -6,6 +6,7 @@ import type { UserManager } from "../features/UserManager.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { TelegramBotService } from "../index.js"
 import type { AIChatService } from "../../AIChatService/index.js"
+import type { ChatSettingsService } from "../../ChatSettingsService/index.js"
 import { getMessage } from "../utils/Messages.js"
 import type { BotContext, TelegramMessageContext } from "../types/index.js"
 
@@ -20,6 +21,7 @@ export class CommandHandler {
   private chatRepository: ChatRepository
   private botService: TelegramBotService
   private aiChatService?: AIChatService
+  private chatSettingsService: ChatSettingsService
 
   constructor(
     logger: Logger,
@@ -28,6 +30,7 @@ export class CommandHandler {
     userManager: UserManager,
     chatRepository: ChatRepository,
     botService: TelegramBotService,
+    chatSettingsService: ChatSettingsService,
     aiChatService?: AIChatService,
   ) {
     this.logger = logger
@@ -36,6 +39,7 @@ export class CommandHandler {
     this.userManager = userManager
     this.chatRepository = chatRepository
     this.botService = botService
+    this.chatSettingsService = chatSettingsService
     this.aiChatService = aiChatService
   }
 
@@ -146,6 +150,9 @@ export class CommandHandler {
           break
         case "/addaltronkey":
           await this.handleAddAltronKeyCommand(context)
+          break
+        case "/ultron":
+          await this.handleUltronCommand(context)
           break
         default:
           // Неизвестная команда - игнорируем
@@ -391,7 +398,7 @@ export class CommandHandler {
           if (member && member.user && member.user.id === targetUserId) {
             isMember = true
           }
-        } catch (_e) {
+        } catch {
           isMember = false
         }
         if (!isMember) {
@@ -490,6 +497,107 @@ export class CommandHandler {
   }
 
   /**
+   * Обработка команды /ultron [@chat_username] [1/0] (включение/выключение ИИ)
+   */
+  async handleUltronCommand(context: TelegramMessageContext): Promise<void> {
+    try {
+      const text = context.text
+      if (!text) {
+        return
+      }
+
+      // Удаляем сообщение пользователя с командой
+      await this.deleteUserCommandMessage(context)
+
+      // Парсим аргументы команды
+      const args = text.split(" ").slice(1) // убираем саму команду
+
+      if (args.length === 0) {
+        const message = getMessage("ultron_usage")
+        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        return
+      }
+
+      let targetChatId: number
+      let targetChatUsername: string | undefined
+      let enableValue: string
+
+      // Определяем формат команды
+      if (args.length === 1) {
+        // Формат: /ultron [1/0] - для текущего чата
+        targetChatId = context.chat!.id
+        enableValue = args[0] || ""
+
+        // Проверяем права админа группы для текущего чата
+        if (!await this.isGroupAdminCommand(context)) {
+          return
+        }
+      } else if (args.length === 2) {
+        // Формат: /ultron @chat_username [1/0] - для указанного чата
+        targetChatUsername = (args[0] || "").replace("@", "")
+        enableValue = args[1] || ""
+
+        // Только суперадмин может управлять другими чатами
+        if (!this.isSuperAdminCommand(context)) {
+          return
+        }
+
+        // Находим чат по username
+        const targetChat = await this.findChatByUsername(targetChatUsername)
+        if (!targetChat) {
+          const message = getMessage("ultron_chat_not_found", { username: targetChatUsername })
+          await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+          return
+        }
+
+        targetChatId = targetChat.id
+      } else {
+        // Неверный формат
+        const message = getMessage("ultron_invalid_format")
+        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        return
+      }
+
+      // Проверяем значение включения/выключения
+      if (enableValue !== "1" && enableValue !== "0") {
+        const message = getMessage("ultron_invalid_value")
+        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        return
+      }
+
+      const enabled = enableValue === "1"
+
+      // Выполняем изменение настройки через ChatSettingsService (автоматически очистит все кеши)
+      const success = await this.chatSettingsService.toggleAi(targetChatId, enabled)
+
+      if (success) {
+        let message: string
+        if (targetChatUsername) {
+          // Команда для другого чата
+          message = getMessage(
+            enabled ? "ultron_enabled_for_chat" : "ultron_disabled_for_chat",
+            { username: targetChatUsername },
+          )
+        } else {
+          // Команда для текущего чата
+          message = getMessage(enabled ? "ultron_enabled" : "ultron_disabled")
+        }
+
+        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+
+        this.logger.i(`AI ${enabled ? "enabled" : "disabled"} for chat ${targetChatId}${targetChatUsername ? ` (@${targetChatUsername})` : ""}`)
+      } else {
+        const message = getMessage("ultron_error")
+        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      }
+    } catch (error) {
+      this.logger.e("Error handling ultron command:", error)
+      const message = getMessage("ultron_error")
+      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+    }
+  }
+
+  /**
    * Обработка команды /addAltronKey (добавление API ключа для группы)
    * Формат: /addAltronKey @chat_username API_KEY
    */
@@ -570,9 +678,8 @@ export class CommandHandler {
    */
   private async saveChatApiKey(chatId: number, apiKey: string): Promise<{ success: boolean, message?: string }> {
     try {
-      const success = await this.chatRepository.setApiKey(chatId, apiKey)
+      const success = await this.chatSettingsService.setApiKey(chatId, apiKey)
       if (success) {
-        this.aiChatService?.clearChatCache(chatId)
         return { success: true }
       } else {
         return { success: false, message: "Ошибка при сохранении API ключа" }

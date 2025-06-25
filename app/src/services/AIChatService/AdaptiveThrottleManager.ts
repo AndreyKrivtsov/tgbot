@@ -12,7 +12,7 @@ class TokenBucket {
   constructor(
     private capacity: number,
     private refillRate: number,
-    private tokensPerRequest: number = 1
+    private tokensPerRequest: number = 1,
   ) {
     this.tokens = capacity
     this.lastRefillTime = Date.now()
@@ -65,7 +65,7 @@ class TokenBucket {
     const waitTimeMs = (tokensNeeded / this.refillRate) * 1000
 
     await new Promise(resolve => setTimeout(resolve, waitTimeMs))
-    
+
     // После ожидания пробуем еще раз
     return this.waitForToken()
   }
@@ -99,8 +99,8 @@ export class AdaptiveChatThrottleManager {
   constructor(logger: Logger) {
     this.logger = logger
     this.cleanupInterval = setInterval(
-      () => this.cleanup(), 
-      AI_THROTTLE_CONFIG.CLEANUP_INTERVAL
+      () => this.cleanup(),
+      AI_THROTTLE_CONFIG.CLEANUP_INTERVAL,
     )
   }
 
@@ -111,68 +111,46 @@ export class AdaptiveChatThrottleManager {
     if (!this.buckets.has(contextId)) {
       this.buckets.set(contextId, new TokenBucket(
         AI_THROTTLE_CONFIG.BUCKET_CAPACITY,
-        AI_THROTTLE_CONFIG.REFILL_RATE,
-        AI_THROTTLE_CONFIG.TOKENS_PER_REQUEST
+        AI_THROTTLE_CONFIG.MAX_DELAY,
+        AI_THROTTLE_CONFIG.TOKENS_PER_REQUEST,
       ))
     }
     return this.buckets.get(contextId)!
   }
 
   /**
-   * Вычисление адаптивной задержки на основе длины ответа
+   * Основной throttling: сначала token bucket, потом задержка по длине ответа
+   */
+  async waitForThrottle(contextId: string, responseLength: number): Promise<void> {
+    const bucket = this.getBucket(contextId)
+    // Сначала token bucket
+    if (!bucket.tryConsume()) {
+      await bucket.waitForToken()
+    }
+    // Затем задержка по длине ответа
+    const delay = this.calculateAdaptiveDelay(responseLength)
+    if (delay > 0) {
+      this.logger.d(`Chat ${contextId}: Adaptive delay ${delay}ms (response: ${responseLength} chars)`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+    this.lastRequestTime.set(contextId, Date.now())
+  }
+
+  /**
+   * Линейная задержка: короткие ответы — 0, длинные — MAX_DELAY
    */
   private calculateAdaptiveDelay(responseLength: number): number {
-    const { MIN_DELAY, MAX_DELAY, SHORT_RESPONSE_THRESHOLD, LONG_RESPONSE_THRESHOLD } = AI_THROTTLE_CONFIG
-
+    const { MAX_DELAY, SHORT_RESPONSE_THRESHOLD, LONG_RESPONSE_THRESHOLD } = AI_THROTTLE_CONFIG
     if (responseLength <= SHORT_RESPONSE_THRESHOLD) {
-      return MIN_DELAY
+      return 0
     }
 
     if (responseLength >= LONG_RESPONSE_THRESHOLD) {
       return MAX_DELAY
     }
 
-    // Линейная интерполяция между MIN и MAX
-    const ratio = (responseLength - SHORT_RESPONSE_THRESHOLD) / 
-                  (LONG_RESPONSE_THRESHOLD - SHORT_RESPONSE_THRESHOLD)
-    
-    return MIN_DELAY + (MAX_DELAY - MIN_DELAY) * ratio
-  }
-
-  /**
-   * Ожидание разрешения на запрос (перед отправкой)
-   */
-  async waitForRequestPermission(contextId: string): Promise<void> {
-    const bucket = this.getBucket(contextId)
-    
-    // Сначала проверяем token bucket
-    if (bucket.tryConsume()) {
-      // Есть токены - можем делать запрос сразу
-      this.logger.d(`Chat ${contextId}: Token available, proceeding immediately`)
-      return
-    }
-
-    // Токенов нет - ждем по правилам token bucket
-    this.logger.d(`Chat ${contextId}: No tokens, waiting for refill`)
-    await bucket.waitForToken()
-  }
-
-  /**
-   * Применение адаптивной задержки после получения ответа
-   */
-  async applyPostResponseDelay(contextId: string, responseLength: number): Promise<void> {
-    const adaptiveDelay = this.calculateAdaptiveDelay(responseLength)
-    const lastRequestTime = this.lastRequestTime.get(contextId) || 0
-    const timeSinceLastRequest = Date.now() - lastRequestTime
-
-    // Если прошло меньше времени чем нужная задержка - дождемся
-    if (timeSinceLastRequest < adaptiveDelay) {
-      const remainingDelay = adaptiveDelay - timeSinceLastRequest
-      this.logger.d(`Chat ${contextId}: Adaptive delay ${remainingDelay}ms (response: ${responseLength} chars)`)
-      await new Promise(resolve => setTimeout(resolve, remainingDelay))
-    }
-
-    this.lastRequestTime.set(contextId, Date.now())
+    const ratio = (responseLength - SHORT_RESPONSE_THRESHOLD) / (LONG_RESPONSE_THRESHOLD - SHORT_RESPONSE_THRESHOLD)
+    return Math.round(MAX_DELAY * ratio)
   }
 
   /**
@@ -185,7 +163,7 @@ export class AdaptiveChatThrottleManager {
     const bucket = this.getBucket(contextId)
     return {
       bucketState: bucket.getState(),
-      lastRequestTime: this.lastRequestTime.get(contextId) || 0
+      lastRequestTime: this.lastRequestTime.get(contextId) || 0,
     }
   }
 
@@ -213,4 +191,4 @@ export class AdaptiveChatThrottleManager {
     this.buckets.clear()
     this.lastRequestTime.clear()
   }
-} 
+}

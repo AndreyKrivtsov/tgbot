@@ -1,3 +1,6 @@
+import { axiosWithProxy } from "../../../helpers/axiosWithProxy.js"
+import type { IAIProvider } from "./IAIProvider.js"
+
 export interface GeminiMessage {
   role: "user" | "model"
   parts: Array<{
@@ -5,40 +8,15 @@ export interface GeminiMessage {
   }>
 }
 
-interface GeminiRequest {
-  contents: GeminiMessage[]
-  generationConfig?: {
-    stopSequences?: string[]
-    temperature?: number
-    maxOutputTokens?: number
-    topP?: number
-    topK?: number
-  }
-}
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content: {
-      parts: Array<{
-        text: string
-      }>
-    }
-  }>
-  error?: {
-    message: string
-    code: number
-  }
-}
-
-export class GeminiAdapter {
+export class GeminiAdapter implements IAIProvider {
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
-  private model = "gemini-2.0-flash"
+  private model = "gemma-3-27b-it"
   private defaultConfig = {
     temperature: 1.0,
     maxOutputTokens: 800,
     topP: 0.8,
     topK: 10,
-    stopSequences: ["Title"],
+    stopSequences: [],
   }
 
   constructor() {
@@ -51,12 +29,12 @@ export class GeminiAdapter {
   async generateContent(
     apiKey: string,
     prompt: string,
-    conversationHistory?: GeminiMessage[],
+    conversationHistory?: any[],
     systemPrompt?: string,
-    customConfig?: Partial<typeof this.defaultConfig>,
+    customConfig?: object,
   ): Promise<string> {
     // Подготавливаем содержимое запроса
-    const contents: GeminiMessage[] = []
+    const contents: any[] = []
 
     // Добавляем системный промпт если есть (как первое user сообщение)
     if (systemPrompt) {
@@ -83,7 +61,7 @@ export class GeminiAdapter {
       ...customConfig,
     }
 
-    const requestBody: GeminiRequest = {
+    const requestBody = {
       contents,
       generationConfig,
     }
@@ -97,20 +75,21 @@ export class GeminiAdapter {
     const url = `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`
 
     // Выполняем запрос
-    const response = await fetch(url, {
+    const response = await axiosWithProxy({
+      url,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      data: JSON.stringify(requestBody),
+      responseType: "json",
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Gemini API error (${response.status}): ${errorText}`)
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Gemini API error (${response.status}): ${response.statusText}`)
     }
 
-    const data = await response.json() as GeminiResponse
+    const data = response.data
 
     // Проверяем на ошибки в ответе
     if (data.error) {
@@ -138,7 +117,7 @@ export class GeminiAdapter {
     try {
       const response = await this.generateContent(apiKey, "Hello")
       return response.length > 0
-    } catch (error) {
+    } catch {
       return false
     }
   }
