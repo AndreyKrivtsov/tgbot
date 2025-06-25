@@ -32,10 +32,10 @@ export const BOT_CONFIG = {
 // =============================================================================
 
 export const AI_CHAT_CONFIG = {
-  MAX_QUEUE_SIZE: 8, // Максимальный размер очереди сообщений
+  MAX_QUEUE_SIZE: 10, // Максимальный размер очереди сообщений
   QUEUE_PROCESS_INTERVAL_MS: 200, // 200ms - интервал обработки очереди
-  MAX_CONTEXT_MESSAGES: 100, // Максимальное количество сообщений в контексте чата
-  
+  MAX_CONTEXT_MESSAGES: 500, // Максимальное количество сообщений в контексте чата
+
   // Redis кэширование контекстов
   CONTEXT_TTL_SECONDS: 24 * 60 * 60, // 24 часа - время жизни контекста в кэше
   CONTEXT_SAVE_INTERVAL_MS: 30 * 1000, // 30 секунд - интервал автосохранения
@@ -68,21 +68,20 @@ export const AI_CHAT_CONFIG = {
 
 export const AI_THROTTLE_CONFIG = {
   // Adaptive throttling настройки
-  BASE_REFILL_INTERVAL: 10000,   // Базовый интервал пополнения (мс) = 1/REFILL_RATE
-  MIN_DELAY: 10000 / 4,          // Минимальная задержка (1/4 от BASE_REFILL_INTERVAL)
-  MAX_DELAY: 10000,              // Максимальная задержка (= BASE_REFILL_INTERVAL)
+  // MAX_DELAY теперь основной параметр для всех вычислений
+  MAX_DELAY: 20000, // Максимальная задержка (мс)
+  MIN_DELAY: 5000, // Минимальная задержка
 
   // Token Bucket настройки
-  BUCKET_CAPACITY: 5,           // Максимум токенов (burst capacity)
-  REFILL_RATE: 1 / (10000 / 1000),            // Токенов в секунду (1 токен каждые 10 сек)
-  TOKENS_PER_REQUEST: 1,        // Токенов за запрос
-  
+  BUCKET_CAPACITY: 6, // Максимум токенов (burst capacity)
+  TOKENS_PER_REQUEST: 1, // Токенов за запрос
+
   // Адаптивность по длине ответа
-  SHORT_RESPONSE_THRESHOLD: 100,  // Символов для "короткого" ответа
-  LONG_RESPONSE_THRESHOLD: 500,   // Символов для "длинного" ответа
-  
+  SHORT_RESPONSE_THRESHOLD: 100, // Символов для "короткого" ответа
+  LONG_RESPONSE_THRESHOLD: 500, // Символов для "длинного" ответа
+
   // Cleanup
-  CLEANUP_INTERVAL: 5 * 60 * 1000,  // 5 минут
+  CLEANUP_INTERVAL: 5 * 60 * 1000, // 5 минут
   INACTIVE_TIMEOUT: 30 * 60 * 1000, // 30 минут неактивности
 } as const
 

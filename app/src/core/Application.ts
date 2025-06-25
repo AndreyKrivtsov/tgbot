@@ -108,7 +108,15 @@ export class Application {
       const { ChatRepository } = await import("../repository/ChatRepository.js")
       const database = await this.container.getAsync("database") as any
       const cache = await this.container.getAsync("cache") as any
-              return new ChatRepository(database, cache)
+      return new ChatRepository(database, cache)
+    })
+
+    // Chat Settings Service
+    this.container.register("chatSettings", async () => {
+      const { ChatSettingsService } = await import("../services/ChatSettingsService/index.js")
+      const chatRepository = await this.container.getAsync("chatRepository") as any
+      const logger = await this.container.getAsync("logger") as any
+      return new ChatSettingsService(logger, chatRepository)
     })
 
     // Chat Config Service
@@ -151,13 +159,36 @@ export class Application {
     // Chat Service
     this.container.register("chat", async () => {
       const { AIChatService } = await import("../services/AIChatService/index.js")
+      const { GeminiAdapter } = await import("../services/AIChatService/providers/GeminiAdapter.js")
+      const { ChatQueueManager } = await import("../services/AIChatService/ChatQueueManager.js")
+      const { ChatContextManager } = await import("../services/AIChatService/ChatContextManager.js")
+      const { AdaptiveChatThrottleManager } = await import("../services/AIChatService/AdaptiveThrottleManager.js")
+      const cache = await this.container.getAsync("cache") as any
       const database = await this.container.getAsync("database") as any
       const redis = await this.container.getAsync("redis") as any
+      const logger = await this.container.getAsync("logger") as any
+      const aiProvider = new GeminiAdapter()
+      const queueManager = new ChatQueueManager()
+      const contextManager = new ChatContextManager(cache)
+      const throttleManager = new AdaptiveChatThrottleManager(logger)
+      const aiChatService = new AIChatService(
+        this.config,
+        logger,
+        {
+          database,
+          redis,
+        },
+        aiProvider,
+        queueManager,
+        contextManager,
+        throttleManager,
+      )
 
-      return new AIChatService(this.config, this.logger, {
-        database,
-        redis,
-      })
+      // Подключаем ChatSettingsService к AIChatService для синхронизации кешей
+      const chatSettings = await this.container.getAsync("chatSettings") as any
+      chatSettings.setAIChatService(aiChatService)
+
+      return aiChatService
     })
 
     this.logger.i("✅ Business services registered")
@@ -177,6 +208,7 @@ export class Application {
       const antiSpamService = await this.container.getAsync("antiSpam")
       const chatService = await this.container.getAsync("chat")
       const chatRepository = await this.container.getAsync("chatRepository")
+      const chatSettingsService = await this.container.getAsync("chatSettings")
 
       // Настройки Telegram бота (можно перенести в БД позже)
       const botSettings = {
@@ -195,6 +227,7 @@ export class Application {
         antiSpamService: antiSpamService as any,
         chatService: chatService as any,
         chatRepository: chatRepository as any,
+        chatSettingsService: chatSettingsService as any,
       }, botSettings)
     })
 

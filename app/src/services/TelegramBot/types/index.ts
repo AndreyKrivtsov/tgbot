@@ -12,6 +12,7 @@ export interface TelegramBotDependencies {
   chatService?: AIChatService
   redisService?: RedisService
   chatRepository?: ChatRepository
+  chatSettingsService?: any // ChatSettingsService
 }
 
 export interface TelegramBotSettings {

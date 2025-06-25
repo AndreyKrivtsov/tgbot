@@ -19,6 +19,12 @@ export interface AppConfig {
   // Админ
   ADMIN_USERNAME?: string
 
+  // Прокси
+  PROXY_ENABLED: boolean
+  PROXY_URL?: string
+  PROXY_USERNAME?: string
+  PROXY_PASSWORD?: string
+
   // Логирование
   LOG_LEVEL: number
   LOG_USE_FILE: boolean
@@ -47,6 +53,12 @@ export const config: AppConfig = {
   PORT: env.get("PORT").default(3000).asPortNumber(),
 
   ADMIN_USERNAME: env.get("ADMIN_USERNAME").asString(),
+
+  // Прокси
+  PROXY_ENABLED: env.get("PROXY_ENABLED").default("false").asBool(),
+  PROXY_URL: env.get("PROXY_URL").asString(),
+  PROXY_USERNAME: env.get("PROXY_USERNAME").default("").asString(),
+  PROXY_PASSWORD: env.get("PROXY_PASSWORD").default("").asString(),
 
   LOG_LEVEL: env.get("LOG_LEVEL").default(2).asInt(),
 

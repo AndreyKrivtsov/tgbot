@@ -26,7 +26,7 @@ export class MessageHandler {
 
   // AI Chat Service
   private chatService?: AIChatService
-  
+
   // Typing intervals для каждого чата
   private typingIntervals: Map<string, NodeJS.Timeout> = new Map()
 
@@ -154,7 +154,7 @@ export class MessageHandler {
         await this.bot.sendMessage(messageParams)
       }
 
-      this.logger.d(`✅ AI response sent to chat ${chatId} (${response.length} chars)${userMessageId ? ` as reply to ${userMessageId}` : ''}`)
+      this.logger.d(`✅ AI response sent to chatId=${chatId} (${response.length} chars)${userMessageId ? ` as reply to msgId=${userMessageId}` : ""}`)
     } catch (error) {
       this.logger.e("Error handling AI response:", error)
 
@@ -197,7 +197,6 @@ export class MessageHandler {
       }, 10000)
 
       this.typingIntervals.set(contextId, interval)
-      
     } catch (error) {
       this.logger.e("Error sending typing action:", error)
     }
