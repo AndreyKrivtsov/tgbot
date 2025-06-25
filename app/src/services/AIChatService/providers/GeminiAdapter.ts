@@ -8,10 +8,18 @@ export interface GeminiMessage {
   }>
 }
 
+interface DefaultConfig {
+  temperature: number
+  maxOutputTokens: number
+  topP: number
+  topK: number
+  stopSequences: string[]
+}
+
 export class GeminiAdapter implements IAIProvider {
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
   private model = "gemma-3-27b-it"
-  private defaultConfig = {
+  private defaultConfig: DefaultConfig = {
     temperature: 1.0,
     maxOutputTokens: 800,
     topP: 0.8,
