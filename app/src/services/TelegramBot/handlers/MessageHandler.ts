@@ -28,9 +28,6 @@ export class MessageHandler {
   // AI Chat Service
   private chatService?: AIChatServiceRefactored
 
-  // Typing intervals для каждого чата
-  private typingIntervals: Map<string, NodeJS.Timeout> = new Map()
-
   constructor(
     logger: Logger,
     config: AppConfig,
@@ -170,52 +167,6 @@ export class MessageHandler {
       } catch (sendError) {
         this.logger.e("Failed to send error message:", sendError)
       }
-    }
-  }
-
-  /**
-   * Отправка typing действия
-   */
-  async sendTypingAction(contextId: string): Promise<void> {
-    try {
-      const chatId = Number.parseInt(contextId)
-
-      // Если уже есть интервал для этого чата, не создаем новый
-      if (this.typingIntervals.has(contextId)) {
-        return
-      }
-
-      // Отправляем typing индикатор сразу
-      await this.bot.sendChatAction(chatId, "typing")
-
-      // Создаем интервал для повторной отправки каждые 5 секунд
-      const interval = setInterval(async () => {
-        try {
-          await this.bot.sendChatAction(chatId, "typing")
-        } catch (error) {
-          this.logger.e("Error sending typing action in interval:", error)
-        }
-      }, 10000)
-
-      this.typingIntervals.set(contextId, interval)
-    } catch (error) {
-      this.logger.e("Error sending typing action:", error)
-    }
-  }
-
-  /**
-   * Остановка typing действия
-   */
-  async stopTypingAction(contextId: string): Promise<void> {
-    try {
-      const interval = this.typingIntervals.get(contextId)
-      if (interval) {
-        clearInterval(interval)
-        this.typingIntervals.delete(contextId)
-        this.logger.d(`Stopped typing for chat ${contextId}`)
-      }
-    } catch (error) {
-      this.logger.e("Error stopping typing action:", error)
     }
   }
 

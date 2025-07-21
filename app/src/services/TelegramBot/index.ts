@@ -399,13 +399,16 @@ export class TelegramBotService implements IService {
         this.messageHandler?.handleAIResponse(contextId, response, messageId, userMessageId, isError)
       }
 
-      this.dependencies.chatService.onTypingStart = (contextId: string) => {
-        this.messageHandler?.sendTypingAction(contextId)
-      }
-
-      this.dependencies.chatService.onTypingStop = (contextId: string) => {
-        this.messageHandler?.stopTypingAction(contextId)
-      }
+      // Настраиваем функцию отправки typing action напрямую в AIChatService
+      this.dependencies.chatService.setSendTypingAction(async (chatId: number) => {
+        try {
+          if (this.bot) {
+            await this.bot.sendChatAction(chatId, "typing")
+          }
+        } catch (error) {
+          this.logger.e("Error sending typing action:", error)
+        }
+      })
     }
   }
 

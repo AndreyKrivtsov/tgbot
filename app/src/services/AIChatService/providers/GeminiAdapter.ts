@@ -3,13 +3,6 @@ import type { IAIProvider } from "./IAIProvider.js"
 import { AI_CHAT_CONFIG } from "../../../constants.js"
 import type { Logger } from "../../../helpers/Logger.js"
 
-export interface GeminiMessage {
-  role: "user" | "model"
-  parts: Array<{
-    text: string
-  }>
-}
-
 interface DefaultConfig {
   temperature: number
   maxOutputTokens: number
@@ -22,13 +15,13 @@ export class GeminiAdapter implements IAIProvider {
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
   private model = "gemma-3-27b-it"
   // private model = "gemini-2.0-flash"
-  private requestTimeoutMs: number = AI_CHAT_CONFIG.AI_REQUEST_TIMEOUT_MS // Таймаут запросов к AI
-  private logger?: Logger // Опциональный логгер для дебага
+  private requestTimeoutMs: number = AI_CHAT_CONFIG.AI_REQUEST_TIMEOUT_MS
+  private logger?: Logger
   private defaultConfig: DefaultConfig = {
-    temperature: 1.0,
+    temperature: 2.0,
     maxOutputTokens: 800,
-    topP: 0.8,
-    topK: 10,
+    topP: 0.7,
+    topK: 20,
     stopSequences: [],
   }
 
@@ -50,17 +43,20 @@ export class GeminiAdapter implements IAIProvider {
     // Подготавливаем содержимое запроса
     const contents: any[] = []
 
-    // НЕ добавляем системный промпт как отдельное сообщение
-    // Вместо этого будем использовать его в самом prompt
-
     // Добавляем историю разговора если есть
     if (conversationHistory && conversationHistory.length > 0) {
       for (const msg of conversationHistory) {
-        // Нормализуем формат сообщения к новому API
-        const normalizedMsg = this.normalizeMessage(msg)
-        if (normalizedMsg) {
-          contents.push(normalizedMsg)
+        // Пропускаем системные сообщения (не поддерживаются Gemini)
+        // и невалидные сообщения
+        if (msg?.role === "system" || !msg?.role || !msg?.content) {
+          continue
         }
+
+        // Конвертируем в формат Gemini API
+        contents.push({
+          role: msg.role, // "user" или "model"
+          parts: [{ text: msg.content }],
+        })
       }
     }
 
@@ -162,59 +158,6 @@ export class GeminiAdapter implements IAIProvider {
   }
 
   /**
-   * Нормализация сообщения к новому формату Gemini API
-   */
-  private normalizeMessage(msg: any): any | null {
-    if (!msg || !msg.role) {
-      return null
-    }
-
-    // Пропускаем системные сообщения - они не поддерживаются
-    if (msg.role === "system") {
-      return null
-    }
-
-    let normalizedRole: string
-    switch (msg.role) {
-      case "assistant":
-        normalizedRole = "model"
-        break
-      case "user":
-        normalizedRole = "user"
-        break
-      default:
-        // Пропускаем неизвестные роли
-        return null
-    }
-
-    // Если уже в новом формате (с parts)
-    if (msg.parts) {
-      return {
-        role: normalizedRole,
-        parts: msg.parts,
-      }
-    }
-
-    // Если в старом формате (с content)
-    if (msg.content) {
-      return {
-        role: normalizedRole,
-        parts: [{ text: msg.content }],
-      }
-    }
-
-    // Если есть только текст
-    if (typeof msg === "string") {
-      return {
-        role: "user",
-        parts: [{ text: msg }],
-      }
-    }
-
-    return null
-  }
-
-  /**
    * Парсинг ответа от Gemini API
    */
   private parseResponse(data: any): string {
@@ -263,76 +206,5 @@ export class GeminiAdapter implements IAIProvider {
       : "No candidates found"
 
     throw new Error(`No valid response from Gemini API. ${candidatesInfo}. Raw response keys: ${Object.keys(data).join(", ")}`)
-  }
-
-  /**
-   * Проверить соединение с API
-   */
-  async testConnection(apiKey: string): Promise<boolean> {
-    try {
-      const response = await this.generateContent(apiKey, "Hello")
-      return response.length > 0
-    } catch {
-      return false
-    }
-  }
-
-  /**
-   * Установить другую модель
-   */
-  setModel(modelName: string): void {
-    this.model = modelName
-  }
-
-  /**
-   * Обновить конфигурацию генерации по умолчанию
-   */
-  updateDefaultConfig(config: Partial<{
-    temperature: number
-    maxOutputTokens: number
-    topP: number
-    topK: number
-    stopSequences: string[]
-  }>): void {
-    this.defaultConfig = {
-      ...this.defaultConfig,
-      ...config,
-    }
-  }
-
-  /**
-   * Получить текущую конфигурацию по умолчанию
-   */
-  getDefaultConfig() {
-    return { ...this.defaultConfig }
-  }
-
-  /**
-   * Получить информацию о текущей модели
-   */
-  getModelInfo() {
-    return {
-      model: this.model,
-      baseUrl: this.baseUrl,
-      config: this.getDefaultConfig(),
-      timeoutMs: this.requestTimeoutMs,
-    }
-  }
-
-  /**
-   * Установить таймаут для запросов (в миллисекундах)
-   */
-  setRequestTimeout(timeoutMs: number): void {
-    if (timeoutMs <= 0) {
-      throw new Error("Timeout must be positive number")
-    }
-    this.requestTimeoutMs = timeoutMs
-  }
-
-  /**
-   * Получить текущий таймаут
-   */
-  getRequestTimeout(): number {
-    return this.requestTimeoutMs
   }
 }

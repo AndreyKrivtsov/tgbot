@@ -8,18 +8,16 @@ export interface TypingState {
   isActive: boolean
   startTime: number
   timeoutId?: NodeJS.Timeout
+  intervalId?: NodeJS.Timeout
 }
 
 /**
- * Интерфейс для TypingManager
+ * Интерфейс для TypingManager (упрощенный, только используемые методы)
  */
 export interface ITypingManager {
   startTyping: (chatId: string) => void
   stopTyping: (chatId: string) => void
   stopAllTyping: () => void
-  isTyping: (chatId: string) => boolean
-  getActiveTypingChats: () => string[]
-  cleanup: () => void
   getStats: () => object
   dispose: () => void
 }
@@ -31,23 +29,18 @@ export class TypingManager implements ITypingManager {
   private activeTypingChats: Map<string, TypingState> = new Map()
   private logger: Logger
   private typingTimeoutMs: number = 30000 // 30 секунд максимум
-  private typingCallbacks: {
-    onStart?: (chatId: string) => void
-    onStop?: (chatId: string) => void
-  } = {}
+  private sendTypingAction: (chatId: number) => Promise<void>
 
   constructor(
     logger: Logger,
+    sendTypingAction: (chatId: number) => Promise<void>,
     options: {
       typingTimeoutMs?: number
-      onStart?: (chatId: string) => void
-      onStop?: (chatId: string) => void
     } = {},
   ) {
     this.logger = logger
-    this.typingTimeoutMs = options.typingTimeoutMs || 30000
-    this.typingCallbacks.onStart = options.onStart
-    this.typingCallbacks.onStop = options.onStop
+    this.sendTypingAction = sendTypingAction
+    this.typingTimeoutMs = options.typingTimeoutMs || 300 * 1000
   }
 
   /**
@@ -62,6 +55,14 @@ export class TypingManager implements ITypingManager {
 
     this.logger.d(`Starting typing indicator for chat ${chatId}`)
 
+    // Отправляем typing сразу
+    this.sendTypingActionSafe(Number.parseInt(chatId))
+
+    // Создаем интервал для повторной отправки каждые 4 секунды
+    const intervalId = setInterval(() => {
+      this.sendTypingActionSafe(Number.parseInt(chatId))
+    }, 4000)
+
     // Создаем таймаут для автоматической остановки
     const timeoutId = setTimeout(() => {
       this.stopTyping(chatId)
@@ -73,18 +74,10 @@ export class TypingManager implements ITypingManager {
       isActive: true,
       startTime: Date.now(),
       timeoutId,
+      intervalId,
     }
 
     this.activeTypingChats.set(chatId, typingState)
-
-    // Вызываем колбэк
-    if (this.typingCallbacks.onStart) {
-      try {
-        this.typingCallbacks.onStart(chatId)
-      } catch (error) {
-        this.logger.e(`Error calling onStart callback for chat ${chatId}:`, error)
-      }
-    }
   }
 
   /**
@@ -104,31 +97,24 @@ export class TypingManager implements ITypingManager {
       clearTimeout(typingState.timeoutId)
     }
 
+    // Очищаем интервал
+    if (typingState.intervalId) {
+      clearInterval(typingState.intervalId)
+    }
+
     // Удаляем состояние
     this.activeTypingChats.delete(chatId)
+  }
 
-    // Вызываем колбэк
-    if (this.typingCallbacks.onStop) {
-      try {
-        this.typingCallbacks.onStop(chatId)
-      } catch (error) {
-        this.logger.e(`Error calling onStop callback for chat ${chatId}:`, error)
-      }
+  /**
+   * Безопасная отправка typing action с обработкой ошибок
+   */
+  private async sendTypingActionSafe(chatId: number): Promise<void> {
+    try {
+      await this.sendTypingAction(chatId)
+    } catch (error) {
+      this.logger.e(`Error sending typing action for chat ${chatId}:`, error)
     }
-  }
-
-  /**
-   * Проверить, активна ли индикация печати
-   */
-  isTyping(chatId: string): boolean {
-    return this.activeTypingChats.has(chatId)
-  }
-
-  /**
-   * Получить список чатов с активной индикацией
-   */
-  getActiveTypingChats(): string[] {
-    return Array.from(this.activeTypingChats.keys())
   }
 
   /**
@@ -140,27 +126,6 @@ export class TypingManager implements ITypingManager {
 
     for (const chatId of chatIds) {
       this.stopTyping(chatId)
-    }
-  }
-
-  /**
-   * Очистка устаревших индикаций
-   */
-  cleanup(): void {
-    const now = Date.now()
-    const expiredChats: string[] = []
-
-    for (const [chatId, state] of this.activeTypingChats.entries()) {
-      if (now - state.startTime > this.typingTimeoutMs) {
-        expiredChats.push(chatId)
-      }
-    }
-
-    if (expiredChats.length > 0) {
-      this.logger.d(`Cleaning up ${expiredChats.length} expired typing indicators`)
-      for (const chatId of expiredChats) {
-        this.stopTyping(chatId)
-      }
     }
   }
 
@@ -181,40 +146,6 @@ export class TypingManager implements ITypingManager {
         : 0,
       serviceStatus: "active",
     }
-  }
-
-  /**
-   * Получить детальную информацию о состоянии
-   */
-  getTypingState(chatId: string): TypingState | null {
-    return this.activeTypingChats.get(chatId) || null
-  }
-
-  /**
-   * Обновить таймаут для активной индикации
-   */
-  refreshTyping(chatId: string): void {
-    const state = this.activeTypingChats.get(chatId)
-    if (!state) {
-      this.logger.d(`No active typing to refresh for chat ${chatId}`)
-      return
-    }
-
-    // Очищаем старый таймаут
-    if (state.timeoutId) {
-      clearTimeout(state.timeoutId)
-    }
-
-    // Создаем новый таймаут
-    const timeoutId = setTimeout(() => {
-      this.stopTyping(chatId)
-    }, this.typingTimeoutMs)
-
-    // Обновляем состояние
-    state.timeoutId = timeoutId
-    state.startTime = Date.now()
-
-    this.logger.d(`Refreshed typing indicator for chat ${chatId}`)
   }
 
   /**

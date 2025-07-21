@@ -3,6 +3,7 @@ import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 
 /**
+ * @deprecated
  * Сервис кэширования
  */
 export class CacheService implements IService {

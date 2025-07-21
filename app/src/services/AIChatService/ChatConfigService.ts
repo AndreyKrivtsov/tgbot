@@ -205,14 +205,4 @@ export class ChatConfigService implements IChatConfigService {
       this.logger.e("Error loading chat settings:", error)
     }
   }
-
-  /**
-   * Получить статистику сервиса
-   */
-  getStats(): object {
-    return {
-      cachedChats: this.chatSettings.size,
-      serviceStatus: "active",
-    }
-  }
 }

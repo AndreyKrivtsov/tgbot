@@ -31,22 +31,11 @@ export interface AIResponseParams {
 }
 
 /**
- * Интерфейс для статистики ответа
- */
-export interface ResponseStats {
-  length: number
-  wordCount: number
-  processingTime: number
-  isError: boolean
-}
-
-/**
  * Интерфейс для AIResponseService
  */
 export interface IAIResponseService {
   generateResponse: (params: AIResponseParams) => Promise<AIResponseResult>
   formatResponse: (response: string) => string
-  getResponseStats: (response: string, processingTime: number, isError: boolean) => ResponseStats
   validateResponse: (response: string) => { isValid: boolean, reason?: string }
 }
 
@@ -243,20 +232,6 @@ export class AIResponseService implements IAIResponseService {
   }
 
   /**
-   * Получение статистики ответа
-   */
-  getResponseStats(response: string, processingTime: number, isError: boolean): ResponseStats {
-    const words = response.split(/\s+/).filter(word => word.length > 0)
-
-    return {
-      length: response.length,
-      wordCount: words.length,
-      processingTime,
-      isError,
-    }
-  }
-
-  /**
    * Создание сообщения об ошибке для пользователя
    */
   createErrorMessage(_error: string): string {
@@ -273,44 +248,6 @@ export class AIResponseService implements IAIResponseService {
     this.logger.d(`Using error message: ${randomMessage}`)
 
     return randomMessage!
-  }
-
-  /**
-   * Проверка качества ответа
-   */
-  assessResponseQuality(response: string): {
-    score: number
-    factors: string[]
-  } {
-    const factors: string[] = []
-    let score = 100
-
-    // Проверка длины
-    if (response.length < 10) {
-      score -= 30
-      factors.push("Слишком короткий")
-    } else if (response.length > 2000) {
-      score -= 20
-      factors.push("Слишком длинный")
-    }
-
-    // Проверка на читаемость
-    const sentences = response.split(/[.!?]+/).filter(s => s.trim().length > 0)
-    if (sentences.length < 1) {
-      score -= 40
-      factors.push("Нет предложений")
-    }
-
-    // Проверка на повторы
-    if (this.isSpamResponse(response)) {
-      score -= 50
-      factors.push("Много повторов")
-    }
-
-    return {
-      score: Math.max(0, score),
-      factors,
-    }
   }
 
   /**

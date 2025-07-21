@@ -27,134 +27,6 @@ interface AIChatDependencies {
 }
 
 /**
- * Адаптер для RedisService к CacheService интерфейсу
- */
-class RedisAsCacheService extends CacheService {
-  constructor(private redis: RedisService, config: any, logger: any) {
-    super(config, logger)
-  }
-
-  async initialize(): Promise<void> {
-    // Redis уже инициализирован
-  }
-
-  async start(): Promise<void> {
-    // Redis уже запущен
-  }
-
-  async stop(): Promise<void> {
-    // Не останавливаем Redis, он управляется отдельно
-  }
-
-  async dispose(): Promise<void> {
-    // Не освобождаем Redis, он управляется отдельно
-  }
-
-  isHealthy(): boolean {
-    return this.redis.isHealthy()
-  }
-
-  set(key: string, value: any, ttl?: number): void {
-    // Асинхронно устанавливаем значение, не блокируя
-    this.redis.set(key, JSON.stringify(value), ttl)
-  }
-
-  get(_key: string): any {
-    // Синхронный get не поддерживается Redis, возвращаем null
-    // Для реального получения используйте getAsync
-    return null
-  }
-
-  delete(key: string): boolean {
-    // Асинхронно удаляем
-    this.redis.del(key)
-    return true
-  }
-
-  clear(): void {
-    // Асинхронно очищаем
-    this.redis.keys("*").then((keys) => {
-      if (keys.length > 0) {
-        keys.forEach(key => this.redis.del(key))
-      }
-    })
-  }
-
-  getStats(): object {
-    return {
-      size: 0, // Не можем получить размер синхронно
-      isConnected: this.redis.isHealthy(),
-      status: this.redis.isHealthy() ? "active" : "inactive",
-    }
-  }
-
-  // Дополнительные асинхронные методы
-  async getAsync(key: string): Promise<any> {
-    const value = await this.redis.get(key)
-    return value ? JSON.parse(value) : null
-  }
-
-  async setAsync(key: string, value: any, ttl?: number): Promise<void> {
-    await this.redis.set(key, JSON.stringify(value), ttl)
-  }
-
-  async deleteAsync(key: string): Promise<boolean> {
-    return await this.redis.del(key)
-  }
-
-  async hasAsync(key: string): Promise<boolean> {
-    return await this.redis.exists(key)
-  }
-
-  async sizeAsync(): Promise<number> {
-    const keys = await this.redis.keys("*")
-    return keys.length
-  }
-
-  async clearAsync(): Promise<void> {
-    const keys = await this.redis.keys("*")
-    if (keys.length > 0) {
-      await Promise.all(keys.map(key => this.redis.del(key)))
-    }
-  }
-}
-
-/**
- * Расширенный ChatQueueManager со статистикой
- */
-class ExtendedChatQueueManager extends ChatQueueManager {
-  getStats(): object {
-    return {
-      totalQueues: this.hasQueue.length,
-      // Добавьте другие статистики если нужно
-    }
-  }
-}
-
-/**
- * Расширенный ChatContextManager со статистикой
- */
-class ExtendedChatContextManager extends ChatContextManager {
-  getStats(): object {
-    return {
-      activeContexts: Object.keys(this.getContext).length,
-      // Добавьте другие статистики если нужно
-    }
-  }
-
-  createContext(chatId: string): ChatContext {
-    const context: ChatContext = {
-      chatId,
-      messages: [],
-      lastActivity: Date.now(),
-      requestCount: 0,
-    }
-    this.setContext(chatId, context)
-    return context
-  }
-}
-
-/**
  * Рефакторированный сервис AI чат-бота
  * Теперь работает как оркестратор, делегируя задачи специализированным компонентам
  */
@@ -168,21 +40,24 @@ export class AIChatServiceRefactored implements IService {
   private messageProcessor: IMessageProcessor
   private aiResponseService: IAIResponseService
   private typingManager: ITypingManager
-  private contextManager: ExtendedChatContextManager
-  private queueManager: ExtendedChatQueueManager
+  private contextManager: ChatContextManager
+  private queueManager: ChatQueueManager
   private throttleManager: AdaptiveChatThrottleManager
-  private moderationTools?: ModerationTools
 
   // Состояние обработки
-  private queueProcessors: Set<string> = new Set()
-  private isProcessingQueue = false
   private nextMessageId = 1
   private contextSaveTimer?: NodeJS.Timeout
 
   // Колбэки для интеграции с TelegramBotService
   public onMessageResponse?: (contextId: string, response: string, messageId: number, userMessageId?: number, isError?: boolean) => void
-  public onTypingStart?: (contextId: string) => void
-  public onTypingStop?: (contextId: string) => void
+
+  /**
+   * Установка функции отправки typing action
+   */
+  public setSendTypingAction(sendTypingAction: (chatId: number) => Promise<void>): void {
+    // Пересоздаем TypingManager с новой функцией
+    this.typingManager = new TypingManager(this.logger, sendTypingAction)
+  }
 
   constructor(
     config: AppConfig,
@@ -190,6 +65,7 @@ export class AIChatServiceRefactored implements IService {
     dependencies: AIChatDependencies = {},
     aiProvider: IAIProvider,
     throttleManager?: AdaptiveChatThrottleManager,
+    _sendTypingAction?: (chatId: number) => Promise<void>,
   ) {
     this.config = config
     this.logger = logger
@@ -200,100 +76,49 @@ export class AIChatServiceRefactored implements IService {
       ? new ChatRepository(dependencies.database)
       : undefined
 
-    // Создаем CacheService wrapper для Redis
-    const cacheService = dependencies.redis
-      ? new RedisAsCacheService(dependencies.redis, config, logger)
-      : undefined
-
     // Инициализируем специализированные компоненты
     this.chatConfigService = new ChatConfigService(logger, chatRepository)
     this.messageProcessor = new MessageProcessor(logger)
     this.aiResponseService = new AIResponseService(logger, aiProvider)
-    this.contextManager = new ExtendedChatContextManager(cacheService)
-    this.queueManager = new ExtendedChatQueueManager()
+    this.contextManager = new ChatContextManager(dependencies.redis)
+    this.queueManager = new ChatQueueManager()
     this.throttleManager = throttleManager || new AdaptiveChatThrottleManager(logger)
 
-    // Инициализируем TypingManager с колбэками
-    this.typingManager = new TypingManager(logger, {
-      onStart: (contextId: string) => {
-        this.onTypingStart?.(contextId)
-      },
-      onStop: (contextId: string) => {
-        this.onTypingStop?.(contextId)
-      },
+    // Инициализируем TypingManager с прямой отправкой typing
+    const typingFunction = _sendTypingAction || (async () => {
+      // Заглушка если функция не передана
     })
-
-    // Инициализируем ModerationTools если есть EventBus
-    if (dependencies.eventBus) {
-      this.moderationTools = new ModerationTools(dependencies.eventBus, logger)
-    }
+    this.typingManager = new TypingManager(logger, typingFunction)
   }
 
   name: string = "AIChatServiceRefactored"
 
   /**
-   * Инициализация сервиса
-   */
-  async initialize(): Promise<void> {
-    this.logger.i("🤖 Initializing AI chat service (refactored)...")
-
-    // Загружаем настройки чатов
-    await this.chatConfigService.loadAllChatSettings()
-
-    this.logger.i("✅ AI chat service initialized")
-  }
-
-  /**
-   * Запуск сервиса
+   * Запуск сервиса (инициализация и старт)
    */
   async start(): Promise<void> {
     this.logger.i("🚀 Starting AI chat service (refactored)...")
-
-    // Запускаем автосохранение контекстов
+    await this.chatConfigService.loadAllChatSettings()
     this.startContextAutoSave()
-
     this.logger.i("✅ AI chat service started")
   }
 
   /**
-   * Остановка сервиса
+   * Остановка сервиса (освобождение ресурсов)
    */
   async stop(): Promise<void> {
     this.logger.i("🛑 Stopping AI chat service (refactored)...")
-
-    this.isProcessingQueue = false
-
-    // Останавливаем автосохранение
     if (this.contextSaveTimer) {
       clearInterval(this.contextSaveTimer)
       this.contextSaveTimer = undefined
     }
-
-    // Сохраняем все контексты
     await this.contextManager.saveAllToCache()
-
-    // Останавливаем все typing индикаторы
     this.typingManager.stopAllTyping()
-
-    // Очищаем все очереди
     this.queueManager.clearAll()
-    this.queueProcessors.clear()
-
-    this.logger.i("✅ AI chat service stopped")
-  }
-
-  /**
-   * Освобождение ресурсов
-   */
-  async dispose(): Promise<void> {
-    this.logger.i("🗑️ Disposing AI chat service (refactored)...")
-
-    await this.stop()
     this.throttleManager.dispose()
     this.typingManager.dispose()
     this.contextManager.clearAll()
-
-    this.logger.i("✅ AI chat service disposed")
+    this.logger.i("✅ AI chat service stopped")
   }
 
   /**
@@ -380,10 +205,8 @@ export class AIChatServiceRefactored implements IService {
     // Запускаем typing индикатор
     this.typingManager.startTyping(contextId)
 
-    // Запускаем обработчик очереди если не запущен
-    if (!this.queueProcessors.has(contextId)) {
-      this.startQueueProcessor(contextId)
-    }
+    // Запускаем обработчик очереди (один на чат)
+    this.startQueueProcessor(contextId)
 
     return {
       success: true,
@@ -395,28 +218,14 @@ export class AIChatServiceRefactored implements IService {
   /**
    * Запуск обработчика очереди для конкретного чата
    */
-  private startQueueProcessor(contextId: string): void {
-    this.queueProcessors.add(contextId)
+  private async startQueueProcessor(contextId: string): Promise<void> {
     this.logger.d(`Starting queue processor for context ${contextId}`)
-
-    const processNext = async () => {
+    while (this.queueManager.getQueueLength(contextId) > 0) {
       const queueItem = this.queueManager.dequeue(contextId)
-      if (!queueItem) {
-        this.queueProcessors.delete(contextId)
-        return
-      }
-
+      if (!queueItem)
+        break
       await this.processQueuedMessage(queueItem)
-
-      // Продолжаем обработку если есть еще сообщения
-      if (this.queueManager.getQueueLength(contextId) > 0) {
-        setTimeout(processNext, 100)
-      } else {
-        this.queueProcessors.delete(contextId)
-      }
     }
-
-    processNext()
   }
 
   /**
@@ -426,6 +235,14 @@ export class AIChatServiceRefactored implements IService {
     try {
       // Получаем контекст
       const context = await this.getOrCreateContext(queueItem.contextId)
+
+      console.log("КОНТЕКСТ", context)
+
+      // Защита от порчи структуры messages
+      if (!Array.isArray(context.messages)) {
+        this.logger.e("context.messages is not an array! Восстанавливаю...")
+        context.messages = []
+      }
 
       // Получаем системный промпт
       const chatId = Number(queueItem.contextId)
@@ -438,6 +255,10 @@ export class AIChatServiceRefactored implements IService {
       }
 
       // Добавляем сообщение в контекст
+      if (!Array.isArray(context.messages)) {
+        this.logger.e("context.messages is not an array! Восстанавливаю...")
+        context.messages = []
+      }
       context.messages.push({
         role: "user",
         content: queueItem.message,
@@ -450,7 +271,6 @@ export class AIChatServiceRefactored implements IService {
         context,
         systemPrompt,
         apiKey: apiKeyResult.key,
-        tools: this.getModerationFunctionDeclarations(),
       })
 
       if (!responseResult.success) {
@@ -466,29 +286,11 @@ export class AIChatServiceRefactored implements IService {
         return
       }
 
-      // Проверяем на вызов функции модерации
-      if (responseResult.functionCall) {
-        const functionResult = await this.executeModerationFunction(
-          responseResult.functionCall.name,
-          responseResult.functionCall.args,
-        )
-
-        // Отправляем результат выполнения функции
-        const resultMessage = functionResult.success
-          ? `✅ ${functionResult.message}`
-          : `❌ ${functionResult.message}`
-
-        this.onMessageResponse?.(
-          queueItem.contextId,
-          resultMessage,
-          queueItem.id,
-          queueItem.userMessageId,
-          !functionResult.success,
-        )
-        return
-      }
-
       // Добавляем ответ в контекст
+      if (!Array.isArray(context.messages)) {
+        this.logger.e("context.messages is not an array! Восстанавливаю...")
+        context.messages = []
+      }
       context.messages.push({
         role: "model",
         content: responseResult.response!,
@@ -568,35 +370,6 @@ export class AIChatServiceRefactored implements IService {
     }, AI_CHAT_CONFIG.CONTEXT_SAVE_INTERVAL_MS)
   }
 
-  // Методы для совместимости с старым интерфейсом
-  isBotMention(message: string, botUsername?: string, replyToBotMessage?: boolean): boolean {
-    return this.messageProcessor.isBotMention(message, botUsername, replyToBotMessage)
-  }
-
-  cleanBotMention(message: string, botUsername?: string): string {
-    return this.messageProcessor.cleanBotMention(message, botUsername)
-  }
-
-  async getChatSettings(chatId: number) {
-    return await this.chatConfigService.getChatSettings(chatId)
-  }
-
-  async updateChatSettings(chatId: number, userId: number, updates: any) {
-    return await this.chatConfigService.updateChatSettings(chatId, userId, updates)
-  }
-
-  async isAiEnabledForChat(chatId: number): Promise<boolean> {
-    return await this.chatConfigService.isAiEnabledForChat(chatId)
-  }
-
-  async isChatAdmin(chatId: number, userId: number): Promise<boolean> {
-    return await this.chatConfigService.isChatAdmin(chatId, userId)
-  }
-
-  clearChatCache(chatId: number): void {
-    this.chatConfigService.clearChatCache(chatId)
-  }
-
   getContextStats(contextId: string) {
     const context = this.contextManager.getContext(contextId)
     if (!context)
@@ -612,37 +385,12 @@ export class AIChatServiceRefactored implements IService {
     return this.throttleManager.getStats()
   }
 
-  getStats(): object {
-    return {
-      service: "AIChatServiceRefactored",
-      queues: this.queueManager.getStats(),
-      contexts: this.contextManager.getStats(),
-      throttle: this.throttleManager.getStats(),
-      typing: this.typingManager.getStats(),
-    }
+  async initialize(): Promise<void> {
+    // Для совместимости с интерфейсом IService, вызывает start
+    await this.start()
   }
 
-  /**
-   * Получить объявления функций модерации для Gemini API
-   */
-  getModerationFunctionDeclarations() {
-    if (!this.moderationTools) {
-      return []
-    }
-    return this.moderationTools.getFunctionDeclarations()
-  }
-
-  /**
-   * Выполнить функцию модерации
-   */
-  async executeModerationFunction(functionName: string, args: any) {
-    if (!this.moderationTools) {
-      return {
-        success: false,
-        message: "Инструменты модерации не инициализированы",
-        error: "ModerationTools not initialized",
-      }
-    }
-    return await this.moderationTools.executeFunction(functionName, args)
+  public isBotMention(message: string, botUsername?: string, replyToBotMessage?: boolean): boolean {
+    return this.messageProcessor.isBotMention(message, botUsername, replyToBotMessage)
   }
 }
