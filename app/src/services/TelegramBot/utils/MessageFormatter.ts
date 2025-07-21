@@ -10,4 +10,12 @@ export class MessageFormatter {
     // _ * [ ] ( ) ~ ` > # + - = | { } . !
     return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&")
   }
+
+  /**
+   * Экранирование символов для Markdown (V1)
+   */
+  static escapeMarkdown(text: string): string {
+    // Экранируем только основные символы Markdown: _, *, `
+    return text.replace(/[_*`]/g, "\\$&")
+  }
 }

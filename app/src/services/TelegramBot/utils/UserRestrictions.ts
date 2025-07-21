@@ -155,7 +155,6 @@ export class UserRestrictions {
       await this.bot.sendMessage({
         chat_id: chatId,
         text,
-        parse_mode: "Markdown",
       })
     } catch (error) {
       this.logger.e("Failed to send message:", error)
@@ -167,7 +166,7 @@ export class UserRestrictions {
    * Отправка сообщения с автоудалением в групповых чатах
    * В приватных чатах сообщения остаются, в групповых - удаляются автоматически
    */
-  async sendGroupMessage(chatId: number, text: string, parseMode: "HTML" | "Markdown" | "MarkdownV2" = "Markdown"): Promise<void> {
+  async sendGroupMessage(chatId: number, text: string, parseMode?: "HTML" | "Markdown" | "MarkdownV2"): Promise<void> {
     try {
       await this.bot.sendGroupMessage({
         chat_id: chatId,

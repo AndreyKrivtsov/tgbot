@@ -133,7 +133,6 @@ export class MessageHandler {
       const messageParams: any = {
         chat_id: chatId,
         text: response,
-        parse_mode: "Markdown",
       }
 
       // Если есть ID сообщения пользователя, отвечаем на него

@@ -3,6 +3,7 @@ import type { MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import { BOT_CONFIG } from "../../../constants.js"
 import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
+import { MessageFormatter } from "../utils/MessageFormatter.js"
 
 /**
  * Обертка для библиотеки GramIO с минималистичным API
@@ -87,7 +88,20 @@ export class GramioBot {
    * Отправка обычного сообщения
    */
   async sendMessage(params: SendMessageParams): Promise<MessageResult> {
-    return await this.bot.api.sendMessage({ ...params, disable_notification: true, link_preview_options: { is_disabled: true } })
+    let text = params.text
+    const parse_mode = params.parse_mode ?? "MarkdownV2"
+    if (parse_mode === "MarkdownV2") {
+      text = MessageFormatter.escapeMarkdownV2(text)
+    } else if (parse_mode === "Markdown") {
+      text = MessageFormatter.escapeMarkdown(text)
+    }
+    return await this.bot.api.sendMessage({
+      ...params,
+      text,
+      parse_mode,
+      disable_notification: true,
+      link_preview_options: { is_disabled: true },
+    })
   }
 
   /**
