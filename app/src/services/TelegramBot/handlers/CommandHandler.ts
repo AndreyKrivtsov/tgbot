@@ -604,6 +604,7 @@ export class CommandHandler {
   async handleAddAltronKeyCommand(context: TelegramMessageContext): Promise<void> {
     const chat = context.chat
     const userId = context.from?.id
+    const username = context.from?.username
 
     if (!chat || !userId) {
       return
@@ -649,13 +650,19 @@ export class CommandHandler {
         return
       }
 
-      // Проверяем права пользователя (должен быть админом в целевой группе)
-      const hasPermission = await this.chatRepository.isAdmin(targetChat.id, userId)
-      if (!hasPermission) {
-        const noPermissionMessage = getMessage("api_key_no_permission", { username: chatUsername })
-        await this.userRestrictions.sendGroupMessage(chat.id, noPermissionMessage)
-        return
+      // --- ДОБАВЛЕНО: Проверка суперадмина ---
+      if (this.isSuperAdmin(username)) {
+        this.logger.i(`SuperAdmin ${username} добавляет API ключ для @${chatUsername}`)
+      } else {
+        // Проверяем права пользователя (должен быть админом в целевой группе)
+        const hasPermission = await this.chatRepository.isAdmin(targetChat.id, userId)
+        if (!hasPermission) {
+          const noPermissionMessage = getMessage("api_key_no_permission", { username: chatUsername })
+          await this.userRestrictions.sendGroupMessage(chat.id, noPermissionMessage)
+          return
+        }
       }
+      // --- КОНЕЦ ДОБАВЛЕНИЯ ---
 
       // Сохраняем API ключ
       const saveResult = await this.saveChatApiKey(targetChat.id, apiKey)
@@ -862,7 +869,18 @@ export class CommandHandler {
    * Проверка, является ли пользователь суперадминистратором бота
    */
   private isSuperAdmin(username?: string): boolean {
-    return username === this.config.ADMIN_USERNAME?.replace("@", "")
+    console.log("username", username)
+    console.log("this.config.ADMIN_USERNAME", this.config.ADMIN_USERNAME)
+
+    let superAdminUsername = this.config.ADMIN_USERNAME?.replace("@", "")
+
+    if (superAdminUsername?.startsWith("@")) {
+      superAdminUsername = this.config.ADMIN_USERNAME?.replace("@", "")
+    } else {
+      superAdminUsername = this.config.ADMIN_USERNAME
+    }
+
+    return username === superAdminUsername
   }
 
   /**
