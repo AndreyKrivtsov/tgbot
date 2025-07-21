@@ -20,8 +20,8 @@ interface DefaultConfig {
 
 export class GeminiAdapter implements IAIProvider {
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
-  // private model = "gemma-3-27b-it"
-  private model = "gemini-2.0-flash"
+  private model = "gemma-3-27b-it"
+  // private model = "gemini-2.0-flash"
   private requestTimeoutMs: number = AI_CHAT_CONFIG.AI_REQUEST_TIMEOUT_MS // Таймаут запросов к AI
   private logger?: Logger // Опциональный логгер для дебага
   private defaultConfig: DefaultConfig = {
