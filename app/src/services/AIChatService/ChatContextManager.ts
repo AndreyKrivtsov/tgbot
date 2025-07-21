@@ -2,7 +2,7 @@ import type { CacheService } from "../CacheService/index.js"
 
 export interface ChatContext {
   chatId: string
-  messages: Array<{ role: "user" | "assistant", content: string, timestamp: number }>
+  messages: Array<{ role: "user" | "assistant" | "model", content: string, timestamp: number }>
   lastActivity: number
   requestCount: number
 }
@@ -32,7 +32,8 @@ export class ChatContextManager {
   }
 
   async loadFromCache(chatId: string): Promise<ChatContext | null> {
-    if (!this.cacheService) return null
+    if (!this.cacheService)
+      return null
 
     const cached = await this.cacheService.get(`ai:context:${chatId}`)
     if (cached) {
@@ -43,7 +44,8 @@ export class ChatContextManager {
   }
 
   async saveToCache(chatId: string): Promise<void> {
-    if (!this.cacheService) return
+    if (!this.cacheService)
+      return
 
     const context = this.contexts.get(chatId)
     if (context) {
@@ -52,7 +54,8 @@ export class ChatContextManager {
   }
 
   async saveAllToCache(): Promise<void> {
-    if (!this.cacheService) return
+    if (!this.cacheService)
+      return
 
     for (const [chatId, context] of this.contexts.entries()) {
       this.cacheService.set(`ai:context:${chatId}`, context)
@@ -67,4 +70,4 @@ export class ChatContextManager {
       }
     }
   }
-} 
+}

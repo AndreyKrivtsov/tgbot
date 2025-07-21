@@ -5,7 +5,7 @@ import type { UserRestrictions } from "../utils/UserRestrictions.js"
 import type { UserManager } from "../features/UserManager.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { TelegramBotService } from "../index.js"
-import type { AIChatService } from "../../AIChatService/index.js"
+import type { AIChatServiceRefactored } from "../../AIChatService/AIChatServiceRefactored.js"
 import type { ChatSettingsService } from "../../ChatSettingsService/index.js"
 import { getMessage } from "../utils/Messages.js"
 import type { BotContext, TelegramMessageContext } from "../types/index.js"
@@ -20,7 +20,7 @@ export class CommandHandler {
   private userManager: UserManager
   private chatRepository: ChatRepository
   private botService: TelegramBotService
-  private aiChatService?: AIChatService
+  private aiChatService?: AIChatServiceRefactored
   private chatSettingsService: ChatSettingsService
 
   constructor(
@@ -31,7 +31,7 @@ export class CommandHandler {
     chatRepository: ChatRepository,
     botService: TelegramBotService,
     chatSettingsService: ChatSettingsService,
-    aiChatService?: AIChatService,
+    aiChatService?: AIChatServiceRefactored,
   ) {
     this.logger = logger
     this.config = config

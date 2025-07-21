@@ -34,4 +34,4 @@ export class ChatQueueManager {
   hasQueue(chatId: string): boolean {
     return this.queues.has(chatId)
   }
-} 
+}

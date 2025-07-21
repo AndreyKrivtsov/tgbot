@@ -168,6 +168,17 @@ export class AdaptiveChatThrottleManager {
   }
 
   /**
+   * Получить общую статистику
+   */
+  getStats(): object {
+    return {
+      activeBuckets: this.buckets.size,
+      totalRequests: this.lastRequestTime.size,
+      config: AI_THROTTLE_CONFIG,
+    }
+  }
+
+  /**
    * Очистка неактивных чатов
    */
   private cleanup(): void {

@@ -35,6 +35,10 @@ export const AI_CHAT_CONFIG = {
   MAX_QUEUE_SIZE: 10, // Максимальный размер очереди сообщений
   QUEUE_PROCESS_INTERVAL_MS: 200, // 200ms - интервал обработки очереди
   MAX_CONTEXT_MESSAGES: 500, // Максимальное количество сообщений в контексте чата
+  MAX_RESPONSE_LENGTH: 4000, // Максимальная длина ответа AI
+
+  // Настройки запросов к AI
+  AI_REQUEST_TIMEOUT_MS: 5000, // 5 секунд - таймаут запросов к AI провайдеру
 
   // Redis кэширование контекстов
   CONTEXT_TTL_SECONDS: 24 * 60 * 60, // 24 часа - время жизни контекста в кэше

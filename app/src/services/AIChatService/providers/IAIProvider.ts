@@ -4,6 +4,7 @@ export interface IAIProvider {
     prompt: string,
     conversationHistory?: any[],
     systemPrompt?: string,
-    customConfig?: object
+    customConfig?: object,
+    tools?: any[]
   ) => Promise<string>
-} 
+}

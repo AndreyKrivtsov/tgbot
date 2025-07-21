@@ -1,6 +1,7 @@
+import type { MessageContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
-import type { AIChatService } from "../../AIChatService/index.js"
+import type { AIChatServiceRefactored } from "../../AIChatService/AIChatServiceRefactored.js"
 import type { TelegramBot, TelegramBotSettings, TelegramMessageContext } from "../types/index.js"
 import type { SpamDetector } from "../features/SpamDetector.js"
 import type { UserManager } from "../features/UserManager.js"
@@ -25,7 +26,7 @@ export class MessageHandler {
   private isProcessing = false
 
   // AI Chat Service
-  private chatService?: AIChatService
+  private chatService?: AIChatServiceRefactored
 
   // Typing intervals для каждого чата
   private typingIntervals: Map<string, NodeJS.Timeout> = new Map()
@@ -39,7 +40,7 @@ export class MessageHandler {
     chatRepository: ChatRepository,
     spamDetector?: SpamDetector,
     commandHandler?: CommandHandler,
-    chatService?: AIChatService,
+    chatService?: AIChatServiceRefactored,
   ) {
     this.logger = logger
     this.config = config
@@ -276,7 +277,7 @@ export class MessageHandler {
   /**
    * Установка AI сервиса
    */
-  setAIService(chatService: AIChatService): void {
+  setAIService(chatService: AIChatServiceRefactored): void {
     this.chatService = chatService
   }
 

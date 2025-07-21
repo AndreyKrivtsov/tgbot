@@ -1,7 +1,7 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
-import type { AIChatService } from "../AIChatService/index.js"
+import type { AIChatServiceRefactored } from "../AIChatService/AIChatServiceRefactored.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 
 /**
@@ -11,12 +11,12 @@ import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 export class ChatSettingsService implements IService {
   private logger: Logger
   private chatRepository: ChatRepository
-  private aiChatService?: AIChatService
+  private aiChatService?: AIChatServiceRefactored
 
   constructor(
     logger: Logger,
     chatRepository: ChatRepository,
-    aiChatService?: AIChatService,
+    aiChatService?: AIChatServiceRefactored,
   ) {
     this.logger = logger
     this.chatRepository = chatRepository
@@ -24,9 +24,9 @@ export class ChatSettingsService implements IService {
   }
 
   /**
-   * Установить ссылку на AIChatService (для избежания циклических зависимостей)
+   * Устанавливает ссылку на AIChatService для синхронизации кешей
    */
-  setAIChatService(aiChatService: AIChatService): void {
+  setAIChatService(aiChatService: AIChatServiceRefactored): void {
     this.aiChatService = aiChatService
   }
 

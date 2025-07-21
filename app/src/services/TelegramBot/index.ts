@@ -11,6 +11,7 @@ import type {
   UserMessageCounter,
 } from "./types/index.js"
 import { GramioBot } from "./core/GramioBot.js"
+import type { EventBus } from "../../core/EventBus.js"
 
 // Утилиты
 import { SettingsManager } from "./utils/SettingsManager.js"
@@ -26,6 +27,7 @@ import { MessageHandler } from "./handlers/MessageHandler.js"
 import { MemberHandler } from "./handlers/MemberHandler.js"
 import { CallbackHandler } from "./handlers/CallbackHandler.js"
 import { CommandHandler } from "./handlers/CommandHandler.js"
+import { ModerationEventHandler } from "./handlers/ModerationEventHandler.js"
 
 /**
  * Сервис Telegram бота с модульной архитектурой
@@ -52,6 +54,7 @@ export class TelegramBotService implements IService {
   private memberHandler: MemberHandler | null = null
   private callbackHandler: CallbackHandler | null = null
   private commandHandler: CommandHandler | null = null
+  private moderationEventHandler: ModerationEventHandler | null = null
 
   constructor(
     config: AppConfig,
@@ -188,6 +191,11 @@ export class TelegramBotService implements IService {
       this.logger,
       this.bot,
       this.captchaManager,
+    )
+
+    this.moderationEventHandler = new ModerationEventHandler(
+      this.bot,
+      this.userRestrictions,
     )
   }
 
@@ -471,5 +479,18 @@ export class TelegramBotService implements IService {
     if (!this.bot)
       return []
     return await this.bot.getChatAdministrators(chatId)
+  }
+
+  /**
+   * Подключение к EventBus для обработки событий модерации
+   */
+  setupEventBusListeners(eventBus: EventBus): void {
+    if (!this.moderationEventHandler) {
+      this.logger.w("⚠️ ModerationEventHandler not initialized")
+      return
+    }
+
+    this.moderationEventHandler.setupEventListeners(eventBus)
+    this.logger.i("✅ EventBus listeners setup completed")
   }
 }
