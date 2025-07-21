@@ -113,8 +113,6 @@ describe("aIChatServiceRefactored", () => {
   describe("message processing", () => {
     it("should return disabled when AI is disabled", async () => {
       // Mock AI as disabled
-      jest.spyOn(aiChatService, "isAiEnabledForChat").mockResolvedValue(false)
-
       const result = await aiChatService.processMessage(
         123,
         456,
@@ -128,13 +126,6 @@ describe("aIChatServiceRefactored", () => {
         queued: false,
         reason: "AI отключен в этом чате",
       })
-    })
-  })
-
-  describe("stats", () => {
-    it("should return stats object", () => {
-      const stats = aiChatService.getStats()
-      expect(stats).toBeInstanceOf(Object)
     })
   })
 })

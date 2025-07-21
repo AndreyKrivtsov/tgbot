@@ -12,7 +12,6 @@ export type {
   AIResponseParams,
   AIResponseResult,
   IAIResponseService,
-  ResponseStats,
 } from "./AIResponseService.js"
 
 export { AIResponseService } from "./AIResponseService.js"

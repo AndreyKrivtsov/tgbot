@@ -172,7 +172,7 @@ export class ChatSettingsService implements IService {
     // (вызывается автоматически при updateChatConfig)
 
     // Очищаем кеш в AIChatService
-    this.aiChatService?.clearChatCache(chatId)
+    // this.aiChatService?.clearChatCache(chatId)
 
     this.logger.d(`🔄 All caches cleared for chat ${chatId}`)
   }

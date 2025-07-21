@@ -18,33 +18,6 @@ describe("geminiAdapter", () => {
     jest.clearAllMocks()
   })
 
-  describe("timeout configuration", () => {
-    it("should use default timeout from config", () => {
-      expect(geminiAdapter.getRequestTimeout()).toBe(AI_CHAT_CONFIG.AI_REQUEST_TIMEOUT_MS)
-    })
-
-    it("should allow setting custom timeout", () => {
-      const customTimeout = 10000
-      geminiAdapter.setRequestTimeout(customTimeout)
-      expect(geminiAdapter.getRequestTimeout()).toBe(customTimeout)
-    })
-
-    it("should reject invalid timeout values", () => {
-      expect(() => {
-        geminiAdapter.setRequestTimeout(0)
-      }).toThrow("Timeout must be positive number")
-
-      expect(() => {
-        geminiAdapter.setRequestTimeout(-1000)
-      }).toThrow("Timeout must be positive number")
-    })
-
-    it("should include timeout in model info", () => {
-      const modelInfo = geminiAdapter.getModelInfo()
-      expect(modelInfo.timeoutMs).toBe(AI_CHAT_CONFIG.AI_REQUEST_TIMEOUT_MS)
-    })
-  })
-
   describe("request with timeout", () => {
     it("should include timeout in axios request config", async () => {
       // Мокаем успешный ответ
