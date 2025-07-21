@@ -872,12 +872,10 @@ export class CommandHandler {
     console.log("username", username)
     console.log("this.config.ADMIN_USERNAME", this.config.ADMIN_USERNAME)
 
-    let superAdminUsername = this.config.ADMIN_USERNAME?.replace("@", "")
+    let superAdminUsername = this.config.ADMIN_USERNAME
 
     if (superAdminUsername?.startsWith("@")) {
       superAdminUsername = this.config.ADMIN_USERNAME?.replace("@", "")
-    } else {
-      superAdminUsername = this.config.ADMIN_USERNAME
     }
 
     return username === superAdminUsername
