@@ -2,6 +2,7 @@ import { Bot } from "gramio"
 import type { MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import { BOT_CONFIG } from "../../../constants.js"
+import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
 
 /**
  * Обертка для библиотеки GramIO с минималистичным API
@@ -10,11 +11,13 @@ import { BOT_CONFIG } from "../../../constants.js"
 export class GramioBot {
   private bot: Bot
   private logger: Logger
-  private autoDeleteTimers = new Map<number, NodeJS.Timeout>()
+  private autoDeleteTimers = new Map<number, NodeJS.Timeout>() // Fallback для старой логики
+  private deletionManager?: MessageDeletionManager
 
-  constructor(token: string, logger: Logger) {
+  constructor(token: string, logger: Logger, deletionManager?: MessageDeletionManager) {
     this.bot = new Bot(token)
     this.logger = logger
+    this.deletionManager = deletionManager
   }
 
   /**
@@ -64,7 +67,7 @@ export class GramioBot {
    * Остановка бота
    */
   async stop(): Promise<void> {
-    // Очищаем все активные таймеры
+    // Очищаем fallback таймеры (MessageDeletionManager управляется отдельно)
     for (const timer of this.autoDeleteTimers.values()) {
       clearTimeout(timer)
     }
@@ -96,20 +99,39 @@ export class GramioBot {
   ): Promise<MessageResult> {
     const result = await this.bot.api.sendMessage({ ...params, disable_notification: true, link_preview_options: { is_disabled: true } })
 
-    // Устанавливаем таймер автоудаления
+    // Используем новый менеджер удалений если доступен
+    if (this.deletionManager) {
+      try {
+        await this.deletionManager.scheduleDeletion(params.chat_id, result.message_id, deleteAfterMs)
+      } catch (error) {
+        this.logger.e(`❌ Failed to schedule deletion via MessageDeletionManager for message ${result.message_id}:`, error)
+        // Fallback на старый метод
+        this.scheduleOldStyleDeletion(params.chat_id, result.message_id, deleteAfterMs)
+      }
+    } else {
+      // Fallback на старую логику с таймерами
+      this.logger.w(`⚠️ MessageDeletionManager not available, using fallback timer for message ${result.message_id}`)
+      this.scheduleOldStyleDeletion(params.chat_id, result.message_id, deleteAfterMs)
+    }
+
+    return result
+  }
+
+  /**
+   * Fallback метод для старой логики удаления через таймеры
+   */
+  private scheduleOldStyleDeletion(chatId: number, messageId: number, deleteAfterMs: number): void {
     const timer = setTimeout(() => {
-      this.deleteMessage(params.chat_id, result.message_id)
+      this.deleteMessage(chatId, messageId)
         .catch((error) => {
-          this.logger.w(`Failed to auto-delete message ${result.message_id}:`, error)
+          this.logger.w(`Failed to auto-delete message ${messageId}:`, error)
         })
         .finally(() => {
-          this.autoDeleteTimers.delete(result.message_id)
+          this.autoDeleteTimers.delete(messageId)
         })
     }, deleteAfterMs)
 
-    this.autoDeleteTimers.set(result.message_id, timer)
-
-    return result
+    this.autoDeleteTimers.set(messageId, timer)
   }
 
   /**

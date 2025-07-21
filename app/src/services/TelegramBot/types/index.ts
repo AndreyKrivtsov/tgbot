@@ -7,6 +7,17 @@ import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { ChatSettingsService } from "../../ChatSettingsService/index.js"
 import type { GramioBot } from "../core/GramioBot.js"
+import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
+
+/**
+ * Структура задачи на удаление сообщения
+ */
+export interface DeletionTask {
+  messageId: number
+  chatId: number
+  deleteAt: number // когда удалить (timestamp)
+  retryCount: number // количество попыток (0 или 1)
+}
 
 export interface TelegramBotDependencies {
   redisService?: RedisService
@@ -15,6 +26,7 @@ export interface TelegramBotDependencies {
   chatService?: AIChatServiceRefactored
   chatRepository?: ChatRepository
   chatSettingsService?: ChatSettingsService
+  messageDeletionManager?: MessageDeletionManager
 }
 
 export interface TelegramBotSettings {

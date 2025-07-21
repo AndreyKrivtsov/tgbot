@@ -21,6 +21,7 @@ import { UserRestrictions } from "./utils/UserRestrictions.js"
 import { CaptchaManager } from "./features/CaptchaManager.js"
 import { SpamDetector } from "./features/SpamDetector.js"
 import { UserManager } from "./features/UserManager.js"
+import { MessageDeletionManager } from "./features/MessageDeletionManager.js"
 
 // Обработчики
 import { MessageHandler } from "./handlers/MessageHandler.js"
@@ -48,6 +49,7 @@ export class TelegramBotService implements IService {
   private captchaManager: CaptchaManager | null = null
   private spamDetector: SpamDetector | null = null
   private userManager: UserManager
+  private messageDeletionManager: MessageDeletionManager | null = null
 
   // Обработчики
   private messageHandler: MessageHandler | null = null
@@ -90,8 +92,25 @@ export class TelegramBotService implements IService {
         await import("gramio")
         this.hasGramIO = true
 
-        // Создаем бота через обертку
-        this.bot = new GramioBot(this.config.BOT_TOKEN, this.logger)
+        // Создаем MessageDeletionManager если доступен Redis
+        if (this.dependencies.redisService) {
+          this.messageDeletionManager = new MessageDeletionManager(
+            this.dependencies.redisService,
+            // Временно передаем null, обновим после создания GramioBot
+            undefined as any,
+            this.logger,
+          )
+        }
+
+        // Создаем бота через обертку с MessageDeletionManager
+        this.bot = new GramioBot(this.config.BOT_TOKEN, this.logger, this.messageDeletionManager || undefined)
+
+        // Теперь обновляем MessageDeletionManager с правильной ссылкой на бота
+        if (this.messageDeletionManager) {
+          // Хак для обновления приватного поля bot в MessageDeletionManager
+          (this.messageDeletionManager as any).bot = this.bot
+          await this.messageDeletionManager.initialize()
+        }
 
         // Инициализируем все модули
         await this.initializeModules()
@@ -266,6 +285,12 @@ export class TelegramBotService implements IService {
 
       try {
         await this.bot.stop()
+
+        // Останавливаем MessageDeletionManager
+        if (this.messageDeletionManager) {
+          await this.messageDeletionManager.stop()
+        }
+
         this.isRunning = false
 
         // Останавливаем автоматическую очистку
@@ -288,6 +313,12 @@ export class TelegramBotService implements IService {
 
     // Освобождаем ресурсы модулей
     this.userManager.dispose()
+
+    // Освобождаем ресурсы MessageDeletionManager
+    if (this.messageDeletionManager) {
+      await this.messageDeletionManager.dispose()
+      this.messageDeletionManager = null
+    }
 
     this.bot = null
     this.logger.i("✅ Telegram bot service disposed")
@@ -384,6 +415,12 @@ export class TelegramBotService implements IService {
   async getServiceInfo(): Promise<object> {
     const memberStats = await this.memberHandler?.getMemberStats()
 
+    // Получаем информацию о MessageDeletionManager если он есть
+    let messageDeletionInfo = null
+    if (this.messageDeletionManager) {
+      messageDeletionInfo = await this.messageDeletionManager.getServiceInfo()
+    }
+
     return {
       name: "TelegramBotService",
       version: BOT_CONFIG.VERSION,
@@ -403,10 +440,12 @@ export class TelegramBotService implements IService {
         messageHandler: !!this.messageHandler,
         memberHandler: !!this.memberHandler,
         callbackHandler: !!this.callbackHandler,
+        messageDeletionManager: !!this.messageDeletionManager,
       },
       statistics: {
         ...memberStats,
       },
+      messageDeletion: messageDeletionInfo,
     }
   }
 

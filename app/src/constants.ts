@@ -18,6 +18,12 @@ export const BOT_CONFIG = {
   AUTO_UNBAN_DELAY_MS: 5_000, // 5 секунд - задержка разбана
   USER_OPERATION_DELAY_MS: 5_000, // 5 секунд - задержка операций с пользователями
 
+  // Автоудаление сообщений (MessageDeletionManager)
+  MESSAGE_DELETION_CHECK_INTERVAL_MS: 2_000, // 2 секунды - интервал проверки просроченных удалений
+  MESSAGE_DELETION_RETRY_DELAY_MS: 30_000, // 30 секунд - задержка повторной попытки удаления
+  MESSAGE_DELETION_REDIS_TTL_SEC: 3600, // 1 час - TTL для задач в Redis
+  MESSAGE_DELETION_CLEANUP_MAX_AGE_MS: 3600_000, // 1 час - максимальный возраст задач для очистки
+
   // Антиспам
   MAX_MESSAGES_FOR_SPAM_CHECK: 5, // 5 сообщений для проверки антиспамом
 

@@ -10,4 +10,4 @@ export class MessageFormatter {
     // _ * [ ] ( ) ~ ` > # + - = | { } . !
     return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&")
   }
-} 
+}
