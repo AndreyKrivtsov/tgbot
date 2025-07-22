@@ -272,6 +272,7 @@ export class MemberHandler {
       // Удаляем пользователя из ограниченных (капча)
       if (restrictedUser) {
         await this.userRestrictions.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
+        this.logger.d(`❌ Deleted message ${restrictedUser.questionId} in chat ${restrictedUser.chatId} for user ${restrictedUser.username ?? restrictedUser.firstName}`)
         this.captchaService.removeRestrictedUser(userId)
         cleanedItems++
       }
