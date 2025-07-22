@@ -261,10 +261,17 @@ export class MemberHandler {
    */
   private async cleanupUserData(userId: number): Promise<void> {
     try {
+      if (!this.captchaService) {
+        return
+      }
+
+      const restrictedUser = this.captchaService.getRestrictedUser(userId)
+
       let cleanedItems = 0
 
       // Удаляем пользователя из ограниченных (капча)
-      if (this.captchaService && this.captchaService.isUserRestricted(userId)) {
+      if (restrictedUser) {
+        await this.userRestrictions.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
         this.captchaService.removeRestrictedUser(userId)
         cleanedItems++
       }
