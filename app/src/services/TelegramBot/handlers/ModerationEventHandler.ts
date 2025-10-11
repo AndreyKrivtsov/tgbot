@@ -1,7 +1,7 @@
 import type { EventBus } from "../../../core/EventBus.js"
 import type { BanUserEvent, DeleteMessageEvent, MuteUserEvent, WarnUserEvent } from "../../../types/events.js"
 import type { TelegramBot } from "../types/index.js"
-import type { UserRestrictions } from "../utils/UserRestrictions.js"
+import type { TelegramModerationAdapter } from "../adapters/ModerationAdapter.js"
 
 /**
  * Обработчик событий модерации
@@ -9,7 +9,7 @@ import type { UserRestrictions } from "../utils/UserRestrictions.js"
 export class ModerationEventHandler {
   constructor(
     private bot: TelegramBot,
-    private userRestrictions: UserRestrictions,
+    private moderation: TelegramModerationAdapter,
   ) {}
 
   /**
@@ -27,7 +27,7 @@ export class ModerationEventHandler {
    */
   private async handleBanUser(event: BanUserEvent): Promise<void> {
     try {
-      await this.userRestrictions.restrictUser(event.chatId, event.userId)
+      await this.moderation.restrictUser(event.chatId, event.userId)
 
       await this.bot.sendMessage({
         chat_id: event.chatId,
@@ -43,7 +43,7 @@ export class ModerationEventHandler {
    */
   private async handleMuteUser(event: MuteUserEvent): Promise<void> {
     try {
-      await this.userRestrictions.restrictUser(event.chatId, event.userId)
+      await this.moderation.restrictUser(event.chatId, event.userId)
 
       await this.bot.sendMessage({
         chat_id: event.chatId,

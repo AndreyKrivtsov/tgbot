@@ -1,8 +1,9 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
-import type { AIChatServiceRefactored } from "../AIChatService/AIChatServiceRefactored.js"
+import type { AIChatService } from "../AIChatService/AIChatService.js"
 import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
+import { AI_CHAT_CONFIG } from "../../constants.js"
 
 /**
  * Централизованный сервис для управления настройками чатов
@@ -11,12 +12,12 @@ import type { Chat, ChatConfig, SystemPromptData } from "../../db/schema.js"
 export class ChatSettingsService implements IService {
   private logger: Logger
   private chatRepository: ChatRepository
-  private aiChatService?: AIChatServiceRefactored
+  private aiChatService?: AIChatService
 
   constructor(
     logger: Logger,
     chatRepository: ChatRepository,
-    aiChatService?: AIChatServiceRefactored,
+    aiChatService?: AIChatService,
   ) {
     this.logger = logger
     this.chatRepository = chatRepository
@@ -26,7 +27,7 @@ export class ChatSettingsService implements IService {
   /**
    * Устанавливает ссылку на AIChatService для синхронизации кешей
    */
-  setAIChatService(aiChatService: AIChatServiceRefactored): void {
+  setAIChatService(aiChatService: AIChatService): void {
     this.aiChatService = aiChatService
   }
 
@@ -90,6 +91,17 @@ export class ChatSettingsService implements IService {
   async getSystemPrompt(chatId: number): Promise<SystemPromptData | null> {
     const config = await this.getChatConfig(chatId)
     return config?.systemPrompt || null
+  }
+
+  /**
+   * Получить системный промпт в виде строки
+   */
+  async getSystemPromptText(chatId: number): Promise<string> {
+    const config = await this.getChatConfig(chatId)
+    if (config?.systemPrompt && (this.chatRepository as any)?.buildSystemPromptString) {
+      return (this.chatRepository as any).buildSystemPromptString(config.systemPrompt) || AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
+    }
+    return AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
   }
 
   // ==========================================================================

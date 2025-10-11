@@ -128,6 +128,7 @@ export class Application {
     // Captcha Service
     this.container.register("captcha", async () => {
       const { CaptchaService } = await import("../services/CaptchaService/index.js")
+      const { CaptchaTelegramAdapter } = await import("../services/TelegramBot/adapters/CaptchaTelegramAdapter.js")
 
       // Настройки капчи (можно перенести в БД позже)
       const captchaSettings = {
@@ -135,7 +136,20 @@ export class Application {
         checkIntervalMs: 5000, // 5 секунд
       }
 
-      return new CaptchaService(this.config, this.logger, {}, captchaSettings)
+      // Пытаемся получить бота для адаптера (он регистрируется позже, поэтому используем ленивую привязку)
+      let bot: any
+      try {
+        const telegramBot = await this.container.getAsync("telegramBot") as any
+        bot = (telegramBot as any).bot || null
+      } catch {
+        bot = null
+      }
+
+      const adapter = bot ? new CaptchaTelegramAdapter(bot, this.logger) : undefined
+
+      return new CaptchaService(this.config, this.logger, {
+        actions: adapter,
+      }, captchaSettings)
     })
 
     // Anti-Spam Service
@@ -157,22 +171,38 @@ export class Application {
 
     // Chat Service
     this.container.register("chat", async () => {
-      const { AIChatServiceRefactored } = await import("../services/AIChatService/AIChatServiceRefactored.js")
+      const { AIChatService } = await import("../services/AIChatService/AIChatService.js")
       const { GeminiAdapter } = await import("../services/AIChatService/providers/GeminiAdapter.js")
       const { AdaptiveChatThrottleManager } = await import("../services/AIChatService/AdaptiveThrottleManager.js")
+      const { AIChatTelegramAdapter } = await import("../services/TelegramBot/adapters/AIChatTelegramAdapter.js")
+      const { ChatSettingsRepositoryAdapter } = await import("../services/AIChatService/adapters/ChatSettingsRepositoryAdapter.js")
       const database = await this.container.getAsync("database") as any
       const redis = await this.container.getAsync("redis") as any
       const eventBus = await this.container.getAsync("eventBus") as any
       const logger = await this.container.getAsync("logger") as any
+      // Пытаемся получить бота для actions-порта
+      let actions: any
+      try {
+        const telegramBot = await this.container.getAsync("telegramBot") as any
+        const bot = (telegramBot as any).bot
+        if (bot) {
+          actions = new AIChatTelegramAdapter(bot, logger)
+        }
+      } catch {}
       const aiProvider = new GeminiAdapter(logger)
       const throttleManager = new AdaptiveChatThrottleManager(logger)
-      const aiChatService = new AIChatServiceRefactored(
+      // Преобразуем ChatSettingsService в репозиторийный порт AI
+      const chatSettingsService = await this.container.getAsync("chatSettings") as any
+      const repository = new ChatSettingsRepositoryAdapter(chatSettingsService)
+      const aiChatService = new AIChatService(
         this.config,
         logger,
         {
           database,
           redis,
           eventBus,
+          actions,
+          repository,
         },
         aiProvider,
         throttleManager,
@@ -183,6 +213,14 @@ export class Application {
       chatSettings.setAIChatService(aiChatService)
 
       return aiChatService
+    })
+
+    // AI Moderation Service
+    this.container.register("aiModeration", async () => {
+      const { AIModerationService } = await import("../services/AIModerationService/index.js")
+      const eventBus = await this.container.getAsync("eventBus") as any
+      const logger = await this.container.getAsync("logger") as any
+      return new AIModerationService(this.config, logger, { eventBus })
     })
 
     this.logger.i("✅ Business services registered")
@@ -225,8 +263,9 @@ export class Application {
         chatSettingsService: chatSettingsService as any,
       }, botSettings)
 
-      // Подключаем EventBus после инициализации
-      botService.setupEventBusListeners(eventBus)
+      // Подключаем EventBus после инициализации TelegramBot (если он уже инициализирован)
+      // Если нет — отложим подключение до конца initialize()
+      ;(botService as any)._pendingEventBus = eventBus
 
       return botService
     })

@@ -1,5 +1,4 @@
 import type { Logger } from "../../helpers/Logger.js"
-
 /**
  * Интерфейс для управления состоянием typing
  */
@@ -18,7 +17,6 @@ export interface ITypingManager {
   startTyping: (chatId: string) => void
   stopTyping: (chatId: string) => void
   stopAllTyping: () => void
-  getStats: () => object
   dispose: () => void
 }
 
@@ -126,25 +124,6 @@ export class TypingManager implements ITypingManager {
 
     for (const chatId of chatIds) {
       this.stopTyping(chatId)
-    }
-  }
-
-  /**
-   * Получить статистику
-   */
-  getStats(): object {
-    const states = Array.from(this.activeTypingChats.values())
-    const now = Date.now()
-
-    return {
-      activeChats: states.length,
-      averageDuration: states.length > 0
-        ? states.reduce((sum, state) => sum + (now - state.startTime), 0) / states.length
-        : 0,
-      longestDuration: states.length > 0
-        ? Math.max(...states.map(state => now - state.startTime))
-        : 0,
-      serviceStatus: "active",
     }
   }
 

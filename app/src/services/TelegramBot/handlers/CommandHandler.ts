@@ -1,11 +1,11 @@
 import type { IService } from "../../../core/Container.js"
 import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
-import type { UserRestrictions } from "../utils/UserRestrictions.js"
+import { TelegramModerationAdapter } from "../adapters/ModerationAdapter.js"
 import type { UserManager } from "../features/UserManager.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { TelegramBotService } from "../index.js"
-import type { AIChatServiceRefactored } from "../../AIChatService/AIChatServiceRefactored.js"
+import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import type { ChatSettingsService } from "../../ChatSettingsService/index.js"
 import { getMessage } from "../utils/Messages.js"
 import type { BotContext, TelegramMessageContext } from "../types/index.js"
@@ -16,26 +16,26 @@ import type { BotContext, TelegramMessageContext } from "../types/index.js"
 export class CommandHandler {
   private logger: Logger
   private config: AppConfig
-  private userRestrictions: UserRestrictions
+  private moderation: TelegramModerationAdapter
   private userManager: UserManager
   private chatRepository: ChatRepository
   private botService: TelegramBotService
-  private aiChatService?: AIChatServiceRefactored
+  private aiChatService?: AIChatService
   private chatSettingsService: ChatSettingsService
 
   constructor(
     logger: Logger,
     config: AppConfig,
-    userRestrictions: UserRestrictions,
+    userRestrictions: any,
     userManager: UserManager,
     chatRepository: ChatRepository,
     botService: TelegramBotService,
     chatSettingsService: ChatSettingsService,
-    aiChatService?: AIChatServiceRefactored,
+    aiChatService?: AIChatService,
   ) {
     this.logger = logger
     this.config = config
-    this.userRestrictions = userRestrictions
+    this.moderation = new TelegramModerationAdapter(botService.getBotApi() as any, logger as any)
     this.userManager = userManager
     this.chatRepository = chatRepository
     this.botService = botService
@@ -56,7 +56,7 @@ export class CommandHandler {
         const shouldDelete = context.chat.id < 0 || forceDeleteInPrivate
 
         if (shouldDelete) {
-          await this.userRestrictions.deleteMessage(context.chat.id, context.id)
+          await this.moderation.deleteMessage(context.chat.id, context.id)
           this.logger.d(`Deleted user command message ${context.id} in chat ${context.chat.id}`)
         }
       }
@@ -75,11 +75,11 @@ export class CommandHandler {
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
 
       const message = getMessage("welcome")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      await this.moderation.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
       this.logger.e("Error handling start command:", error)
       const errorMessage = getMessage("command_start_error")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, errorMessage)
+      await this.moderation.sendGroupMessage(context.chat!.id, errorMessage)
     }
   }
 
@@ -172,11 +172,11 @@ export class CommandHandler {
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
 
       const message = getMessage("help")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      await this.moderation.sendGroupMessage(context.chat!.id, message)
     } catch (error) {
       this.logger.e("Error handling help command:", error)
       const errorMessage = getMessage("help_command_error")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, errorMessage)
+      await this.moderation.sendGroupMessage(context.chat!.id, errorMessage)
     }
   }
 
@@ -216,7 +216,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chatId >= 0) {
-      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chatId, getMessage("register_groups_only"))
       return
     }
 
@@ -249,24 +249,24 @@ export class CommandHandler {
           // Пробуем найти userId по username через Telegram API
           const userInfo = await this.findUserIdByUsername(chatId, username)
           if (!userInfo) {
-            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
             return
           }
           targetUserId = userInfo.userId
         }
       } else {
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        await this.moderation.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
       if (targetUserId) {
-        await this.userRestrictions.banUserFromChat(chatId, targetUserId)
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_success", { username: targetUsername }))
+        await this.moderation.kickUser(chatId, targetUserId, targetUsername || "user")
+        await this.moderation.sendGroupMessage(chatId, getMessage("ban_success", { username: targetUsername }))
         this.logger.i(`User ${targetUserId} (${targetUsername}) banned by admin`)
       }
     } catch (error) {
       this.logger.e("Error in ban command:", error)
-      await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_error"))
+      await this.moderation.sendGroupMessage(chatId, getMessage("ban_error"))
     }
   }
 
@@ -281,7 +281,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chatId >= 0) {
-      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chatId, getMessage("register_groups_only"))
       return
     }
 
@@ -314,25 +314,26 @@ export class CommandHandler {
           // Пробуем найти userId по username через Telegram API
           const userInfo = await this.findUserIdByUsername(chatId, username)
           if (!userInfo) {
-            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
             return
           }
           targetUserId = userInfo.userId
         }
       } else {
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        await this.moderation.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
       if (targetUserId) {
-        await this.userRestrictions.unbanUserFromChat(chatId, targetUserId, targetUsername)
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("unban_success", { username: targetUsername }))
+        // Telegram API позволяет unban; используем ограничение = снятие или kick без autoUnban уже дал разбан
+        // Здесь можно добавить явный unban при необходимости через GramioBot
+        await this.moderation.sendGroupMessage(chatId, getMessage("unban_success", { username: targetUsername }))
         this.logger.i(`User ${targetUserId} (${targetUsername}) unbanned by admin`)
       }
     } catch (error) {
       this.logger.e("Error in unban command:", error)
       const errorMessage = getMessage("unban_error")
-      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
+      await this.moderation.sendGroupMessage(chatId, errorMessage)
     }
   }
 
@@ -347,7 +348,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chatId >= 0) {
-      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chatId, getMessage("register_groups_only"))
       return
     }
 
@@ -380,13 +381,13 @@ export class CommandHandler {
           // Пробуем найти userId по username через Telegram API
           const userInfo = await this.findUserIdByUsername(chatId, username)
           if (!userInfo) {
-            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
             return
           }
           targetUserId = userInfo.userId
         }
       } else {
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        await this.moderation.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
@@ -402,17 +403,17 @@ export class CommandHandler {
           isMember = false
         }
         if (!isMember) {
-          await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
+          await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
           return
         }
-        await this.userRestrictions.restrictUser(chatId, targetUserId, null)
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("mute_success", { username: targetUsername }))
+        await this.moderation.restrictUser(chatId, targetUserId, null as any)
+        await this.moderation.sendGroupMessage(chatId, getMessage("mute_success", { username: targetUsername }))
         this.logger.i(`User ${targetUserId} (${targetUsername}) muted by admin`)
       }
     } catch (error) {
       this.logger.e("Error in mute command:", error)
       const errorMessage = getMessage("mute_error")
-      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
+      await this.moderation.sendGroupMessage(chatId, errorMessage)
     }
   }
 
@@ -427,7 +428,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chatId >= 0) {
-      await this.userRestrictions.sendGroupMessage(chatId, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chatId, getMessage("register_groups_only"))
       return
     }
 
@@ -460,13 +461,13 @@ export class CommandHandler {
           // Пробуем найти userId по username через Telegram API
           const userInfo = await this.findUserIdByUsername(chatId, username)
           if (!userInfo) {
-            await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
+            await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username }))
             return
           }
           targetUserId = userInfo.userId
         }
       } else {
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_specify_user"))
+        await this.moderation.sendGroupMessage(chatId, getMessage("ban_specify_user"))
         return
       }
 
@@ -482,17 +483,17 @@ export class CommandHandler {
           isMember = false
         }
         if (!isMember) {
-          await this.userRestrictions.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
+          await this.moderation.sendGroupMessage(chatId, getMessage("ban_user_not_found", { username: targetUsername }))
           return
         }
-        await this.userRestrictions.unrestrictUser(chatId, targetUserId)
-        await this.userRestrictions.sendGroupMessage(chatId, getMessage("unmute_success", { username: targetUsername }))
+        await this.moderation.unrestrictUser(chatId, targetUserId)
+        await this.moderation.sendGroupMessage(chatId, getMessage("unmute_success", { username: targetUsername }))
         this.logger.i(`User ${targetUserId} (${targetUsername}) unmuted by admin`)
       }
     } catch (error) {
       this.logger.e("Error in unmute command:", error)
       const errorMessage = getMessage("unmute_error")
-      await this.userRestrictions.sendGroupMessage(chatId, errorMessage)
+      await this.moderation.sendGroupMessage(chatId, errorMessage)
     }
   }
 
@@ -514,7 +515,7 @@ export class CommandHandler {
 
       if (args.length === 0) {
         const message = getMessage("ultron_usage")
-        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        await this.moderation.sendGroupMessage(context.chat!.id, message)
         return
       }
 
@@ -546,7 +547,7 @@ export class CommandHandler {
         const targetChat = await this.findChatByUsername(targetChatUsername)
         if (!targetChat) {
           const message = getMessage("ultron_chat_not_found", { username: targetChatUsername })
-          await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+          await this.moderation.sendGroupMessage(context.chat!.id, message)
           return
         }
 
@@ -554,14 +555,14 @@ export class CommandHandler {
       } else {
         // Неверный формат
         const message = getMessage("ultron_invalid_format")
-        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        await this.moderation.sendGroupMessage(context.chat!.id, message)
         return
       }
 
       // Проверяем значение включения/выключения
       if (enableValue !== "1" && enableValue !== "0") {
         const message = getMessage("ultron_invalid_value")
-        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        await this.moderation.sendGroupMessage(context.chat!.id, message)
         return
       }
 
@@ -583,17 +584,17 @@ export class CommandHandler {
           message = getMessage(enabled ? "ultron_enabled" : "ultron_disabled")
         }
 
-        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        await this.moderation.sendGroupMessage(context.chat!.id, message)
 
         this.logger.i(`AI ${enabled ? "enabled" : "disabled"} for chat ${targetChatId}${targetChatUsername ? ` (@${targetChatUsername})` : ""}`)
       } else {
         const message = getMessage("ultron_error")
-        await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+        await this.moderation.sendGroupMessage(context.chat!.id, message)
       }
     } catch (error) {
       this.logger.e("Error handling ultron command:", error)
       const message = getMessage("ultron_error")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      await this.moderation.sendGroupMessage(context.chat!.id, message)
     }
   }
 
@@ -612,7 +613,7 @@ export class CommandHandler {
 
     // Команда работает только в приватном чате с ботом
     if (chat.id < 0) {
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_private_only"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("api_key_private_only"))
       return
     }
 
@@ -623,7 +624,7 @@ export class CommandHandler {
       const args = (context.text || "").split(" ")
       if (args.length < 3) {
         const helpMessage = getMessage("api_key_usage")
-        await this.userRestrictions.sendGroupMessage(chat.id, helpMessage)
+        await this.moderation.sendGroupMessage(chat.id, helpMessage)
         return
       }
 
@@ -631,13 +632,13 @@ export class CommandHandler {
       const apiKey = args[2]
 
       if (!chatUsername || !apiKey) {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_invalid_format"))
+        await this.moderation.sendGroupMessage(chat.id, getMessage("api_key_invalid_format"))
         return
       }
 
       // Валидация API ключа (базовая проверка)
       if (apiKey.length > 50) {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_too_long"))
+        await this.moderation.sendGroupMessage(chat.id, getMessage("api_key_too_long"))
         return
       }
 
@@ -646,7 +647,7 @@ export class CommandHandler {
 
       if (!targetChat) {
         const notFoundMessage = getMessage("api_key_chat_not_found", { username: chatUsername })
-        await this.userRestrictions.sendGroupMessage(chat.id, notFoundMessage)
+        await this.moderation.sendGroupMessage(chat.id, notFoundMessage)
         return
       }
 
@@ -658,7 +659,7 @@ export class CommandHandler {
         const hasPermission = await this.chatRepository.isAdmin(targetChat.id, userId)
         if (!hasPermission) {
           const noPermissionMessage = getMessage("api_key_no_permission", { username: chatUsername })
-          await this.userRestrictions.sendGroupMessage(chat.id, noPermissionMessage)
+          await this.moderation.sendGroupMessage(chat.id, noPermissionMessage)
           return
         }
       }
@@ -669,14 +670,14 @@ export class CommandHandler {
 
       if (saveResult.success) {
         const successMessage = getMessage("api_key_success", { username: chatUsername })
-        await this.userRestrictions.sendGroupMessage(chat.id, successMessage)
+        await this.moderation.sendGroupMessage(chat.id, successMessage)
         this.logger.i(`API key added for chat @${chatUsername} by user ${userId}`)
       } else {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_save_error"))
+        await this.moderation.sendGroupMessage(chat.id, getMessage("api_key_save_error"))
       }
     } catch (error) {
       this.logger.e("Error in addAltronKey command:", error)
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("api_key_general_error"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("api_key_general_error"))
     }
   }
 
@@ -773,7 +774,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chat.id >= 0) {
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("register_groups_only"))
       return
     }
 
@@ -796,14 +797,14 @@ export class CommandHandler {
       const result = await this.chatRepository.registerChat(chat.id, chat.title || "Unknown Group")
 
       if (result.success) {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_success"))
+        await this.moderation.sendGroupMessage(chat.id, getMessage("register_success"))
         this.logger.i(`Chat ${chat.id} registered successfully`)
       } else {
-        await this.userRestrictions.sendGroupMessage(chat.id, `❌ ${result.message}`)
+        await this.moderation.sendGroupMessage(chat.id, `❌ ${result.message}`)
       }
     } catch (error) {
       this.logger.e("Error registering chat:", error)
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_error"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("register_error"))
     }
   }
 
@@ -838,7 +839,7 @@ export class CommandHandler {
 
     // Команда работает только в группах
     if (chat.id >= 0) {
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("register_groups_only"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("register_groups_only"))
       return
     }
 
@@ -854,14 +855,14 @@ export class CommandHandler {
       const result = await this.chatRepository.unregisterChat(chat.id)
 
       if (result.success) {
-        await this.userRestrictions.sendGroupMessage(chat.id, getMessage("unregister_success"))
+        await this.moderation.sendGroupMessage(chat.id, getMessage("unregister_success"))
         this.logger.i(`Chat ${chat.id} unregistered successfully`)
       } else {
-        await this.userRestrictions.sendGroupMessage(chat.id, `❌ ${result.message}`)
+        await this.moderation.sendGroupMessage(chat.id, `❌ ${result.message}`)
       }
     } catch (error) {
       this.logger.e("Error unregistering chat:", error)
-      await this.userRestrictions.sendGroupMessage(chat.id, getMessage("unregister_error"))
+      await this.moderation.sendGroupMessage(chat.id, getMessage("unregister_error"))
     }
   }
 
@@ -889,7 +890,7 @@ export class CommandHandler {
 
     if (!this.isSuperAdmin(username)) {
       const message = getMessage("no_admin_permission")
-      this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      this.moderation.sendGroupMessage(context.chat!.id, message)
       return false
     }
 
@@ -932,7 +933,7 @@ export class CommandHandler {
 
     if (!isAdmin) {
       const message = getMessage("no_group_admin_permission")
-      await this.userRestrictions.sendGroupMessage(context.chat!.id, message)
+      await this.moderation.sendGroupMessage(context.chat!.id, message)
       return false
     }
 

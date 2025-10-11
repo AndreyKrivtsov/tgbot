@@ -76,14 +76,6 @@ class TokenBucket {
   getLastActivity(): number {
     return this.lastActivityTime
   }
-
-  /**
-   * Получить текущее состояние bucket
-   */
-  getState(): { tokens: number, capacity: number } {
-    this.refill()
-    return { tokens: this.tokens, capacity: this.capacity }
-  }
 }
 
 /**
@@ -92,7 +84,6 @@ class TokenBucket {
  */
 export class AdaptiveChatThrottleManager {
   private buckets: Map<string, TokenBucket> = new Map()
-  private lastRequestTime: Map<string, number> = new Map()
   private cleanupInterval: NodeJS.Timeout
   private logger: Logger
 
@@ -133,7 +124,6 @@ export class AdaptiveChatThrottleManager {
       this.logger.d(`Chat ${contextId}: Adaptive delay ${delay}ms (response: ${responseLength} chars)`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
-    this.lastRequestTime.set(contextId, Date.now())
   }
 
   /**
@@ -154,31 +144,6 @@ export class AdaptiveChatThrottleManager {
   }
 
   /**
-   * Получить статистику для чата
-   */
-  getChatStats(contextId: string): {
-    bucketState: { tokens: number, capacity: number }
-    lastRequestTime: number
-  } {
-    const bucket = this.getBucket(contextId)
-    return {
-      bucketState: bucket.getState(),
-      lastRequestTime: this.lastRequestTime.get(contextId) || 0,
-    }
-  }
-
-  /**
-   * Получить общую статистику
-   */
-  getStats(): object {
-    return {
-      activeBuckets: this.buckets.size,
-      totalRequests: this.lastRequestTime.size,
-      config: AI_THROTTLE_CONFIG,
-    }
-  }
-
-  /**
    * Очистка неактивных чатов
    */
   private cleanup(): void {
@@ -188,7 +153,6 @@ export class AdaptiveChatThrottleManager {
     for (const [contextId, bucket] of this.buckets.entries()) {
       if (now - bucket.getLastActivity() > inactiveThreshold) {
         this.buckets.delete(contextId)
-        this.lastRequestTime.delete(contextId)
         this.logger.d(`Cleaned up inactive chat throttle: ${contextId}`)
       }
     }
@@ -200,6 +164,5 @@ export class AdaptiveChatThrottleManager {
   dispose(): void {
     clearInterval(this.cleanupInterval)
     this.buckets.clear()
-    this.lastRequestTime.clear()
   }
 }

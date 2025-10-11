@@ -1,6 +1,6 @@
 /** @type {import('jest').Config} */
 export default {
-  preset: "ts-jest",
+  preset: "ts-jest/presets/default-esm",
   testEnvironment: "node",
   roots: ["<rootDir>/src"],
   testMatch: [
@@ -9,8 +9,18 @@ export default {
     "**/?(*.)+(spec|test).ts",
     "**/?(*.)+(spec|test).js",
   ],
+  // Поддержка ESM + TypeScript через ts-jest
+  transform: {
+    "^.+\\.(ts|tsx)$": ["ts-jest", { useESM: true, tsconfig: "<rootDir>/tsconfig.json" }],
+  },
+  extensionsToTreatAsEsm: [".ts"],
+  moduleFileExtensions: ["ts", "js", "json"],
+  moduleNameMapper: {
+    // Позволяет импортировать .js пути в TS (ESM) во время тестов
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
   // Настройки для интеграционных тестов
-  testTimeout: 15000, // Увеличен таймаут для интеграционных тестов
+  testTimeout: 15000,
   collectCoverageFrom: [
     "src/**/*.ts",
     "!src/**/*.d.ts",
@@ -20,7 +30,6 @@ export default {
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
-
   maxWorkers: 1,
   forceExit: true,
   clearMocks: true,

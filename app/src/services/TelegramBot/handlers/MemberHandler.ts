@@ -1,7 +1,6 @@
 import type { Logger } from "../../../helpers/Logger.js"
-import type { TelegramBotSettings, TelegramChatMemberContext, TelegramLeftMemberContext, TelegramNewMembersContext } from "../types/index.js"
-import type { CaptchaManager } from "../features/CaptchaManager.js"
-import type { UserRestrictions } from "../utils/UserRestrictions.js"
+import type { TelegramBot, TelegramBotSettings, TelegramChatMemberContext, TelegramLeftMemberContext, TelegramNewMembersContext } from "../types/index.js"
+import { TelegramModerationAdapter } from "../adapters/ModerationAdapter.js"
 import type { UserManager } from "../features/UserManager.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
@@ -12,29 +11,29 @@ import type { ChatRepository } from "../../../repository/ChatRepository.js"
 export class MemberHandler {
   private logger: Logger
   private settings: TelegramBotSettings
-  private captchaManager: CaptchaManager
-  private userRestrictions: UserRestrictions
+  private bot?: TelegramBot
+  private moderation: TelegramModerationAdapter
   private userManager: UserManager
   private chatRepository: ChatRepository
   private captchaService?: CaptchaService
 
   // Кеш для предотвращения дублирования капчи
   private recentlyProcessedUsers = new Map<number, number>() // userId -> timestamp
-  private readonly DUPLICATE_PREVENTION_TIMEOUT_MS = 10000 // 10 секунд
+  private readonly DUPLICATE_PREVENTION_TIMEOUT_MS = 2000 // 10 секунд
 
   constructor(
     logger: Logger,
     settings: TelegramBotSettings,
-    captchaManager: CaptchaManager,
-    userRestrictions: UserRestrictions,
+    botOrUndefined: TelegramBot | undefined,
+    userRestrictions: any,
     userManager: UserManager,
     chatRepository: ChatRepository,
     captchaService?: CaptchaService,
   ) {
     this.logger = logger
     this.settings = settings
-    this.captchaManager = captchaManager
-    this.userRestrictions = userRestrictions
+    this.bot = botOrUndefined
+    this.moderation = new TelegramModerationAdapter(botOrUndefined as any, logger)
     this.userManager = userManager
     this.chatRepository = chatRepository
     this.captchaService = captchaService
@@ -65,9 +64,24 @@ export class MemberHandler {
     // Очищаем старые записи из кеша
     this.cleanupRecentlyProcessedUsers()
 
-    // Инициируем капчу
+    // Инициируем капчу через use-case сервиса
+    if (!this.captchaService) {
+      this.logger.w("Captcha service not available, skipping captcha initiation")
+      return
+    }
+
     this.logger.i(`🔐 Initiating captcha for user ${user.id} via ${eventType} event`)
-    await this.captchaManager.initiateUserCaptcha(chatId, user)
+
+    try {
+      await this.captchaService.startChallenge({
+        chatId,
+        userId: user.id,
+        username: user.username,
+        firstName: user.firstName,
+      })
+    } catch (error) {
+      this.logger.e(`❌ Error initiating captcha for user ${user.id}:`, error)
+    }
   }
 
   /**
@@ -95,12 +109,12 @@ export class MemberHandler {
       const chatId = context.chat.id
       this.logger.i(`Chat ID: ${chatId}`)
 
-      // Проверяем, есть ли чат в базе данных
-      const chatExists = await this.chatRepository.chatExists(chatId)
-      this.logger.i(`Chat exists in DB: ${chatExists}`)
+      // Проверяем, активен ли чат (единая семантика)
+      const isActive = await this.chatRepository.isChatActive(chatId)
+      this.logger.i(`Chat is active: ${isActive}`)
 
-      if (!chatExists) {
-        this.logger.w(`Chat ${chatId} not found in database, skipping new members processing`)
+      if (!isActive) {
+        this.logger.w(`Chat ${chatId} is not active or not found in database, skipping new members processing`)
         return
       }
 
@@ -109,7 +123,7 @@ export class MemberHandler {
 
       this.logger.i(`New members count: ${newMembers?.length || 0}`)
       this.logger.i(`Message ID: ${messageId}`)
-      this.logger.i(`CaptchaManager available: ${this.captchaManager ? "YES" : "NO"}`)
+      this.logger.i(`Captcha service available: ${this.captchaService ? "YES" : "NO"}`)
 
       // Сохраняем соответствие userId <-> username для каждого нового участника
       if (Array.isArray(newMembers)) {
@@ -120,7 +134,7 @@ export class MemberHandler {
 
       // Удаляем системное сообщение о присоединении
       if (this.settings.deleteSystemMessages && messageId) {
-        await this.userRestrictions.deleteMessage(chatId, messageId)
+        await this.moderation.deleteMessage(chatId, messageId)
       }
 
       // Обрабатываем новых участников
@@ -171,7 +185,10 @@ export class MemberHandler {
 
       // Удаляем системное сообщение о покидании/исключении
       if (this.settings.deleteSystemMessages && messageId) {
-        await this.userRestrictions.deleteMessage(chatId, messageId)
+        await this.moderation.deleteMessage(chatId, messageId)
+      }
+      if (this.settings.deleteSystemMessages && messageId) {
+        await this.moderation.deleteMessage(chatId, messageId)
       }
 
       // Очищаем данные пользователя
@@ -271,7 +288,7 @@ export class MemberHandler {
 
       // Удаляем пользователя из ограниченных (капча)
       if (restrictedUser) {
-        await this.userRestrictions.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
+        await this.moderation.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
         this.logger.d(`❌ Deleted message ${restrictedUser.questionId} in chat ${restrictedUser.chatId} for user ${restrictedUser.username ?? restrictedUser.firstName}`)
         this.captchaService.removeRestrictedUser(userId)
         cleanedItems++
@@ -296,7 +313,7 @@ export class MemberHandler {
    * Проверка доступности капча сервиса
    */
   hasCaptchaService(): boolean {
-    return this.captchaManager.isAvailable()
+    return !!this.captchaService
   }
 
   /**

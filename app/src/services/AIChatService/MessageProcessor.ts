@@ -175,36 +175,5 @@ export class MessageProcessor implements IMessageProcessor {
   /**
    * Извлечение команд из сообщения
    */
-  extractCommands(message: string): string[] {
-    const commands = message.match(/\/\w+/g) || []
-    return commands.map(cmd => cmd.toLowerCase())
-  }
-
-  /**
-   * Проверка на наличие упоминаний пользователей
-   */
-  hasUserMentions(message: string): boolean {
-    return /@\w+/.test(message)
-  }
-
-  /**
-   * Получение статистики сообщения
-   */
-  getMessageStats(message: string): {
-    length: number
-    wordCount: number
-    hasEmojis: boolean
-    hasLinks: boolean
-  } {
-    const words = message.split(/\s+/).filter(word => word.length > 0)
-    const hasEmojis = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u.test(message)
-    const hasLinks = /https?:\/\/\S+/.test(message)
-
-    return {
-      length: message.length,
-      wordCount: words.length,
-      hasEmojis,
-      hasLinks,
-    }
-  }
+  // dev‑утилиты удалены как неиспользуемые: extractCommands, hasUserMentions, getMessageStats
 }

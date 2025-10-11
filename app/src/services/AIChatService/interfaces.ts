@@ -5,7 +5,7 @@
 export { AdaptiveChatThrottleManager } from "./AdaptiveThrottleManager.js"
 
 // Экспорт рефакторированного сервиса
-export { AIChatServiceRefactored } from "./AIChatServiceRefactored.js"
+export { AIChatService } from "./AIChatService.js"
 
 // Экспорт интерфейсов из AIResponseService
 export type {
@@ -16,16 +16,7 @@ export type {
 
 export { AIResponseService } from "./AIResponseService.js"
 
-// Экспорт интерфейсов из ChatConfigService
-export type {
-  ApiKeyResult,
-  ChatSettingsResult,
-  ChatSettingsUpdates,
-  IChatConfigService,
-} from "./ChatConfigService.js"
-
-// Экспорт классов для использования
-export { ChatConfigService } from "./ChatConfigService.js"
+// ChatConfigService больше не используется напрямую — используем ChatSettingsService через адаптер
 
 // Экспорт интерфейсов из ChatContextManager
 export type {
@@ -61,44 +52,7 @@ export { TypingManager } from "./TypingManager.js"
 /**
  * Базовый интерфейс для всех сервисов AIChatService
  */
-export interface BaseAIService {
-  initialize?: () => Promise<void>
-  start?: () => Promise<void>
-  stop?: () => Promise<void>
-  dispose?: () => Promise<void>
-  isHealthy?: () => boolean
-  getStats?: () => object
-}
-
-/**
- * Конфигурация для создания AIChatService
- */
-export interface AIChatServiceConfig {
-  maxQueueSize?: number
-  maxContextMessages?: number
-  maxResponseLength?: number
-  contextTTL?: number
-  typingTimeout?: number
-  throttleConfig?: {
-    maxDelay?: number
-    minDelay?: number
-    bucketCapacity?: number
-  }
-}
-
-/**
- * Фабрика для создания AIChatService с различными конфигурациями
- */
-export interface AIChatServiceFactory {
-  create: (config: AIChatServiceConfig) => Promise<BaseAIService>
-  createWithDefaults: () => Promise<BaseAIService>
-}
-
-export interface IService {
-  name: string
-  initialize: () => Promise<void>
-  stop: () => Promise<void>
-}
+// удалены устаревшие фабрики/конфиги
 
 export interface ProcessMessageResult {
   success: boolean
@@ -107,4 +61,28 @@ export interface ProcessMessageResult {
   queued?: boolean
   reason?: string
   queuePosition?: number
+}
+
+// Минимальный контракт конфиг-сервиса, используемый AIChatService
+export interface IChatConfigService {
+  loadAllChatSettings: () => Promise<void>
+  isAiEnabledForChat: (chatId: number) => Promise<boolean>
+  getApiKeyForChat: (chatId: number) => Promise<{ key: string } | null>
+  getSystemPromptForChat: (chatId: number) => Promise<string>
+}
+
+// (interfaces re-exported above; keep single source of truth)
+
+// NEW: Ports
+export interface AIChatActionsPort {
+  sendTyping: (chatId: number) => Promise<void>
+  sendMessage: (chatId: number, text: string, replyToMessageId?: number) => Promise<void>
+  sendGroupMessage: (chatId: number, text: string, autoDeleteMs?: number) => Promise<void>
+  getBotInfo?: () => Promise<{ id: number, username?: string } | null>
+}
+
+export interface AIChatRepositoryPort {
+  isAiEnabledForChat: (chatId: number) => Promise<boolean>
+  getApiKeyForChat: (chatId: number) => Promise<{ key: string } | null>
+  getSystemPromptForChat: (chatId: number) => Promise<string>
 }

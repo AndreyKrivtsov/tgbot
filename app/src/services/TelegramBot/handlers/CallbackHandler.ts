@@ -1,6 +1,6 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot } from "../types/index.js"
-import type { CaptchaManager } from "../features/CaptchaManager.js"
+import type { CaptchaService } from "../../CaptchaService/index.js"
 import { getMessage } from "../utils/Messages.js"
 
 /**
@@ -9,12 +9,12 @@ import { getMessage } from "../utils/Messages.js"
 export class CallbackHandler {
   private logger: Logger
   private bot: TelegramBot
-  private captchaManager?: CaptchaManager
+  private captchaService?: CaptchaService
 
-  constructor(logger: Logger, bot: TelegramBot, captchaManager?: CaptchaManager) {
+  constructor(logger: Logger, bot: TelegramBot, captchaService?: CaptchaService) {
     this.logger = logger
     this.bot = bot
-    this.captchaManager = captchaManager
+    this.captchaService = captchaService
   }
 
   /**
@@ -32,13 +32,38 @@ export class CallbackHandler {
 
       // Обработка капчи
       if (callbackData?.startsWith("captcha_")) {
-        if (!this.captchaManager) {
+        if (!this.captchaService) {
           await this.answerCallback(context, getMessage("callback_captcha_unavailable"))
           return
         }
+        const userId = context.from?.id
+        const parts = callbackData.split("_")
+        if (parts.length !== 4 || parts[0] !== "captcha") {
+          await this.answerCallback(context, getMessage("callback_invalid_format"))
+          return
+        }
+        const callbackUserId = Number.parseInt(parts[1] || "0", 10)
+        const isCorrect = parts[3] === "correct"
 
-        // CaptchaManager сам отвечает на callback query, поэтому не дублируем ответ
-        await this.captchaManager.handleCaptchaCallback(context, callbackData)
+        if (callbackUserId !== userId) {
+          // Чужая капча — игнор
+          return
+        }
+
+        // Делегируем use-case'у
+        try {
+          await this.captchaService.submitAnswer({
+            userId,
+            isCorrect,
+          })
+        } catch (e) {
+          this.logger.e("Error submitting captcha answer:", e)
+          await this.answerCallback(context, getMessage("callback_general_error"))
+          return
+        }
+
+        const replyText = isCorrect ? getMessage("callback_captcha_correct") : getMessage("callback_captcha_wrong")
+        await this.answerCallback(context, replyText)
       } else {
         await this.answerCallback(context, getMessage("callback_unknown_command"))
       }
@@ -48,48 +73,7 @@ export class CallbackHandler {
     }
   }
 
-  /**
-   * Обработка callback с капчей (legacy)
-   */
-  async handleCaptchaCallback(context: any, callbackData: string): Promise<boolean> {
-    try {
-      const userId = context.from?.id
-      if (!userId) {
-        await this.answerCallback(context, getMessage("callback_user_error"))
-        return false
-      }
-
-      // Парсим callback data в формате: captcha_${userId}_${optionIndex}_${correct|wrong}
-      const callbackParts = callbackData.split("_")
-      if (callbackParts.length !== 4 || callbackParts[0] !== "captcha") {
-        this.logger.e(`❌ Invalid callback data format: ${callbackData}`)
-        await this.answerCallback(context, getMessage("callback_invalid_format"))
-        return false
-      }
-
-      const callbackUserId = Number.parseInt(callbackParts[1] || "0")
-      const isCorrect = callbackParts[3] === "correct"
-
-      // Проверяем, что пользователь отвечает на свою капчу
-      if (callbackUserId !== userId) {
-        this.logger.w(`❌ User ${userId} trying to answer captcha for user ${callbackUserId}`)
-        return false
-      }
-
-      // Отвечаем на callback
-      const callbackResponse = isCorrect
-        ? getMessage("callback_captcha_correct")
-        : getMessage("callback_captcha_wrong")
-
-      await this.answerCallback(context, callbackResponse)
-
-      return true
-    } catch (error) {
-      this.logger.e("Error handling captcha callback:", error)
-      await this.answerCallback(context, getMessage("callback_general_error"))
-      return false
-    }
-  }
+  // legacy handleCaptchaCallback удалён
 
   /**
    * Отправка ответа на callback query
@@ -156,7 +140,7 @@ export class CallbackHandler {
    * Проверка доступности капча менеджера
    */
   hasCaptchaManager(): boolean {
-    return !!this.captchaManager && this.captchaManager.isAvailable()
+    return !!this.captchaService
   }
 
   /**

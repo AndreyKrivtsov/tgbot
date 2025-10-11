@@ -20,9 +20,16 @@ export class MessageDeletionManager implements IService {
 
   constructor(
     private redisService: RedisService,
-    private bot: TelegramBot,
     private logger: Logger,
+    private bot?: TelegramBot,
   ) {}
+
+  /**
+   * Установка экземпляра бота после его создания
+   */
+  setBot(bot: TelegramBot): void {
+    this.bot = bot
+  }
 
   /**
    * Запланировать удаление сообщения
@@ -184,6 +191,9 @@ export class MessageDeletionManager implements IService {
    */
   private async executeTask(task: DeletionTask): Promise<void> {
     try {
+      if (!this.bot) {
+        throw new Error("Telegram bot is not set in MessageDeletionManager")
+      }
       await this.bot.deleteMessage(task.chatId, task.messageId)
 
       // Успешно удалили - убираем из памяти и Redis

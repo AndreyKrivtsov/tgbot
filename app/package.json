@@ -13,7 +13,7 @@
     "push": "npx drizzle-kit push",
     "migrate": "node drizzle/migrate.js migrate",
     "studio": "npx drizzle-kit studio",
-    "test": "jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --watchAll=false",

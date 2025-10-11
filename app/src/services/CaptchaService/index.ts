@@ -3,21 +3,26 @@ import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 
 interface CaptchaDependencies {
-  telegramBot?: any
+  now?: () => number
+  setTimeoutFn?: (fn: () => void, ms: number) => any
+  rng?: () => number
+  actions?: CaptchaActionsPort
+  repository?: CaptchaRepository
+  policy?: Partial<CaptchaPolicy>
 }
 
-interface CaptchaSettings {
+export interface CaptchaSettings {
   timeoutMs: number // Таймаут капчи (по умолчанию 60 сек)
   checkIntervalMs: number // Интервал проверки истекших капч (по умолчанию 5 сек)
 }
 
-interface CaptchaChallenge {
+export interface CaptchaChallenge {
   question: number[]
   answer: number
   options: number[]
 }
 
-interface RestrictedUser {
+export interface RestrictedUser {
   userId: number
   chatId: number
   questionId: number
@@ -26,6 +31,36 @@ interface RestrictedUser {
   firstName: string
   timestamp: number
   isAnswered: boolean
+}
+
+// ===================== Ports / Policies =====================
+export interface CaptchaActionsPort {
+  sendCaptchaMessage: (
+    chatId: number,
+    userId: number,
+    question: number[],
+    options: number[],
+    correctAnswer: number,
+  ) => Promise<number>
+  sendResultMessage: (chatId: number, text: string, autoDeleteMs?: number) => Promise<void>
+  restrictUser: (chatId: number, userId: number, durationSec?: number) => Promise<void>
+  unrestrictUser: (chatId: number, userId: number) => Promise<void>
+  kickUser: (chatId: number, userId: number, userName: string, autoUnbanDelayMs?: number) => Promise<void>
+  deleteMessage: (chatId: number, messageId: number) => Promise<void>
+}
+
+export interface CaptchaRepository {
+  save: (user: RestrictedUser) => Promise<void>
+  get: (userId: number) => Promise<RestrictedUser | null>
+  remove: (userId: number) => Promise<void>
+  list: () => Promise<RestrictedUser[]>
+}
+
+export interface CaptchaPolicy {
+  temporaryBanDurationSec: number
+  autoUnbanDelayMs: number
+  resultMessageDeleteMs: number
+  duplicateWindowMs: number
 }
 
 /**
@@ -38,6 +73,19 @@ export class CaptchaService implements IService {
   private settings: CaptchaSettings
   private restrictedUsers: Map<number, RestrictedUser> = new Map()
   private isMonitoring = false
+  // helpers
+  private getNow: () => number
+  private setTimeoutWrapper: (fn: () => void, ms: number) => any
+  private random: () => number
+  // ports
+  private actions?: CaptchaActionsPort
+  private repo?: CaptchaRepository
+  private policy: CaptchaPolicy = {
+    temporaryBanDurationSec: 40,
+    autoUnbanDelayMs: 5000,
+    resultMessageDeleteMs: 10000,
+    duplicateWindowMs: 2000,
+  }
 
   constructor(
     config: AppConfig,
@@ -54,6 +102,18 @@ export class CaptchaService implements IService {
       timeoutMs: 60000, // 60 секунд
       checkIntervalMs: 5000, // 5 секунд
       ...settings,
+    }
+
+    // Wire helpers with fallbacks to globals
+    this.getNow = this.dependencies.now || (() => Date.now())
+    this.setTimeoutWrapper = this.dependencies.setTimeoutFn || ((fn: () => void, ms: number) => setTimeout(fn, ms))
+    this.random = this.dependencies.rng || (() => Math.random())
+
+    // wire ports
+    this.actions = this.dependencies.actions
+    this.repo = this.dependencies.repository
+    if (this.dependencies.policy) {
+      this.policy = { ...this.policy, ...this.dependencies.policy }
     }
   }
 
@@ -108,7 +168,7 @@ export class CaptchaService implements IService {
    */
   generateCaptcha(): CaptchaChallenge {
     const randomOption = (from: number, to: number) => {
-      return Math.floor(Math.random() * (to - from + 1)) + from
+      return Math.floor(this.random() * (to - from + 1)) + from
     }
 
     // Генерируем задачу сложения
@@ -133,6 +193,72 @@ export class CaptchaService implements IService {
     return { question, answer, options }
   }
 
+  // ===================== Use-cases (Orchestration) =====================
+  async startChallenge(input: { chatId: number, userId: number, username?: string, firstName: string }): Promise<void> {
+    const { chatId, userId, username, firstName } = input
+    const now = this.getNow()
+
+    // Дедупликация по окну
+    const existing = await this.getRestrictedFromStore(userId)
+    if (existing && (now - existing.timestamp) < this.policy.duplicateWindowMs) {
+      this.logger.i(`🔄 Captcha already started for user ${userId}, skipping`)
+      return
+    }
+
+    // Сгенерировать задачу и отправить сообщение
+    const challenge = this.generateCaptcha()
+    const questionId = this.actions
+      ? await this.actions.sendCaptchaMessage(chatId, userId, challenge.question, challenge.options, challenge.answer)
+      : 0
+
+    // Сохранить состояние
+    const restricted: RestrictedUser = {
+      userId,
+      chatId,
+      questionId,
+      answer: challenge.answer,
+      username,
+      firstName,
+      timestamp: now,
+      isAnswered: false,
+    }
+    await this.saveRestrictedToStore(restricted)
+
+    // Выдать mute (restrict)
+    if (this.actions) {
+      await this.actions.restrictUser(chatId, userId)
+    }
+  }
+
+  async submitAnswer(input: { userId: number, questionId?: number, answer?: number, isCorrect?: boolean }): Promise<void> {
+    const { userId, questionId, answer, isCorrect } = input
+    const restricted = await this.getRestrictedFromStore(userId)
+    if (!restricted)
+      return
+
+    // валидация
+    const computedCorrect = typeof isCorrect === "boolean"
+      ? isCorrect
+      : ((questionId === undefined || restricted.questionId === questionId) && (answer !== undefined && restricted.answer === answer))
+    restricted.isAnswered = true
+
+    if (!this.actions) {
+      await this.removeRestrictedFromStore(userId)
+      return
+    }
+
+    if (computedCorrect) {
+      await this.actions.unrestrictUser(restricted.chatId, restricted.userId)
+      await this.actions.deleteMessage(restricted.chatId, restricted.questionId)
+      await this.actions.sendResultMessage(restricted.chatId, "✅ Капча пройдена", this.policy.resultMessageDeleteMs)
+    } else {
+      await this.actions.deleteMessage(restricted.chatId, restricted.questionId)
+      await this.actions.kickUser(restricted.chatId, restricted.userId, restricted.firstName, this.policy.autoUnbanDelayMs)
+    }
+
+    await this.removeRestrictedFromStore(userId)
+  }
+
   /**
    * Добавление пользователя в список ограниченных
    */
@@ -151,7 +277,7 @@ export class CaptchaService implements IService {
       answer,
       username,
       firstName,
-      timestamp: Date.now(),
+      timestamp: this.getNow(),
       isAnswered: false,
     }
 
@@ -185,27 +311,9 @@ export class CaptchaService implements IService {
     // Отмечаем как отвеченный
     restrictedUser.isAnswered = true
 
-    if (isCorrect) {
-      // Вызываем колбэк успеха
-      if (this.onCaptchaSuccess) {
-        this.onCaptchaSuccess(restrictedUser)
-      }
-
-      // Удаляем пользователя из ограниченных
-      this.restrictedUsers.delete(userId)
-
-      return { isValid: true, user: restrictedUser }
-    } else {
-      // Вызываем колбэк неудачи
-      if (this.onCaptchaFailed) {
-        this.onCaptchaFailed(restrictedUser)
-      }
-
-      // Удаляем пользователя из ограниченных
-      this.restrictedUsers.delete(userId)
-
-      return { isValid: false, user: restrictedUser }
-    }
+    // Колбэки удалены — метод оставлен для обратной совместимости тестов.
+    this.restrictedUsers.delete(userId)
+    return { isValid: isCorrect, user: restrictedUser }
   }
 
   /**
@@ -257,7 +365,7 @@ export class CaptchaService implements IService {
       if (!this.isMonitoring)
         return
 
-      const now = Date.now()
+      const now = this.getNow()
       const expiredUsers: RestrictedUser[] = []
 
       for (const [userId, user] of this.restrictedUsers) {
@@ -274,7 +382,7 @@ export class CaptchaService implements IService {
       }
 
       if (this.isMonitoring) {
-        setTimeout(checkTimeouts, this.settings.checkIntervalMs)
+        this.setTimeoutWrapper(checkTimeouts, this.settings.checkIntervalMs)
       }
     }
 
@@ -287,24 +395,16 @@ export class CaptchaService implements IService {
   private handleCaptchaTimeout(user: RestrictedUser): void {
     this.logger.i(`⏰ Handling captcha timeout for user ${user.userId} (${user.firstName})`)
 
-    // Вызываем колбэк таймаута
-    if (this.onCaptchaTimeout) {
-      this.onCaptchaTimeout(user)
+    // Новая оркестрация таймаута
+    if (this.actions) {
+      void this.actions.deleteMessage(user.chatId, user.questionId)
+      // Временный бан, затем авторазбан (реализуется в адаптере через kick+delay или ban+unban)
+      void this.actions.restrictUser(user.chatId, user.userId, this.policy.temporaryBanDurationSec)
     }
   }
 
   // Колбэки для обработки событий капчи
-  public onCaptchaTimeout?: (user: RestrictedUser) => void
-
-  /**
-   * Колбэк успешного прохождения капчи
-   */
-  public onCaptchaSuccess?: (user: RestrictedUser) => void
-
-  /**
-   * Колбэк неудачного прохождения капчи
-   */
-  public onCaptchaFailed?: (user: RestrictedUser) => void
+  // legacy callbacks удалены — оркестрация внутри сервиса
 
   /**
    * Получение текущих настроек
@@ -328,6 +428,36 @@ export class CaptchaService implements IService {
     return {
       restrictedUsersCount: this.restrictedUsers.size,
       isMonitoring: this.isMonitoring,
+    }
+  }
+
+  // ===================== Internal store helpers =====================
+  private async getRestrictedFromStore(userId: number): Promise<RestrictedUser | null> {
+    if (this.repo) {
+      return await this.repo.get(userId)
+    }
+    return this.restrictedUsers.get(userId) || null
+  }
+
+  // ===================== Policy wiring =====================
+  updatePolicy(newPolicy: Partial<CaptchaPolicy>): void {
+    this.policy = { ...this.policy, ...newPolicy }
+    this.logger.i("⚙️ Captcha policy updated", newPolicy)
+  }
+
+  private async saveRestrictedToStore(user: RestrictedUser): Promise<void> {
+    if (this.repo) {
+      await this.repo.save(user)
+    } else {
+      this.restrictedUsers.set(user.userId, user)
+    }
+  }
+
+  private async removeRestrictedFromStore(userId: number): Promise<void> {
+    if (this.repo) {
+      await this.repo.remove(userId)
+    } else {
+      this.restrictedUsers.delete(userId)
     }
   }
 }
