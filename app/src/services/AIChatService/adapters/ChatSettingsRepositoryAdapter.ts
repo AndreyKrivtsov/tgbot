@@ -17,7 +17,7 @@ export class ChatSettingsRepositoryAdapter implements AIChatRepositoryPort {
   }
 
   async getSystemPromptForChat(chatId: number): Promise<string> {
-    return await (this.svc as any).getSystemPromptText(chatId)
+    return await this.svc.getSystemPromptText(chatId)
   }
 }
 

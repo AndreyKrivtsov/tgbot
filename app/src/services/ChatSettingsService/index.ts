@@ -98,8 +98,8 @@ export class ChatSettingsService implements IService {
    */
   async getSystemPromptText(chatId: number): Promise<string> {
     const config = await this.getChatConfig(chatId)
-    if (config?.systemPrompt && (this.chatRepository as any)?.buildSystemPromptString) {
-      return (this.chatRepository as any).buildSystemPromptString(config.systemPrompt) || AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
+    if (config?.systemPrompt) {
+      return this.chatRepository.buildSystemPromptString(config.systemPrompt) || AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
     }
     return AI_CHAT_CONFIG.DEFAULT_SYSTEM_PROMPT
   }
