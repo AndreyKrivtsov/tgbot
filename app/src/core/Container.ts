@@ -71,11 +71,13 @@ export class Container {
   async getAsync<T>(name: string): Promise<T> {
     // Сначала проверяем уже созданные экземпляры
     if (this.services.has(name)) {
+      console.log("🔄 Get already created async service name:", name)
       return this.services.get(name) as T
     }
 
     // Затем пытаемся создать из фабрики
     if (this.factories.has(name)) {
+      console.log("➕ Create async service name:", name)
       const factory = this.factories.get(name)!
       const instance = await factory()
 
