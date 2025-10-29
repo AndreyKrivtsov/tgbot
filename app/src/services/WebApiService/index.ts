@@ -26,11 +26,11 @@ interface BotConfig {
 }
 
 /**
- * Сервис API-сервера с админ панелью для Telegram бота
+ * Сервис Web API для админ панели Telegram бота
  * ПРИМЕЧАНИЕ: Для активации установите Fastify:
  * npm install fastify @fastify/cors @fastify/static
  */
-export class ApiServerService implements IService {
+export class WebApiService implements IService {
   private config: AppConfig
   private logger: Logger
   private dependencies: ApiServiceDependencies

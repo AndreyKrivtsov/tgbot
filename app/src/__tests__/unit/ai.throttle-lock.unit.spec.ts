@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals"
 import { AIChatService } from "../../services/AIChatService/AIChatService.js"
-import { AdaptiveChatThrottleManager } from "../../services/AIChatService/AdaptiveThrottleManager.js"
-import { makeConfig, makeLogger } from "../test-utils/mocks.js"
+import { AdaptiveChatThrottleManager } from "../../helpers/ai/AdaptiveThrottleManager.js"
+import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 
 class DummyProvider {
   async generateContent(): Promise<string> { return "ok" }
@@ -16,10 +16,11 @@ describe("aiChatService lock & throttle", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
@@ -34,6 +35,7 @@ describe("aiChatService lock & throttle", () => {
   it("throttle: задержка вызывается по длине ответа", async () => {
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
     const waitSpy = jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const repo = {
@@ -44,16 +46,13 @@ describe("aiChatService lock & throttle", () => {
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       throttle,
     )
     await ai.initialize()
-    const done = new Promise<void>((resolve) => {
-      (ai as any).onMessageResponse = () => resolve()
-    })
     await ai.processMessage(1, 1, "hello")
-    await done
+    await new Promise<void>(resolve => setTimeout(resolve, 100))
     expect(waitSpy).toHaveBeenCalled()
   })
 })

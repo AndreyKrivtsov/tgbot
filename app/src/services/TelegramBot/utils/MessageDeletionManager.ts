@@ -1,11 +1,10 @@
-import type { IService } from "../../../core/Container.js"
 import type { Logger } from "../../../helpers/Logger.js"
 import type { RedisService } from "../../RedisService/index.js"
 import type { DeletionTask, TelegramBot } from "../types/index.js"
 import { BOT_CONFIG } from "../../../constants.js"
 
 /**
- * Менеджер автоудаления сообщений с поддержкой персистентности и retry логики
+ * Утилита для автоудаления сообщений с поддержкой персистентности и retry логики
  *
  * Особенности:
  * - Хранение в памяти + Redis для персистентности
@@ -13,7 +12,7 @@ import { BOT_CONFIG } from "../../../constants.js"
  * - Автоматическое восстановление задач при перезапуске
  * - Подробное логирование всех операций
  */
-export class MessageDeletionManager implements IService {
+export class MessageDeletionManager {
   private pendingDeletions = new Map<number, DeletionTask>()
   private processingTimer?: NodeJS.Timeout
   private isRunning = false
@@ -46,8 +45,6 @@ export class MessageDeletionManager implements IService {
       // Сохраняем в память И в Redis
       this.pendingDeletions.set(messageId, task)
       await this.redisService.set(`deletion:${messageId}`, task, BOT_CONFIG.MESSAGE_DELETION_REDIS_TTL_SEC)
-
-      this.logger.d(`📅 Scheduled deletion for message ${messageId} in ${deleteAfterMs}ms (chat: ${chatId})`)
     } catch (error) {
       this.logger.e(`❌ Failed to schedule deletion for message ${messageId}:`, error)
       // Убираем из памяти при ошибке сохранения в Redis
@@ -57,27 +54,17 @@ export class MessageDeletionManager implements IService {
   }
 
   /**
-   * Инициализация сервиса
+   * Инициализация менеджера
    */
   async initialize(): Promise<void> {
-    this.logger.i("🚀 Initializing MessageDeletionManager...")
-
     await this.loadPendingTasks()
     this.startProcessing()
 
     this.isRunning = true
-    this.logger.i(`✅ MessageDeletionManager started with ${this.pendingDeletions.size} pending tasks`)
   }
 
   /**
-   * Запуск сервиса (alias для initialize)
-   */
-  async start(): Promise<void> {
-    await this.initialize()
-  }
-
-  /**
-   * Остановка сервиса
+   * Остановка менеджера
    */
   async stop(): Promise<void> {
     if (this.processingTimer) {
@@ -177,8 +164,6 @@ export class MessageDeletionManager implements IService {
     if (expiredTasks.length === 0) {
       return // Нет просроченных задач
     }
-
-    this.logger.d(`⏰ Processing ${expiredTasks.length} expired deletion tasks`)
 
     // Обрабатываем каждую задачу
     for (const task of expiredTasks) {

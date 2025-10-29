@@ -3,21 +3,19 @@ import type { AppConfig } from "../../config.js"
 import type { DatabaseService } from "../DatabaseService/index.js"
 import type { RedisService } from "../RedisService/index.js"
 import type { EventBus } from "../../core/EventBus.js"
+import { EVENTS } from "../../core/EventBus.js"
 // ChatConfigService удалён: используется ChatSettingsRepositoryAdapter
 import { MessageProcessor } from "./MessageProcessor.js"
 import { AIResponseService } from "./AIResponseService.js"
-import { TypingManager } from "./TypingManager.js"
 import { ChatContextManager } from "./ChatContextManager.js"
 import type { ChatContext } from "./ChatContextManager.js"
-import { ChatQueueManager } from "./ChatQueueManager.js"
-import { AdaptiveChatThrottleManager } from "./AdaptiveThrottleManager.js"
-import type { MessageQueueItem } from "./MessageQueue.js"
+import { TypingManager } from "../../helpers/ai/TypingManager.js"
+import { ChatQueueManager } from "../../helpers/ai/ChatQueueManager.js"
+import { AdaptiveChatThrottleManager } from "../../helpers/ai/AdaptiveThrottleManager.js"
+import type { MessageQueueItem } from "../../helpers/ai/MessageQueue.js"
 import type { IAIProvider } from "./providers/IAIProvider.js"
-import type { AIChatActionsPort, AIChatRepositoryPort, IAIResponseService, IChatConfigService, IMessageProcessor, ITypingManager, ProcessMessageResult } from "./interfaces.js"
+import type { AIChatActionsPort, AIChatRepositoryPort, AIResponseResult, IAIResponseService, IChatConfigService, IMessageProcessor, ITypingManager, ProcessMessageResult } from "./interfaces.js"
 import { AI_CHAT_CONFIG } from "../../constants.js"
-import { ContextLifecycle } from "./facades/ContextLifecycle.js"
-import { ResponseDispatcher } from "./facades/ResponseDispatcher.js"
-import { MessagePipeline } from "./MessagePipeline.js"
 
 interface AIChatDependencies {
   database?: DatabaseService
@@ -31,23 +29,19 @@ export class AIChatService {
   private config: AppConfig
   private logger: Logger
   private dependencies: AIChatDependencies
+  private eventBus?: EventBus
 
   private chatConfigService: IChatConfigService
   private messageProcessor: IMessageProcessor
   private aiResponseService: IAIResponseService
   private typingManager: ITypingManager
   private contextManager: ChatContextManager
-  private contextLifecycle: ContextLifecycle
   private queueManager: ChatQueueManager
   private throttleManager: AdaptiveChatThrottleManager
-  private dispatcher: ResponseDispatcher
-  private pipeline: MessagePipeline
 
   private nextMessageId = 1
   private contextSaveTimer?: NodeJS.Timeout
   private processingContexts: Set<string> = new Set()
-
-  public onMessageResponse?: (contextId: string, response: string, messageId: number, userMessageId?: number, isError?: boolean) => void
 
   public setSendTypingAction(sendTypingAction: (chatId: number) => Promise<void>): void {
     this.typingManager = new TypingManager(this.logger, sendTypingAction)
@@ -64,6 +58,7 @@ export class AIChatService {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
+    this.eventBus = dependencies.eventBus
 
     // Используем только репозиторийный порт (ChatSettingsRepositoryAdapter)
     if (!dependencies.repository) {
@@ -80,20 +75,8 @@ export class AIChatService {
     this.messageProcessor = new MessageProcessor(logger)
     this.aiResponseService = new AIResponseService(logger, aiProvider)
     this.contextManager = new ChatContextManager(dependencies.redis)
-    this.contextLifecycle = new ContextLifecycle(this.contextManager, logger)
     this.queueManager = new ChatQueueManager()
     this.throttleManager = throttleManager || new AdaptiveChatThrottleManager(logger)
-    this.dispatcher = new ResponseDispatcher(logger, (contextId, response, messageId, userMessageId, isError) => {
-      this.onMessageResponse?.(contextId, response, messageId, userMessageId, isError)
-    })
-    this.pipeline = new MessagePipeline({
-      logger,
-      contextLifecycle: this.contextLifecycle,
-      aiResponseService: this.aiResponseService,
-      chatConfigService: this.chatConfigService,
-      throttleManager: this.throttleManager,
-      dispatcher: this.dispatcher,
-    })
 
     const typingFunction = _sendTypingAction
       || dependencies.actions?.sendTyping
@@ -196,6 +179,25 @@ export class AIChatService {
     }
   }
 
+  // ==========================================================================
+  // МЕТОДЫ ДЛЯ РАБОТЫ С КОНТЕКСТОМ (перенесено из ContextLifecycle)
+  // ==========================================================================
+
+  private async getOrCreateContext(contextId: string): Promise<ChatContext> {
+    let context = this.contextManager.getContext(contextId)
+    if (!context) {
+      const cached = await this.contextManager.loadFromCache(contextId)
+      if (cached) {
+        context = cached
+        this.contextManager.setContext(contextId, context)
+      } else {
+        context = this.contextManager.createContext(contextId)
+      }
+    }
+    this.ensureContextShape(context)
+    return context
+  }
+
   private ensureContextShape(context: ChatContext): void {
     if (!Array.isArray(context.messages)) {
       this.logger.e("context.messages is not an array! Восстанавливаю...")
@@ -203,44 +205,145 @@ export class AIChatService {
     }
   }
 
-  private async processQueuedMessage(queueItem: MessageQueueItem & { apiKey?: string }): Promise<void> {
-    try {
-      await this.pipeline.run({ queueItem })
-    } catch (error) {
-      this.logger.e("Error processing queued message:", error)
-      const errorMessage = `Ошибка обработки: ${error instanceof Error ? error.message : "Unknown error"}`
-      this.dispatcher.emitError(queueItem.contextId, errorMessage, queueItem.id, queueItem.userMessageId)
-    } finally {
-      this.typingManager.stopTyping(queueItem.contextId)
+  private appendUserMessage(context: ChatContext, text: string): void {
+    context.messages.push({ role: "user", content: text, timestamp: Date.now() })
+  }
+
+  private appendModelMessage(context: ChatContext, text: string): void {
+    context.messages.push({ role: "model", content: text, timestamp: Date.now() })
+  }
+
+  private pruneContextByLimit(context: ChatContext, maxMessages: number): void {
+    if (context.messages.length > maxMessages) {
+      context.messages = context.messages.slice(-maxMessages)
     }
   }
 
-  private async getOrCreateContext(contextId: string): Promise<ChatContext> {
-    let context = this.contextManager.getContext(contextId)
-    if (!context) {
-      const cachedContext = await this.contextManager.loadFromCache(contextId)
-      if (cachedContext) {
-        context = cachedContext
-        this.contextManager.setContext(contextId, context)
-      } else {
-        context = this.contextManager.createContext(contextId)
-      }
+  private touchContext(context: ChatContext, incrementRequestCount: boolean = false): void {
+    context.lastActivity = Date.now()
+    if (incrementRequestCount) {
+      context.requestCount++
     }
-    return context
+  }
+
+  private commitContext(contextId: string, context: ChatContext): void {
+    this.contextManager.setContext(contextId, context)
+  }
+
+  // ==========================================================================
+  // МЕТОДЫ ДЛЯ ОТПРАВКИ ОТВЕТОВ (перенесено из ResponseDispatcher)
+  // ==========================================================================
+
+  private async emitSuccess(contextId: string, text: string, messageId: number, userMessageId?: number): Promise<void> {
+    const chatId = Number.parseInt(contextId)
+    if (!this.eventBus)
+      return
+
+    try {
+      await this.eventBus.emitAIResponse({
+        chatId,
+        text,
+        replyToMessageId: userMessageId,
+        isError: false,
+        actions: [
+          {
+            type: "sendMessage",
+            params: {
+              text,
+              replyToMessageId: userMessageId,
+            },
+          },
+        ],
+      })
+    } catch (error) {
+      this.logger.e("Error emitting AI success:", error)
+    }
+  }
+
+  private async emitError(contextId: string, errorText: string, messageId: number, userMessageId?: number): Promise<void> {
+    const chatId = Number.parseInt(contextId)
+    if (!this.eventBus)
+      return
+
+    try {
+      await this.eventBus.emitAIResponse({
+        chatId,
+        text: errorText,
+        replyToMessageId: userMessageId,
+        isError: true,
+        actions: [
+          {
+            type: "sendMessage",
+            params: {
+              text: errorText,
+              autoDelete: 20000, // Ошибки удаляются через 20 сек
+            },
+          },
+        ],
+      })
+    } catch (error) {
+      this.logger.e("Error emitting AI error:", error)
+    }
+  }
+
+  // ==========================================================================
+  // ОБРАБОТКА СООБЩЕНИЙ (упрощенная логика из MessagePipeline)
+  // ==========================================================================
+
+  private async processQueuedMessage(queueItem: MessageQueueItem & { apiKey?: string }): Promise<void> {
+    try {
+      const context = await this.getOrCreateContext(queueItem.contextId)
+
+      const chatId = Number(queueItem.contextId)
+      const systemPrompt = await this.chatConfigService.getSystemPromptForChat(chatId)
+      const apiKey = queueItem.apiKey || (await this.chatConfigService.getApiKeyForChat(chatId))?.key
+
+      if (!apiKey) {
+        this.emitError(queueItem.contextId, "API key not found", queueItem.id, queueItem.userMessageId)
+        return
+      }
+
+      this.appendUserMessage(context, queueItem.message)
+
+      const responseResult: AIResponseResult = await this.aiResponseService.generateResponse({
+        message: queueItem.message,
+        context,
+        systemPrompt,
+        apiKey,
+      })
+
+      if (!responseResult.success) {
+        const errorMessage = `Ошибка AI: ${responseResult.error || "Unknown error"}`
+        this.emitError(queueItem.contextId, errorMessage, queueItem.id, queueItem.userMessageId)
+        return
+      }
+
+      this.appendModelMessage(context, responseResult.response!)
+      this.touchContext(context, true)
+      this.pruneContextByLimit(context, AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES)
+      this.commitContext(queueItem.contextId, context)
+
+      const responseText = responseResult.response!
+      await this.throttleManager.waitForThrottle(queueItem.contextId, responseText.length)
+      this.emitSuccess(queueItem.contextId, responseText, queueItem.id, queueItem.userMessageId)
+    } catch (error) {
+      this.logger.e("Error processing queued message:", error)
+      const errorMessage = `Ошибка обработки: ${error instanceof Error ? error.message : "Unknown error"}`
+      this.emitError(queueItem.contextId, errorMessage, queueItem.id, queueItem.userMessageId)
+    } finally {
+      this.typingManager.stopTyping(queueItem.contextId)
+    }
   }
 
   private startContextAutoSave(): void {
     this.contextSaveTimer = setInterval(async () => {
       try {
         await this.contextManager.saveAllToCache()
-        this.logger.d("Auto-saved all contexts to cache")
       } catch (error) {
         this.logger.e("Error auto-saving contexts:", error)
       }
     }, AI_CHAT_CONFIG.CONTEXT_SAVE_INTERVAL_MS)
   }
-
-  
 
   async initialize(): Promise<void> {
     await this.start()
@@ -254,7 +357,7 @@ export class AIChatService {
   public setupEventBusListeners(eventBus?: EventBus): void {
     if (!eventBus)
       return
-    eventBus.on("message.received", async (context: any) => {
+    eventBus.on(EVENTS.MESSAGE_RECEIVED, async (context: any) => {
       try {
         const { from, text, chat } = context
         if (!from || !text || !chat)

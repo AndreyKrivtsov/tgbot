@@ -11,22 +11,22 @@ import type {
 } from "./types/index.js"
 import { GramioBot } from "./core/GramioBot.js"
 import type { EventBus } from "../../core/EventBus.js"
+// EVENTS not used here
 
 // Утилиты
 import { SettingsManager } from "./utils/SettingsManager.js"
 // UserRestrictions removed; use TelegramModerationAdapter instead
 
 // Feature модули
-// Feature managers removed in favor of direct services
-import { UserManager } from "./features/UserManager.js"
-import { MessageDeletionManager } from "./features/MessageDeletionManager.js"
+// Utils for user and message management
+import { UserManager } from "./utils/UserManager.js"
+import { MessageDeletionManager } from "./utils/MessageDeletionManager.js"
 
 // Обработчики
 import { MessageHandlerNew as MessageHandler } from "./handlers/MessageHandlerNew.js"
 import { MemberHandler } from "./handlers/MemberHandler.js"
 import { CallbackHandler } from "./handlers/CallbackHandler.js"
 import { CommandHandler } from "./handlers/CommandHandler.js"
-import { ModerationEventHandler } from "./handlers/ModerationEventHandler.js"
 // import type { CaptchaActionsPort } from "../CaptchaService/index.js"
 
 /**
@@ -54,7 +54,6 @@ export class TelegramBotService implements IService {
   private memberHandler: MemberHandler | null = null
   private callbackHandler: CallbackHandler | null = null
   private commandHandler: CommandHandler | null = null
-  private moderationEventHandler: ModerationEventHandler | null = null
   private eventBusRef: EventBus | null = null
 
   constructor(
@@ -108,15 +107,21 @@ export class TelegramBotService implements IService {
           await this.messageDeletionManager.initialize()
         }
 
-        // Если EventBus был передан раньше, подключаем слушатели и сохраняем ссылку сейчас
+        // Сохраняем EventBus для использования в initializeModules
+        let pendingBus: EventBus | undefined
         if ((this as any)._pendingEventBus) {
-          const pendingBus = (this as any)._pendingEventBus as EventBus
+          pendingBus = (this as any)._pendingEventBus as EventBus
+          this.eventBusRef = pendingBus
           ;(this as any)._pendingEventBus = undefined
-          this.setupEventBusListeners(pendingBus)
         }
 
         // Инициализируем все модули (требует eventBus для нового обработчика)
         await this.initializeModules()
+
+        // Подключаем EventBus слушатели после инициализации модулей
+        if (pendingBus) {
+          this.setupEventBusListeners(pendingBus)
+        }
 
         // Настраиваем обработчики событий
         this.setupEventHandlers()
@@ -141,6 +146,9 @@ export class TelegramBotService implements IService {
 
     const settings = this.settingsManager.getSettings()
 
+    // Для обработчиков требуется EventBus
+    const eventBus = this.eventBusRef as EventBus
+
     // Инициализируем утилиты (moderation uses adapters in handlers)
 
     // feature managers no longer initialized
@@ -151,12 +159,6 @@ export class TelegramBotService implements IService {
       throw new Error("ChatRepository is required")
     }
 
-    // Проверяем наличие ChatSettingsService
-    if (!this.dependencies.chatSettingsService) {
-      this.logger.e("❌ ChatSettingsService is required for TelegramBot handlers")
-      throw new Error("ChatSettingsService is required")
-    }
-
     // Инициализируем обработчики
     this.commandHandler = new CommandHandler(
       this.logger,
@@ -165,12 +167,11 @@ export class TelegramBotService implements IService {
       this.userManager,
       this.dependencies.chatRepository,
       this,
-      this.dependencies.chatSettingsService,
       this.dependencies.chatService,
+      eventBus,
     )
 
     // Для нового обработчика требуется EventBus
-    const eventBus = this.eventBusRef as EventBus
     this.messageHandler = new MessageHandler(
       this.logger,
       this.config,
@@ -194,6 +195,7 @@ export class TelegramBotService implements IService {
       this.userManager,
       this.dependencies.chatRepository,
       this.dependencies.captchaService,
+      eventBus,
     )
 
     this.callbackHandler = new CallbackHandler(
@@ -202,10 +204,6 @@ export class TelegramBotService implements IService {
       this.dependencies.captchaService,
     )
 
-    this.moderationEventHandler = new ModerationEventHandler(
-      this.bot,
-      new (await import("./adapters/ModerationAdapter.js")).TelegramModerationAdapter(this.bot, this.logger),
-    )
     // Подключаем AIChatService к EventBus (он может слушать события напрямую)
     try {
       (this.dependencies.chatService as any)?.setupEventBusListeners?.(eventBus)
@@ -235,9 +233,6 @@ export class TelegramBotService implements IService {
       this.logger.w("🚫 Telegram bot not available (GramIO not installed or BOT_TOKEN not set)")
       return
     }
-
-    // Настраиваем колбэки для сервисов
-    this.setupServiceCallbacks()
 
     if (this.isRunning) {
       this.logger.w("TelegramBot service is already running")
@@ -335,7 +330,7 @@ export class TelegramBotService implements IService {
       return
     }
 
-    this.logger.i("🔧 Setting up event handlers...")
+    // this.logger.i("🔧 Setting up event handlers...")
 
     // Обработка сообщений
     this.bot.on("message", (context: TelegramMessageContext) => {
@@ -344,19 +339,17 @@ export class TelegramBotService implements IService {
 
     // Обработка новых участников
     this.bot.on("new_chat_members", (context: TelegramNewMembersContext) => {
-      this.logger.i("🔥 NEW_CHAT_MEMBERS event received in TelegramBotService!")
       this.memberHandler!.handleNewChatMembers(context)
     })
 
     // Обработка ушедших участников
     this.bot.on("left_chat_member", (context: any) => {
-      this.logger.i("👋 LEFT_CHAT_MEMBER event received")
       this.memberHandler!.handleLeftChatMember(context)
     })
 
     // Обработка изменений участников
     this.bot.on("chat_member", (context: any) => {
-      this.logger.i("👥 CHAT_MEMBER event received")
+      // this.logger.i("👥 CHAT_MEMBER event received")
       this.memberHandler!.handleChatMember(context)
     })
 
@@ -366,31 +359,6 @@ export class TelegramBotService implements IService {
     })
 
     this.logger.i("✅ Event handlers setup completed")
-  }
-
-  /**
-   * Настройка колбэков для сервисов
-   */
-  private setupServiceCallbacks(): void {
-    // Колбэки для CaptchaService больше не требуются — оркестрация внутри сервиса
-
-    // Колбэки для ChatService
-    if (this.dependencies.chatService && this.messageHandler) {
-      this.dependencies.chatService.onMessageResponse = (contextId: string, response: string, messageId: number, userMessageId?: number, isError?: boolean) => {
-        (this.messageHandler as any)?.handleAIResponse(contextId, response, messageId, userMessageId, isError)
-      }
-
-      // Настраиваем функцию отправки typing action напрямую в AIChatService
-      this.dependencies.chatService.setSendTypingAction(async (chatId: number) => {
-        try {
-          if (this.bot) {
-            await this.bot.sendChatAction(chatId, "typing")
-          }
-        } catch (error) {
-          this.logger.e("Error sending typing action:", error)
-        }
-      })
-    }
   }
 
   /**
@@ -507,57 +475,23 @@ export class TelegramBotService implements IService {
    */
   setupEventBusListeners(eventBus: EventBus): void {
     this.eventBusRef = eventBus
-    if (!this.moderationEventHandler) {
-      this.logger.w("⚠️ ModerationEventHandler not initialized")
-      return
+
+    // Инициализируем TelegramActionsAdapter для обработки событий
+    if (this.bot) {
+      import("./adapters/TelegramActionsAdapter.js").then(({ TelegramActionsAdapter }) => {
+        const actionsAdapter = new TelegramActionsAdapter(
+          this.bot!,
+          this.logger,
+          eventBus,
+          this.userManager,
+        )
+        actionsAdapter.initialize()
+      }).catch((error) => {
+        this.logger.e("Error loading TelegramActionsAdapter:", error)
+      })
     }
 
-    this.moderationEventHandler.setupEventListeners(eventBus)
     // Подписка на результаты AI модерации (batch)
-    eventBus.on("moderation.batchResult", async (payload: any) => {
-      try {
-        const { chatId, violations } = payload || {}
-        if (!chatId || !Array.isArray(violations) || violations.length === 0) {
-          return
-        }
-        // Применяем действия по каждому нарушению
-        for (const v of violations) {
-          const action = String(v.action || "").toLowerCase()
-          const reason = v.reason || "Нарушение правил"
-          // Находим автора сообщения, если передан список сообщений в payload
-          const message = (payload.messages || []).find((m: any) => m.id === v.messageId)
-          const userId = message?.userId
-          switch (action) {
-            case "delete":
-              await this.bot?.deleteMessage(chatId, v.messageId)
-              break
-            case "warn":
-              await this.bot?.sendGroupMessage({ chat_id: chatId, text: `⚠️ Предупреждение. Причина: ${reason}` } as any)
-              break
-            case "mute":
-              if (userId) {
-                await (this.moderationEventHandler as any).moderation.restrictUser(chatId, userId)
-              }
-              break
-            case "kick":
-              if (userId) {
-                await (this.moderationEventHandler as any).moderation.kickUserFromChat(chatId, userId, "user")
-              }
-              break
-            case "ban":
-              if (userId) {
-                await (this.moderationEventHandler as any).moderation.banUserFromChat(chatId, userId)
-              }
-              break
-            default:
-              // неизвестное действие — пропускаем
-              break
-          }
-        }
-      } catch (error) {
-        this.logger.e("Error applying moderation batch results:", error)
-      }
-    })
     this.logger.i("✅ EventBus listeners setup completed")
   }
 }

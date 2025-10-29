@@ -1,7 +1,8 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot, TelegramBotSettings, TelegramChatMemberContext, TelegramLeftMemberContext, TelegramNewMembersContext } from "../types/index.js"
-import { TelegramModerationAdapter } from "../adapters/ModerationAdapter.js"
-import type { UserManager } from "../features/UserManager.js"
+import type { EventBus } from "../../../core/EventBus.js"
+import { EVENTS } from "../../../core/EventBus.js"
+import type { UserManager } from "../utils/UserManager.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 
@@ -12,10 +13,10 @@ export class MemberHandler {
   private logger: Logger
   private settings: TelegramBotSettings
   private bot?: TelegramBot
-  private moderation: TelegramModerationAdapter
   private userManager: UserManager
   private chatRepository: ChatRepository
   private captchaService?: CaptchaService
+  private eventBus?: EventBus
 
   // Кеш для предотвращения дублирования капчи
   private recentlyProcessedUsers = new Map<number, number>() // userId -> timestamp
@@ -29,14 +30,15 @@ export class MemberHandler {
     userManager: UserManager,
     chatRepository: ChatRepository,
     captchaService?: CaptchaService,
+    eventBus?: EventBus,
   ) {
     this.logger = logger
     this.settings = settings
     this.bot = botOrUndefined
-    this.moderation = new TelegramModerationAdapter(botOrUndefined as any, logger)
     this.userManager = userManager
     this.chatRepository = chatRepository
     this.captchaService = captchaService
+    this.eventBus = eventBus
   }
 
   /**
@@ -98,72 +100,18 @@ export class MemberHandler {
 
   /**
    * Обработка новых участников
+   * Только удаление системного сообщения. Вся логика обработки в handleChatMember.
+   * Не эмитит событие member.joined, так как оно обрабатывается в handleChatMember.
    */
   async handleNewChatMembers(context: TelegramNewMembersContext): Promise<void> {
     try {
-      // Диагностическое логирование
-      this.logger.i("🔥 NEW_CHAT_MEMBERS event handler called!")
-      this.logger.i(`Context type: ${typeof context}`)
-      this.logger.i(`Context keys: ${Object.keys(context)}`)
-
       const chatId = context.chat.id
-      this.logger.i(`Chat ID: ${chatId}`)
-
-      // Проверяем, активен ли чат (единая семантика)
-      const isActive = await this.chatRepository.isChatActive(chatId)
-      this.logger.i(`Chat is active: ${isActive}`)
-
-      if (!isActive) {
-        this.logger.w(`Chat ${chatId} is not active or not found in database, skipping new members processing`)
-        return
-      }
-
-      const newMembers = context.newChatMembers
-      const messageId = (context as any).messageId || (context as any).message_id || context.id
-
-      this.logger.i(`New members count: ${newMembers?.length || 0}`)
-      this.logger.i(`Message ID: ${messageId}`)
-      this.logger.i(`Captcha service available: ${this.captchaService ? "YES" : "NO"}`)
-
-      // Сохраняем соответствие userId <-> username для каждого нового участника
-      if (Array.isArray(newMembers)) {
-        for (const member of newMembers) {
-          await this.userManager.saveUserMapping(chatId, member.id, member.username)
-        }
-      }
+      const messageId = context.id
 
       // Удаляем системное сообщение о присоединении
       if (this.settings.deleteSystemMessages && messageId) {
-        await this.moderation.deleteMessage(chatId, messageId)
+        await this.bot?.deleteMessage(chatId, messageId)
       }
-
-      // Обрабатываем новых участников
-      if (newMembers?.length) {
-        const realUsers = newMembers.filter((user: any) => !user.isBot())
-        const bots = newMembers.filter((user: any) => user.isBot())
-
-        if (realUsers.length > 0) {
-          this.logger.i(`🎯 Processing ${realUsers.length} new members in chat ${chatId}`)
-
-          // Логируем каждого пользователя
-          realUsers.forEach((user: any, index: number) => {
-            this.logger.i(`Real user ${index + 1}: ${user.firstName || "NoName"} (ID: ${user.id}, @${user.username || "no_username"})`)
-          })
-        }
-
-        if (bots.length > 0) {
-          this.logger.d(`🤖 Skipping ${bots.length} bots`)
-        }
-
-        for (const user of realUsers) {
-          this.logger.i(`🔐 Initiating captcha for user ${user.id}`)
-          await this.initiateUserCaptchaWithDuplicateCheck(chatId, user, "NEW_CHAT_MEMBERS")
-        }
-      } else {
-        this.logger.w("No new members found in context!")
-      }
-
-      this.logger.i("✅ handleNewChatMembers completed")
     } catch (error) {
       this.logger.e("❌ Error handling new chat members:", error)
     }
@@ -171,29 +119,21 @@ export class MemberHandler {
 
   /**
    * Обработка ушедших участников
+   * Только удаление системного сообщения. Вся логика обработки в handleChatMember.
+   * Не эмитит событие member.left, так как оно обрабатывается в handleChatMember.
    */
   async handleLeftChatMember(context: TelegramLeftMemberContext): Promise<void> {
     try {
       const chatId = context.chat?.id
-      const leftUser = context.leftChatMember
       const messageId = context.id
 
       if (!chatId) {
-        this.logger.w("No chat ID in left member context")
         return
       }
 
       // Удаляем системное сообщение о покидании/исключении
       if (this.settings.deleteSystemMessages && messageId) {
-        await this.moderation.deleteMessage(chatId, messageId)
-      }
-      if (this.settings.deleteSystemMessages && messageId) {
-        await this.moderation.deleteMessage(chatId, messageId)
-      }
-
-      // Очищаем данные пользователя
-      if (leftUser?.id) {
-        await this.cleanupUserData(leftUser.id)
+        await this.bot?.deleteMessage(chatId, messageId)
       }
     } catch (error) {
       this.logger.e("❌ Error handling left chat member:", error)
@@ -202,6 +142,9 @@ export class MemberHandler {
 
   /**
    * Обработка изменений участника чата
+   *
+   * Централизованная обработка всех изменений статуса участников.
+   * События new_chat_members и left_chat_member только удаляют системные сообщения.
    */
   async handleChatMember(context: TelegramChatMemberContext): Promise<void> {
     try {
@@ -223,51 +166,77 @@ export class MemberHandler {
       }
 
       if (!chatId) {
-        this.logger.w("No chat ID in chat member context")
+        return
+      }
+
+      // Проверяем активность чата
+      const isActive = await this.chatRepository.isChatActive(chatId)
+      if (!isActive) {
         return
       }
 
       // Проверяем валидность статусов
       if (!isValidStatus(oldMember?.status) || !isValidStatus(newMember?.status)) {
-        this.logger.w("Некорректные статусы участников:", oldMember?.status, "->", newMember?.status)
         return
       }
 
-      this.logger.i(`🔄 CHAT_MEMBER event: ${oldMember.status} -> ${newMember.status}`)
+      const user = newMember.user
+      if (!user) {
+        return
+      }
+
+      // Пропускаем ботов
+      if (user.isBot()) {
+        return
+      }
 
       // Пользователь вступил в чат
       if (
         (oldMember.status === "left" || oldMember.status === "kicked" || !oldMember.isMember())
         && (newMember.status === "member" || newMember.status === "restricted")
       ) {
-        const user = newMember.user
-        if (user && !user.isBot()) {
-          this.logger.i(`🎉 Новый участник: ${user.id} (@${user.username || "no_username"})`)
-          await this.initiateUserCaptchaWithDuplicateCheck(chatId, user as any, "CHAT_MEMBER")
+        this.logger.i(`👋 User ${user.id} (@${user.username || "no_username"}) joined chat ${chatId}`)
+
+        // Сохраняем маппинг пользователя
+        await this.userManager.saveUserMapping(chatId, user.id, user.username)
+
+        // Эмитим member.joined
+        if (this.eventBus) {
+          await this.eventBus.emit(EVENTS.MEMBER_JOINED, {
+            chatId,
+            userId: user.id,
+            username: user.username,
+            firstName: user.firstName,
+          })
         }
         return
       }
 
       // Пользователь покинул чат
       if (newMember.status === "left" || newMember.status === "kicked" || !newMember.isMember()) {
-        const userId = newMember.user?.id
-        if (userId) {
-          this.logger.i(`👋 Пользователь покинул чат: ${userId}`)
-          await this.cleanupUserData(userId)
+        this.logger.i(`👋 User ${user.id} left chat ${chatId}`)
+
+        // Эмитим member.left
+        if (this.eventBus) {
+          await this.eventBus.emit(EVENTS.MEMBER_LEFT, { chatId, userId: user.id })
         }
         return
       }
 
       // Изменение прав
       if (oldMember.status !== newMember.status) {
-        const user = newMember.user
-        this.logger.i(`⚡ Изменение прав: ${oldMember.status} -> ${newMember.status} для пользователя ${user?.id}`)
-        // Здесь можно добавить дополнительную логику для изменения прав
-        return
+        this.logger.d(`⚡ Status change: ${oldMember.status} -> ${newMember.status} for user ${user.id}`)
+        // Эмитим member.updated
+        if (this.eventBus) {
+          await this.eventBus.emit(EVENTS.CHAT_MEMBER_UPDATED, {
+            chatId,
+            oldStatus: oldMember.status,
+            newStatus: newMember.status,
+            userId: user.id,
+            username: user.username,
+          })
+        }
       }
-
-      // Если ничего из вышеперечисленного — просто логируем
-      this.logger.i("Изменение не требует действий.")
     } catch (error) {
       this.logger.e("❌ Error handling chat member update:", error)
     }
@@ -288,8 +257,7 @@ export class MemberHandler {
 
       // Удаляем пользователя из ограниченных (капча)
       if (restrictedUser) {
-        await this.moderation.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
-        this.logger.d(`❌ Deleted message ${restrictedUser.questionId} in chat ${restrictedUser.chatId} for user ${restrictedUser.username ?? restrictedUser.firstName}`)
+        await this.bot?.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
         this.captchaService.removeRestrictedUser(userId)
         cleanedItems++
       }

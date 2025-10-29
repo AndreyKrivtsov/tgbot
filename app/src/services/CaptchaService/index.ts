@@ -1,14 +1,15 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
+import type { EventBus } from "../../core/EventBus.js"
 
 interface CaptchaDependencies {
   now?: () => number
   setTimeoutFn?: (fn: () => void, ms: number) => any
   rng?: () => number
-  actions?: CaptchaActionsPort
   repository?: CaptchaRepository
   policy?: Partial<CaptchaPolicy>
+  eventBus?: EventBus
 }
 
 export interface CaptchaSettings {
@@ -34,21 +35,6 @@ export interface RestrictedUser {
 }
 
 // ===================== Ports / Policies =====================
-export interface CaptchaActionsPort {
-  sendCaptchaMessage: (
-    chatId: number,
-    userId: number,
-    question: number[],
-    options: number[],
-    correctAnswer: number,
-  ) => Promise<number>
-  sendResultMessage: (chatId: number, text: string, autoDeleteMs?: number) => Promise<void>
-  restrictUser: (chatId: number, userId: number, durationSec?: number) => Promise<void>
-  unrestrictUser: (chatId: number, userId: number) => Promise<void>
-  kickUser: (chatId: number, userId: number, userName: string, autoUnbanDelayMs?: number) => Promise<void>
-  deleteMessage: (chatId: number, messageId: number) => Promise<void>
-}
-
 export interface CaptchaRepository {
   save: (user: RestrictedUser) => Promise<void>
   get: (userId: number) => Promise<RestrictedUser | null>
@@ -78,8 +64,8 @@ export class CaptchaService implements IService {
   private setTimeoutWrapper: (fn: () => void, ms: number) => any
   private random: () => number
   // ports
-  private actions?: CaptchaActionsPort
   private repo?: CaptchaRepository
+  private eventBus?: EventBus
   private policy: CaptchaPolicy = {
     temporaryBanDurationSec: 40,
     autoUnbanDelayMs: 5000,
@@ -110,8 +96,8 @@ export class CaptchaService implements IService {
     this.random = this.dependencies.rng || (() => Math.random())
 
     // wire ports
-    this.actions = this.dependencies.actions
     this.repo = this.dependencies.repository
+    this.eventBus = this.dependencies.eventBus
     if (this.dependencies.policy) {
       this.policy = { ...this.policy, ...this.dependencies.policy }
     }
@@ -122,6 +108,55 @@ export class CaptchaService implements IService {
    */
   async initialize(): Promise<void> {
     this.logger.i("🔐 Initializing captcha service...")
+
+    // Подписываемся на событие отправки сообщения капчи
+    if (this.eventBus) {
+      this.eventBus.onCaptchaMessageSent(async (event) => {
+        await this.updateQuestionId(event.userId, event.messageId)
+      })
+
+      // Подписка на события участников: запуск и очистка капчи
+      this.eventBus.onMemberJoined(async (evt) => {
+        try {
+          await this.startChallenge({
+            chatId: evt.chatId,
+            userId: evt.userId,
+            username: evt.username,
+            firstName: evt.firstName || "Unknown",
+          })
+        } catch (e) {
+          this.logger.e("Captcha start on member.joined failed:", e)
+        }
+      })
+
+      this.eventBus.onMemberLeft(async (evt) => {
+        try {
+          const existing = await this.getRestrictedFromStore(evt.userId)
+          if (!existing)
+            return
+
+          // Эмитим событие удаления сообщения капчи через существующий механизм
+          await this.eventBus!.emitCaptchaFailed({
+            chatId: existing.chatId,
+            userId: evt.userId,
+            username: existing.username,
+            firstName: existing.firstName,
+            reason: "timeout",
+            actions: [
+              {
+                type: "deleteMessage",
+                params: { messageId: existing.questionId },
+              },
+            ],
+          })
+
+          await this.removeRestrictedFromStore(evt.userId)
+        } catch (e) {
+          this.logger.e("Captcha cleanup on member.left failed:", e)
+        }
+      })
+    }
+
     this.logger.i("✅ Captcha service initialized")
   }
 
@@ -205,17 +240,15 @@ export class CaptchaService implements IService {
       return
     }
 
-    // Сгенерировать задачу и отправить сообщение
+    // Сгенерировать задачу
     const challenge = this.generateCaptcha()
-    const questionId = this.actions
-      ? await this.actions.sendCaptchaMessage(chatId, userId, challenge.question, challenge.options, challenge.answer)
-      : 0
 
-    // Сохранить состояние
+    // Генерируем событие начала капчи (NEW_MEMBER уже есть, но можно добавить CAPTCHA_STARTED)
+    // Пока сохраняем состояние с questionId = 0, он будет установлен обработчиком события
     const restricted: RestrictedUser = {
       userId,
       chatId,
-      questionId,
+      questionId: 0, // Будет установлен обработчиком
       answer: challenge.answer,
       username,
       firstName,
@@ -224,9 +257,36 @@ export class CaptchaService implements IService {
     }
     await this.saveRestrictedToStore(restricted)
 
-    // Выдать mute (restrict)
-    if (this.actions) {
-      await this.actions.restrictUser(chatId, userId)
+    // Генерируем событие для отправки капчи
+    if (this.eventBus) {
+      await this.eventBus.emit("captcha.challenge", {
+        chatId,
+        userId,
+        username,
+        firstName,
+        question: challenge.question,
+        options: challenge.options,
+        correctAnswer: challenge.answer,
+        actions: [
+          {
+            type: "sendMessage",
+            params: {
+              text: `Ответьте на пример: ${challenge.question[0]} + ${challenge.question[1]} = ?`,
+              inlineKeyboard: challenge.options.map((option: number, index: number) => [{
+                text: `${option}`,
+                callback_data: `captcha_${userId}_${index}_${option === challenge.answer ? "correct" : "wrong"}`,
+              }]),
+            },
+          },
+          {
+            type: "restrict",
+            params: {
+              userId,
+              permissions: "none",
+            },
+          },
+        ],
+      })
     }
   }
 
@@ -242,18 +302,58 @@ export class CaptchaService implements IService {
       : ((questionId === undefined || restricted.questionId === questionId) && (answer !== undefined && restricted.answer === answer))
     restricted.isAnswered = true
 
-    if (!this.actions) {
-      await this.removeRestrictedFromStore(userId)
-      return
-    }
-
     if (computedCorrect) {
-      await this.actions.unrestrictUser(restricted.chatId, restricted.userId)
-      await this.actions.deleteMessage(restricted.chatId, restricted.questionId)
-      await this.actions.sendResultMessage(restricted.chatId, "✅ Капча пройдена", this.policy.resultMessageDeleteMs)
+      // Генерируем событие успешного прохождения капчи
+      if (this.eventBus) {
+        await this.eventBus.emitCaptchaPassed({
+          chatId: restricted.chatId,
+          userId: restricted.userId,
+          username: restricted.username,
+          firstName: restricted.firstName,
+          actions: [
+            {
+              type: "unrestrict",
+              params: {
+                userId: restricted.userId,
+                permissions: "full",
+              },
+            },
+            {
+              type: "deleteMessage",
+              params: {
+                messageId: restricted.questionId,
+              },
+            },
+          ],
+        })
+      }
     } else {
-      await this.actions.deleteMessage(restricted.chatId, restricted.questionId)
-      await this.actions.kickUser(restricted.chatId, restricted.userId, restricted.firstName, this.policy.autoUnbanDelayMs)
+      // Генерируем событие неудачного прохождения капчи
+      if (this.eventBus) {
+        await this.eventBus.emitCaptchaFailed({
+          chatId: restricted.chatId,
+          userId: restricted.userId,
+          username: restricted.username,
+          firstName: restricted.firstName,
+          reason: "wrong_answer",
+          actions: [
+            {
+              type: "deleteMessage",
+              params: {
+                messageId: restricted.questionId,
+              },
+            },
+            {
+              type: "ban",
+              params: {
+                userId: restricted.userId,
+                userName: restricted.firstName,
+                durationSec: 60,
+              },
+            },
+          ],
+        })
+      }
     }
 
     await this.removeRestrictedFromStore(userId)
@@ -320,13 +420,9 @@ export class CaptchaService implements IService {
    * Удаление пользователя из списка ограниченных
    */
   removeRestrictedUser(userId: number): RestrictedUser | undefined {
-    this.logger.i(`🔓 Removing user ${userId} from restricted list`)
-
     const user = this.restrictedUsers.get(userId)
     if (user) {
       this.restrictedUsers.delete(userId)
-      this.logger.i(`✅ User ${userId} (${user.firstName}) removed from restrictions`)
-      this.logger.d(`Remaining restricted users: ${this.restrictedUsers.size}`)
     } else {
       this.logger.w(`⚠️ User ${userId} was not in restricted list`)
     }
@@ -368,9 +464,8 @@ export class CaptchaService implements IService {
       const now = this.getNow()
       const expiredUsers: RestrictedUser[] = []
 
-      for (const [userId, user] of this.restrictedUsers) {
+      for (const [_userId, user] of this.restrictedUsers) {
         if (!user.isAnswered && (now - user.timestamp) > this.settings.timeoutMs) {
-          this.logger.w(`⏰ Captcha timeout for user ${userId} (${user.firstName})`)
           expiredUsers.push(user)
         }
       }
@@ -393,13 +488,31 @@ export class CaptchaService implements IService {
    * Обработка таймаута капчи
    */
   private handleCaptchaTimeout(user: RestrictedUser): void {
-    this.logger.i(`⏰ Handling captcha timeout for user ${user.userId} (${user.firstName})`)
-
-    // Новая оркестрация таймаута
-    if (this.actions) {
-      void this.actions.deleteMessage(user.chatId, user.questionId)
-      // Временный бан, затем авторазбан (реализуется в адаптере через kick+delay или ban+unban)
-      void this.actions.restrictUser(user.chatId, user.userId, this.policy.temporaryBanDurationSec)
+    // Генерируем событие таймаута капчи
+    if (this.eventBus) {
+      void this.eventBus.emitCaptchaFailed({
+        chatId: user.chatId,
+        userId: user.userId,
+        username: user.username,
+        firstName: user.firstName,
+        reason: "timeout",
+        actions: [
+          {
+            type: "deleteMessage",
+            params: {
+              messageId: user.questionId,
+            },
+          },
+          {
+            type: "ban",
+            params: {
+              userId: user.userId,
+              userName: user.firstName,
+              durationSec: this.policy.temporaryBanDurationSec,
+            },
+          },
+        ],
+      })
     }
   }
 
@@ -437,6 +550,21 @@ export class CaptchaService implements IService {
       return await this.repo.get(userId)
     }
     return this.restrictedUsers.get(userId) || null
+  }
+
+  /**
+   * Обновление questionId у пользователя после отправки сообщения капчи
+   */
+  private async updateQuestionId(userId: number, messageId: number): Promise<void> {
+    const restricted = await this.getRestrictedFromStore(userId)
+    if (!restricted) {
+      this.logger.w(`⚠️ Cannot update questionId: user ${userId} not found in store`)
+      return
+    }
+
+    restricted.questionId = messageId
+    await this.saveRestrictedToStore(restricted)
+    this.logger.d(`✅ Updated questionId=${messageId} for user ${userId}`)
   }
 
   // ===================== Policy wiring =====================

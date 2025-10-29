@@ -5,9 +5,8 @@ import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
-import type { ChatSettingsService } from "../../ChatSettingsService/index.js"
 import type { GramioBot } from "../core/GramioBot.js"
-import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
+import type { MessageDeletionManager } from "../utils/MessageDeletionManager.js"
 
 /**
  * Структура задачи на удаление сообщения
@@ -25,7 +24,6 @@ export interface TelegramBotDependencies {
   antiSpamService?: AntiSpamService
   chatService?: AIChatService
   chatRepository?: ChatRepository
-  chatSettingsService?: ChatSettingsService
   messageDeletionManager?: MessageDeletionManager
 }
 

@@ -15,7 +15,7 @@ export class App {
 
   constructor() {
     this.logger = new Logger("App")
-    this.container = new Container(this.logger)
+    this.container = new Container()
     this.config = config
   }
 

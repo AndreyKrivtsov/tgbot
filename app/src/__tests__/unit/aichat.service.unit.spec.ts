@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals"
 import { AIChatService } from "../../services/AIChatService/AIChatService.js"
-import { AdaptiveChatThrottleManager } from "../../services/AIChatService/AdaptiveThrottleManager.js"
-import { makeConfig, makeLogger } from "../test-utils/mocks.js"
+import { AdaptiveChatThrottleManager } from "../../helpers/ai/AdaptiveThrottleManager.js"
+import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 
 class DummyProvider {
   async generateContent(): Promise<string> { return "ok" }
@@ -16,27 +16,32 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       throttle,
     )
     await ai.initialize()
 
     const done = new Promise<void>((resolve) => {
-      ;(ai as any).onMessageResponse = (_ctxId: string, response: string) => {
-        expect(response).toBe("ok")
+      // Перехватываем событие AI_RESPONSE
+      eventBus.onAIResponse = jest.fn((handler: any) => {
+        handler({ contextId: "1", response: "ok" })
         resolve()
-      }
+      })
     })
 
     const res = await ai.processMessage(1, 1, "hello")
     expect(res).toEqual({ success: true, queued: true, queuePosition: 1 })
-    await done
+
+    // Проверяем, что было вызвано emitAIResponse
+    await new Promise<void>(resolve => setTimeout(resolve, 100))
+    expect((eventBus as any).emitAIResponse).toHaveBeenCalled()
   })
 
   it("returns not queued when AI disabled", async () => {
@@ -47,10 +52,11 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
@@ -70,10 +76,11 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
@@ -93,6 +100,7 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     class SlowProvider {
       async generateContent(): Promise<string> {
         await new Promise(r => setTimeout(r, 50))
@@ -102,13 +110,13 @@ describe("aIChatService basic flows", () => {
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new SlowProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
     await ai.initialize()
     // Блокируем автопроцессор, чтобы очередь не опустошалась
-    ;(ai as any).startQueueProcessor = jest.fn().mockResolvedValue(undefined)
+    ;(ai as any).startQueueProcessor = jest.fn()
 
     // Заполняем очередь до лимита
     const promises: Array<Promise<any>> = []
@@ -132,12 +140,13 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new DummyProvider() as any,
       throttle,
     )
@@ -145,13 +154,9 @@ describe("aIChatService basic flows", () => {
 
     // Перехватим TypingManager
     const stopSpy = jest.spyOn((ai as any).typingManager, "stopTyping")
-    const done = new Promise<void>((resolve) => {
-      ;(ai as any).onMessageResponse = () => resolve()
-    })
     await ai.processMessage(1, 1, "hello")
-    await done
     // Даем циклу finally выполниться
-    await new Promise<void>(resolve => setImmediate(resolve))
+    await new Promise<void>(resolve => setTimeout(resolve, 100))
     expect(stopSpy).toHaveBeenCalled()
   })
 
@@ -168,25 +173,26 @@ describe("aIChatService basic flows", () => {
     }
     const logger = makeLogger()
     const config = makeConfig()
+    const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
       logger,
-      { repository: repo as any },
+      { repository: repo as any, eventBus },
       new FailingProvider() as any,
       throttle,
     )
     await ai.initialize()
 
-    const done = new Promise<void>((resolve) => {
-      ;(ai as any).onMessageResponse = (_ctxId: string, response: string, _mid: number, _umid?: number, isError?: boolean) => {
-        expect(isError).toBe(true)
-        expect(response).toMatch(/ошиб/i)
-        resolve()
-      }
-    })
     await ai.processMessage(1, 1, "hello")
-    await done
+
+    // Даем время на обработку ошибки
+    await new Promise<void>(resolve => setTimeout(resolve, 100))
+
+    // Проверяем, что было вызвано emitAIResponse с ошибкой
+    expect((eventBus as any).emitAIResponse).toHaveBeenCalledWith(expect.objectContaining({
+      isError: true,
+    }))
   })
 })

@@ -1,5 +1,3 @@
-import type { Logger } from "../helpers/Logger.js"
-
 export type ServiceFactory<T = any> = () => T | Promise<T>
 export type ServiceInstance<T = any> = T
 
@@ -18,11 +16,8 @@ export class Container {
   private factories = new Map<string, ServiceFactory>()
   private initialized = new Set<string>()
   private started = new Set<string>()
-  private logger: Logger
 
-  constructor(logger: Logger) {
-    this.logger = logger
-  }
+  constructor() {}
 
   /**
    * Регистрация сервиса или фабрики
@@ -30,11 +25,9 @@ export class Container {
   register<T>(name: string, serviceOrFactory: T | ServiceFactory<T>): void {
     if (typeof serviceOrFactory === "function") {
       this.factories.set(name, serviceOrFactory as ServiceFactory<T>)
-      this.logger.d(`📝 Registered factory: ${name}`)
     }
     else {
       this.services.set(name, serviceOrFactory)
-      this.logger.d(`📝 Registered service: ${name}`)
     }
   }
 
@@ -71,13 +64,11 @@ export class Container {
   async getAsync<T>(name: string): Promise<T> {
     // Сначала проверяем уже созданные экземпляры
     if (this.services.has(name)) {
-      console.log("🔄 Get already created async service name:", name)
       return this.services.get(name) as T
     }
 
     // Затем пытаемся создать из фабрики
     if (this.factories.has(name)) {
-      console.log("➕ Create async service name:", name)
       const factory = this.factories.get(name)!
       const instance = await factory()
 
@@ -100,8 +91,6 @@ export class Container {
    * Инициализация всех сервисов
    */
   async initialize(): Promise<void> {
-    this.logger.i("🔧 Initializing services...")
-
     // Создаем экземпляры из всех фабрик
     const factoryNames = Array.from(this.factories.keys())
     for (const name of factoryNames) {
@@ -111,50 +100,28 @@ export class Container {
     // Инициализируем все сервисы
     for (const [name, service] of this.services) {
       if (this.isService(service) && service.initialize && !this.initialized.has(name)) {
-        try {
-          await service.initialize()
-          this.initialized.add(name)
-          this.logger.d(`✅ Initialized: ${name}`)
-        }
-        catch (error) {
-          this.logger.e(`❌ Failed to initialize ${name}:`, error)
-          throw error
-        }
+        await service.initialize()
+        this.initialized.add(name)
       }
     }
-
-    this.logger.i("✅ All services initialized")
   }
 
   /**
    * Запуск всех сервисов
    */
   async start(): Promise<void> {
-    this.logger.i("🚀 Starting services...")
-
     for (const [name, service] of this.services) {
       if (this.isService(service) && service.start && !this.started.has(name)) {
-        try {
-          await service.start()
-          this.started.add(name)
-          this.logger.d(`✅ Started: ${name}`)
-        }
-        catch (error) {
-          this.logger.e(`❌ Failed to start ${name}:`, error)
-          throw error
-        }
+        await service.start()
+        this.started.add(name)
       }
     }
-
-    this.logger.i("✅ All services started")
   }
 
   /**
    * Остановка всех сервисов
    */
   async stop(): Promise<void> {
-    this.logger.i("🛑 Stopping services...")
-
     // Останавливаем в обратном порядке
     const startedServices = Array.from(this.started).reverse()
 
@@ -164,31 +131,25 @@ export class Container {
         try {
           await service.stop()
           this.started.delete(name)
-          this.logger.d(`✅ Stopped: ${name}`)
         }
-        catch (error) {
-          this.logger.e(`❌ Failed to stop ${name}:`, error)
+        catch {
+          // Игнорируем ошибки при остановке
         }
       }
     }
-
-    this.logger.i("✅ All services stopped")
   }
 
   /**
    * Освобождение ресурсов
    */
   async dispose(): Promise<void> {
-    this.logger.i("🗑️ Disposing services...")
-
-    for (const [name, service] of this.services) {
+    for (const [_name, service] of this.services) {
       if (this.isService(service) && service.dispose) {
         try {
           await service.dispose()
-          this.logger.d(`✅ Disposed: ${name}`)
         }
-        catch (error) {
-          this.logger.e(`❌ Failed to dispose ${name}:`, error)
+        catch {
+          // Игнорируем ошибки при освобождении ресурсов
         }
       }
     }
@@ -197,8 +158,6 @@ export class Container {
     this.factories.clear()
     this.initialized.clear()
     this.started.clear()
-
-    this.logger.i("✅ All services disposed")
   }
 
   /**

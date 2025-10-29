@@ -1,10 +1,14 @@
 import type { AppConfig } from "../../config.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { IService } from "../../core/Container.js"
+import type { EventBus, MessageReceivedEvent } from "../../core/EventBus.js"
+import { EVENTS } from "../../core/EventBus.js"
+
 import { ANTI_SPAM_CONFIG } from "../../constants.js"
 
 interface AntiSpamDependencies {
-  // Пока нет зависимостей, но оставляем для расширяемости
+  eventBus?: EventBus
+  userManager?: any // Для получения счетчиков пользователей
 }
 
 interface AntiSpamResult {
@@ -35,6 +39,8 @@ export class AntiSpamService implements IService {
   private dependencies: AntiSpamDependencies
   private settings: AntiSpamSettings
   private isRunning = false
+  private eventBus?: EventBus
+  private userManager?: any
 
   constructor(
     config: AppConfig,
@@ -53,6 +59,9 @@ export class AntiSpamService implements IService {
       retryDelayMs: ANTI_SPAM_CONFIG.RETRY_DELAY_MS,
       ...settings,
     }
+
+    this.eventBus = dependencies.eventBus
+    this.userManager = dependencies.userManager
   }
 
   /**
@@ -79,7 +88,102 @@ export class AntiSpamService implements IService {
     // Проверяем доступность API
     await this.healthCheck()
 
+    // Подписываемся на события сообщений если доступен EventBus
+    if (this.eventBus) {
+      this.setupEventListeners()
+    }
+
     this.logger.i("✅ Anti-spam service started")
+  }
+
+  /**
+   * Настройка слушателей событий
+   */
+  private setupEventListeners(): void {
+    if (!this.eventBus)
+      return
+
+    // Слушаем все входящие сообщения
+    this.eventBus.on(EVENTS.MESSAGE_RECEIVED, async (event: MessageReceivedEvent) => {
+      try {
+        // Проверяем только первые 5 сообщений пользователя
+        if (this.userManager) {
+          const userCounter = await this.userManager.getUserCounter(event.from.id)
+          if (userCounter && userCounter.messageCount > 5) {
+            return // Пропускаем проверку для опытных пользователей
+          }
+        }
+
+        // Проверяем сообщение на спам
+        const spamResult = await this.checkMessage(event.from.id, event.text)
+
+        if (spamResult.isSpam) {
+          // Получаем текущий счетчик спама
+          let spamCount = 0
+          if (this.userManager) {
+            const userCounter = await this.userManager.getUserCounter(event.from.id)
+            spamCount = userCounter?.spamCount || 0
+            // Увеличиваем счетчик
+            await this.userManager.incrementSpamCounter(event.from.id)
+          }
+
+          // Определяем действия в зависимости от счетчика спама
+          const actions: any[] = [
+            {
+              type: "deleteMessage",
+              params: { messageId: event.id },
+            },
+          ]
+
+          if (spamCount < 2) {
+            // Предупреждение
+            const modifier = spamCount > 0 ? "Повторное c" : ""
+            const escapedName = event.from.firstName.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")
+            actions.push({
+              type: "sendMessage",
+              params: {
+                text: `⚠️ ${modifier}Предупреждение для ${escapedName}: обнаружен спам`,
+                parseMode: "MarkdownV2",
+                autoDelete: 20000,
+              },
+            })
+          } else {
+            // Кик пользователя
+            const escapedName = event.from.firstName.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")
+            actions.push(
+              {
+                type: "sendMessage",
+                params: {
+                  text: `🚫 ${escapedName} удален за спам`,
+                  parseMode: "MarkdownV2",
+                  autoDelete: 20000,
+                },
+              },
+              {
+                type: "kick",
+                params: {
+                  userId: event.from.id,
+                  clearCounter: true,
+                },
+              },
+            )
+          }
+
+          // Генерируем событие обнаружения спама с действиями
+          await this.eventBus!.emitSpamDetected({
+            chatId: event.chat.id,
+            userId: event.from.id,
+            messageId: event.id,
+            username: event.from.username,
+            firstName: event.from.firstName,
+            spamCount,
+            actions,
+          })
+        }
+      } catch (error) {
+        this.logger.e("Error in spam detection:", error)
+      }
+    })
   }
 
   /**

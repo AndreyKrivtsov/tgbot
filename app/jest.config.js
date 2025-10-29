@@ -19,6 +19,7 @@ export default {
     // Позволяет импортировать .js пути в TS (ESM) во время тестов
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
+  setupFilesAfterEnv: ["<rootDir>/src/__tests__/setup.ts"],
   // Настройки для интеграционных тестов
   testTimeout: 15000,
   collectCoverageFrom: [

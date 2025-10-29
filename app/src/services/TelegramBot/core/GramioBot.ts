@@ -2,7 +2,7 @@ import { Bot } from "gramio"
 import type { MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import { BOT_CONFIG } from "../../../constants.js"
-import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
+import type { MessageDeletionManager } from "../utils/MessageDeletionManager.js"
 import { MessageFormatter } from "../utils/MessageFormatter.js"
 
 /**
@@ -30,37 +30,45 @@ export class GramioBot {
 
   /**
    * Запуск бота с настройкой allowed_updates для получения событий участников
+   * При ошибке подключения повторяет попытку каждую секунду
    */
   async start(): Promise<void> {
-    try {
-      // Настраиваем allowed_updates для получения всех необходимых событий
-      const allowedUpdates = [
-        "message",
-        "edited_message",
-        "callback_query",
-        "chat_member",
-        "left_chat_member",
-        "my_chat_member",
-      ]
+    let attempt = 0
 
-      this.logger.i("🔧 Configuring bot with allowed_updates:", allowedUpdates)
+    while (true) {
+      attempt++
 
-      // Очищаем webhook и настраиваем getUpdates с allowed_updates
-      await this.bot.api.deleteWebhook({ drop_pending_updates: true })
+      try {
+        // Настраиваем allowed_updates для получения всех необходимых событий
+        const allowedUpdates = [
+          "message",
+          "edited_message",
+          "callback_query",
+          "chat_member",
+          "left_chat_member",
+          "my_chat_member",
+        ]
 
-      // Настраиваем allowed_updates через getUpdates
-      await this.bot.api.getUpdates({
-        allowed_updates: allowedUpdates as any,
-        limit: 1,
-        timeout: 1,
-      })
+        this.logger.i(`🔧 [Attempt ${attempt}] Configuring bot...`)
 
-      this.logger.i("✅ Bot configured with allowed_updates successfully")
+        // Очищаем webhook и настраиваем getUpdates с allowed_updates
+        await this.bot.api.deleteWebhook({ drop_pending_updates: true })
 
-      await this.bot.start()
-    } catch (error) {
-      this.logger.e("❌ Failed to start bot with allowed_updates:", error)
-      throw error
+        // Настраиваем allowed_updates через getUpdates
+        await this.bot.api.getUpdates({
+          allowed_updates: allowedUpdates as any,
+          limit: 1,
+          timeout: 1,
+        })
+
+        await this.bot.start()
+
+        this.logger.i("✅ Bot started successfully")
+        return
+      } catch (error: any) {
+        this.logger.w(`⚠️ Failed to start bot. Retrying in 1 second...`, error)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
     }
   }
 
@@ -287,6 +295,20 @@ export class GramioBot {
    */
   async getChatAdministrators(chatId: number): Promise<any[]> {
     return await this.bot.api.getChatAdministrators({ chat_id: chatId })
+  }
+
+  /**
+   * Получить информацию об участнике чата (обертка над getChatMember)
+   */
+  async getChatMember(params: { chat_id: number, user_id: number | string }): Promise<any> {
+    return await this.bot.api.getChatMember(params as any)
+  }
+
+  /**
+   * Получить информацию о чате (обертка над getChat)
+   */
+  async getChat(params: { chat_id: number | string }): Promise<any> {
+    return await this.bot.api.getChat(params as any)
   }
 
   /**

@@ -2,7 +2,7 @@
  * Экспорт всех интерфейсов для AIChatService
  */
 
-export { AdaptiveChatThrottleManager } from "./AdaptiveThrottleManager.js"
+export { AdaptiveChatThrottleManager } from "../../helpers/ai/AdaptiveThrottleManager.js"
 
 // Экспорт рефакторированного сервиса
 export { AIChatService } from "./AIChatService.js"
@@ -24,7 +24,7 @@ export type {
 } from "./ChatContextManager.js"
 
 export { ChatContextManager } from "./ChatContextManager.js"
-export { ChatQueueManager } from "./ChatQueueManager.js"
+export { ChatQueueManager } from "../../helpers/ai/ChatQueueManager.js"
 // Экспорт интерфейсов из MessageProcessor
 export type {
   BotMentionResult,
@@ -35,8 +35,8 @@ export { MessageProcessor } from "./MessageProcessor.js"
 // Экспорт интерфейсов из MessageQueue
 export type {
   MessageQueueItem,
-} from "./MessageQueue.js"
-export { MessageQueue } from "./MessageQueue.js"
+} from "../../helpers/ai/MessageQueue.js"
+export { MessageQueue } from "../../helpers/ai/MessageQueue.js"
 // Экспорт интерфейсов из провайдеров
 export type {
   IAIProvider,
@@ -45,9 +45,9 @@ export type {
 export type {
   ITypingManager,
   TypingState,
-} from "./TypingManager.js"
+} from "../../helpers/ai/TypingManager.js"
 
-export { TypingManager } from "./TypingManager.js"
+export { TypingManager } from "../../helpers/ai/TypingManager.js"
 
 /**
  * Базовый интерфейс для всех сервисов AIChatService

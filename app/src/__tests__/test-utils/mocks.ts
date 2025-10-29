@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals"
 import type { AppConfig } from "../../config.js"
 import type { Logger } from "../../helpers/Logger.js"
-import type { CaptchaActionsPort } from "../../services/CaptchaService/index.js"
+import type { EventBus } from "../../core/EventBus.js"
 
 export function makeConfig(): AppConfig {
   return ({
@@ -33,27 +33,62 @@ export function makeLogger(): Logger {
   } as unknown as Logger)
 }
 
-export function makeActions(): CaptchaActionsPort {
+export function makeEventBus(): EventBus {
+  const emit = jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
+  const emitFunc = jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
+  
   return ({
-    sendCaptchaMessage: jest.fn().mockResolvedValue(123),
-    sendResultMessage: jest.fn().mockResolvedValue(undefined),
-    restrictUser: jest.fn().mockResolvedValue(undefined),
-    unrestrictUser: jest.fn().mockResolvedValue(undefined),
-    kickUser: jest.fn().mockResolvedValue(undefined),
-    deleteMessage: jest.fn().mockResolvedValue(undefined),
-  } as unknown as CaptchaActionsPort)
+    on: jest.fn(),
+    emit,
+    onMessageReceived: jest.fn(),
+    emitMessageReceived: emitFunc,
+    onSpamDetected: jest.fn(),
+    emitSpamDetected: emitFunc,
+    onCaptchaPassed: jest.fn(),
+    emitCaptchaPassed: emitFunc,
+    onCaptchaFailed: jest.fn(),
+    emitCaptchaFailed: emitFunc,
+    onCaptchaMessageSent: jest.fn(),
+    emitCaptchaMessageSent: emitFunc,
+    onAIResponse: jest.fn(),
+    emitAIResponse: emitFunc,
+    onModerationBatchResult: jest.fn(),
+    emitModerationBatchResult: emitFunc,
+    onMemberJoined: jest.fn(),
+    emitMemberJoined: emitFunc,
+    onMemberLeft: jest.fn(),
+    emitMemberLeft: emitFunc,
+    onChatMemberUpdated: jest.fn(),
+    emitChatMemberUpdated: emitFunc,
+    onCommandRegister: jest.fn(),
+    emitCommandRegister: emitFunc,
+    onCommandUnregister: jest.fn(),
+    emitCommandUnregister: emitFunc,
+    onCommandBan: jest.fn(),
+    emitCommandBan: emitFunc,
+    onCommandUnban: jest.fn(),
+    emitCommandUnban: emitFunc,
+    onCommandMute: jest.fn(),
+    emitCommandMute: emitFunc,
+    onCommandUnmute: jest.fn(),
+    emitCommandUnmute: emitFunc,
+    onCommandUltronToggle: jest.fn(),
+    emitCommandUltronToggle: emitFunc,
+    onCommandAddAltronKey: jest.fn(),
+    emitCommandAddAltronKey: emitFunc,
+  } as unknown as EventBus)
 }
 
 export function makeFakeBot() {
   return ({
-    deleteMessage: jest.fn().mockResolvedValue(undefined),
-    sendMessage: jest.fn().mockResolvedValue({ messageId: 1 }),
-    sendGroupMessage: jest.fn().mockResolvedValue(undefined),
-    restrictUser: jest.fn().mockResolvedValue(undefined),
-    kickUser: jest.fn().mockResolvedValue(undefined),
-    banUser: jest.fn().mockResolvedValue(undefined),
-    unbanUser: jest.fn().mockResolvedValue(undefined),
-    getChatAdministrators: jest.fn().mockResolvedValue([]),
+    deleteMessage: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    sendMessage: jest.fn<() => Promise<any>>().mockResolvedValue({ messageId: 1 }),
+    sendGroupMessage: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    restrictUser: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    kickUser: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    banUser: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    unbanUser: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    getChatAdministrators: jest.fn<() => Promise<any[]>>().mockResolvedValue([]),
   })
 }
 
