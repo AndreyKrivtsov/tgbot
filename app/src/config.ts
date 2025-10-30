@@ -8,7 +8,6 @@ export interface AppConfig {
 
   // Сервисы
   ANTISPAM_URL: string
-  LLAMA_URL: string
 
   // Опциональные сервисы
   REDIS_URL: string
@@ -43,8 +42,6 @@ export const config: AppConfig = {
   DATABASE_URL: env.get("DATABASE_URL").required().asString(),
 
   ANTISPAM_URL: env.get("ANTISPAM_URL").required().asString(),
-
-  LLAMA_URL: env.get("LLAMA_URL").required().asString(),
 
   // Опциональные сервисы
   REDIS_URL: env.get("REDIS_URL").required().asString(),

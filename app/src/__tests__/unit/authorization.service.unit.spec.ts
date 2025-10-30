@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals"
 import { AuthorizationService } from "../../services/AuthorizationService/index.js"
 import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 

@@ -186,11 +186,13 @@ export class Application {
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
         const logger = await this.container.getAsync("logger") as any
         const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+        const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
         const geminiAdapter = new GeminiAdapter(logger)
         return new AIModerationService(this.config, logger, {
           eventBus,
           geminiAdapter,
           chatRepository,
+          redisService,
         })
       })
     }

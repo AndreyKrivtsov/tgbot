@@ -8,6 +8,20 @@ class DummyProvider {
 }
 
 describe("aIChatService basic flows", () => {
+  let aiToDispose: AIChatService | undefined
+  let throttleToDispose: AdaptiveChatThrottleManager | undefined
+
+  afterEach(async () => {
+    if (aiToDispose) {
+      await aiToDispose.stop()
+      aiToDispose = undefined
+    }
+    if (throttleToDispose) {
+      throttleToDispose.dispose()
+      throttleToDispose = undefined
+    }
+  })
+
   it("returns queued and emits response when AI enabled and key exists", async () => {
     const repo = {
       isAiEnabledForChat: async () => true,
@@ -18,6 +32,7 @@ describe("aIChatService basic flows", () => {
     const config = makeConfig()
     const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
+    throttleToDispose = throttle
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
@@ -26,6 +41,7 @@ describe("aIChatService basic flows", () => {
       new DummyProvider() as any,
       throttle,
     )
+    aiToDispose = ai
     await ai.initialize()
 
     const done = new Promise<void>((resolve) => {
@@ -60,6 +76,7 @@ describe("aIChatService basic flows", () => {
       new DummyProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
+    aiToDispose = ai
     await ai.initialize()
 
     const res = await ai.processMessage(1, 1, "hello")
@@ -84,6 +101,7 @@ describe("aIChatService basic flows", () => {
       new DummyProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
+    aiToDispose = ai
     await ai.initialize()
 
     const res = await ai.processMessage(1, 1, "hello")
@@ -114,6 +132,7 @@ describe("aIChatService basic flows", () => {
       new SlowProvider() as any,
       new AdaptiveChatThrottleManager(logger),
     )
+    aiToDispose = ai
     await ai.initialize()
     // Блокируем автопроцессор, чтобы очередь не опустошалась
     ;(ai as any).startQueueProcessor = jest.fn()
@@ -142,6 +161,7 @@ describe("aIChatService basic flows", () => {
     const config = makeConfig()
     const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
+    throttleToDispose = throttle
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
@@ -150,6 +170,7 @@ describe("aIChatService basic flows", () => {
       new DummyProvider() as any,
       throttle,
     )
+    aiToDispose = ai
     await ai.initialize()
 
     // Перехватим TypingManager
@@ -175,6 +196,7 @@ describe("aIChatService basic flows", () => {
     const config = makeConfig()
     const eventBus = makeEventBus()
     const throttle = new AdaptiveChatThrottleManager(logger)
+    throttleToDispose = throttle
     jest.spyOn(throttle as any, "waitForThrottle").mockResolvedValue(undefined)
     const ai = new AIChatService(
       config,
@@ -183,6 +205,7 @@ describe("aIChatService basic flows", () => {
       new FailingProvider() as any,
       throttle,
     )
+    aiToDispose = ai
     await ai.initialize()
 
     await ai.processMessage(1, 1, "hello")

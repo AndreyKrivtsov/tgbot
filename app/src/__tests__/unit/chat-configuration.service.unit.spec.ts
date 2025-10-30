@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals"
 import { ChatConfigurationService } from "../../services/ChatConfigurationService/index.js"
 import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 import { EVENTS } from "../../core/EventBus.js"
@@ -40,13 +41,16 @@ describe("ChatConfigurationService (unit)", () => {
 
   it("handleUltronToggle: проверяет права для текущего чата", async () => {
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ULTRON_TOGGLE, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      enabled: true,
-      actorUsername: "admin",
-    })
+    const handler = (eventBus as any).onCommandUltronToggle.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        enabled: true,
+        actorUsername: "admin",
+      })
+    }
 
     expect(mockAuthorizationService.checkGroupAdmin).toHaveBeenCalledWith(-456, 123, "admin")
     expect(mockChatRepository.toggleAi).toHaveBeenCalledWith(-456, true)
@@ -56,14 +60,17 @@ describe("ChatConfigurationService (unit)", () => {
     mockAuthorizationService.isSuperAdmin.mockReturnValueOnce(false)
 
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ULTRON_TOGGLE, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      targetChat: { username: "testgroup" },
-      enabled: true,
-      actorUsername: "user",
-    })
+    const handler = (eventBus as any).onCommandUltronToggle.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        targetChat: { username: "testgroup" },
+        enabled: true,
+        actorUsername: "user",
+      })
+    }
 
     expect(mockAuthorizationService.isSuperAdmin).toHaveBeenCalledWith("user")
     expect(mockChatRepository.toggleAi).not.toHaveBeenCalled()
@@ -71,13 +78,16 @@ describe("ChatConfigurationService (unit)", () => {
 
   it("handleUltronToggle: включает AI для текущего чата", async () => {
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ULTRON_TOGGLE, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      enabled: true,
-      actorUsername: "admin",
-    })
+    const handler = (eventBus as any).onCommandUltronToggle.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        enabled: true,
+        actorUsername: "admin",
+      })
+    }
 
     expect(mockChatRepository.toggleAi).toHaveBeenCalledWith(-456, true)
     expect(eventBus.emitAIResponse).toHaveBeenCalledWith(
@@ -89,14 +99,17 @@ describe("ChatConfigurationService (unit)", () => {
 
   it("handleAddAltronKey: работает только в приватном чате", async () => {
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ADD_ALTRON_KEY, {
-      actorId: 123,
-      chatId: -456, // группа
-      messageId: 789,
-      targetChat: { username: "testgroup" },
-      apiKey: "test-key",
-      actorUsername: "user",
-    })
+    const handler = (eventBus as any).onCommandAddAltronKey.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456, // группа
+        messageId: 789,
+        targetChat: { username: "testgroup" },
+        apiKey: "test-key",
+        actorUsername: "user",
+      })
+    }
 
     expect(eventBus.emitAIResponse).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -110,14 +123,17 @@ describe("ChatConfigurationService (unit)", () => {
     mockChatRepository.isAdmin.mockResolvedValueOnce(true)
 
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ADD_ALTRON_KEY, {
-      actorId: 123,
-      chatId: 456, // приватный чат
-      messageId: 789,
-      targetChat: { username: "testgroup" },
-      apiKey: "test-key",
-      actorUsername: "user",
-    })
+    const handler = (eventBus as any).onCommandAddAltronKey.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: 456, // приватный чат
+        messageId: 789,
+        targetChat: { username: "testgroup" },
+        apiKey: "test-key",
+        actorUsername: "user",
+      })
+    }
 
     expect(mockChatRepository.isAdmin).toHaveBeenCalled()
   })
@@ -127,14 +143,17 @@ describe("ChatConfigurationService (unit)", () => {
     mockChatRepository.isAdmin.mockResolvedValueOnce(true)
 
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_ADD_ALTRON_KEY, {
-      actorId: 123,
-      chatId: 456,
-      messageId: 789,
-      targetChat: { username: "testgroup" },
-      apiKey: "test-key-123",
-      actorUsername: "user",
-    })
+    const handler = (eventBus as any).onCommandAddAltronKey.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: 456,
+        messageId: 789,
+        targetChat: { username: "testgroup" },
+        apiKey: "test-key-123",
+        actorUsername: "user",
+      })
+    }
 
     expect(mockChatRepository.setApiKey).toHaveBeenCalledWith(-123, "test-key-123")
     expect(eventBus.emitAIResponse).toHaveBeenCalled()
@@ -148,4 +167,3 @@ describe("ChatConfigurationService (unit)", () => {
     })
   })
 })
-

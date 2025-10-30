@@ -17,11 +17,6 @@ export class MemberHandler {
   private chatRepository: ChatRepository
   private captchaService?: CaptchaService
   private eventBus?: EventBus
-
-  // Кеш для предотвращения дублирования капчи
-  private recentlyProcessedUsers = new Map<number, number>() // userId -> timestamp
-  private readonly DUPLICATE_PREVENTION_TIMEOUT_MS = 2000 // 10 секунд
-
   constructor(
     logger: Logger,
     settings: TelegramBotSettings,
@@ -39,63 +34,6 @@ export class MemberHandler {
     this.chatRepository = chatRepository
     this.captchaService = captchaService
     this.eventBus = eventBus
-  }
-
-  /**
-   * Проверка и инициация капчи с защитой от дублирования
-   */
-  private async initiateUserCaptchaWithDuplicateCheck(chatId: number, user: any, eventType: string): Promise<void> {
-    const now = Date.now()
-    const lastProcessed = this.recentlyProcessedUsers.get(user.id)
-
-    // Проверяем, не обрабатывали ли мы этого пользователя недавно
-    if (lastProcessed && (now - lastProcessed) < this.DUPLICATE_PREVENTION_TIMEOUT_MS) {
-      this.logger.i(`🔄 User ${user.id} already processed recently (${Math.round((now - lastProcessed) / 1000)}s ago), skipping ${eventType} event`)
-      return
-    }
-
-    // Дополнительная проверка через CaptchaService
-    if (this.captchaService?.isUserRestricted(user.id)) {
-      this.logger.i(`🔄 User ${user.id} already has active captcha, skipping ${eventType} event`)
-      return
-    }
-
-    // Обновляем кеш
-    this.recentlyProcessedUsers.set(user.id, now)
-
-    // Очищаем старые записи из кеша
-    this.cleanupRecentlyProcessedUsers()
-
-    // Инициируем капчу через use-case сервиса
-    if (!this.captchaService) {
-      this.logger.w("Captcha service not available, skipping captcha initiation")
-      return
-    }
-
-    this.logger.i(`🔐 Initiating captcha for user ${user.id} via ${eventType} event`)
-
-    try {
-      await this.captchaService.startChallenge({
-        chatId,
-        userId: user.id,
-        username: user.username,
-        firstName: user.firstName,
-      })
-    } catch (error) {
-      this.logger.e(`❌ Error initiating captcha for user ${user.id}:`, error)
-    }
-  }
-
-  /**
-   * Очистка старых записей из кеша
-   */
-  private cleanupRecentlyProcessedUsers(): void {
-    const now = Date.now()
-    for (const [userId, timestamp] of this.recentlyProcessedUsers.entries()) {
-      if (now - timestamp > this.DUPLICATE_PREVENTION_TIMEOUT_MS) {
-        this.recentlyProcessedUsers.delete(userId)
-      }
-    }
   }
 
   /**
@@ -243,41 +181,6 @@ export class MemberHandler {
   }
 
   /**
-   * Очистка данных пользователя при покидании чата
-   */
-  private async cleanupUserData(userId: number): Promise<void> {
-    try {
-      if (!this.captchaService) {
-        return
-      }
-
-      const restrictedUser = this.captchaService.getRestrictedUser(userId)
-
-      let cleanedItems = 0
-
-      // Удаляем пользователя из ограниченных (капча)
-      if (restrictedUser) {
-        await this.bot?.deleteMessage(restrictedUser.chatId, restrictedUser.questionId)
-        this.captchaService.removeRestrictedUser(userId)
-        cleanedItems++
-      }
-
-      // Удаляем счетчик сообщений пользователя
-      const hasCounter = await this.userManager.hasMessageCounter(userId)
-      if (hasCounter) {
-        await this.userManager.deleteMessageCounter(userId)
-        cleanedItems++
-      }
-
-      if (cleanedItems > 0) {
-        this.logger.d(`🧹 Cleaned ${cleanedItems} items for user ${userId}`)
-      }
-    } catch (error) {
-      this.logger.e(`Error cleaning up data for user ${userId}:`, error)
-    }
-  }
-
-  /**
    * Проверка доступности капча сервиса
    */
   hasCaptchaService(): boolean {
@@ -294,20 +197,6 @@ export class MemberHandler {
 
     return {
       restrictedUsers,
-    }
-  }
-
-  /**
-   * Принудительная очистка данных пользователя (для админских команд)
-   */
-  async forceCleanupUser(userId: number): Promise<boolean> {
-    try {
-      await this.cleanupUserData(userId)
-      this.logger.i(`🧹 Force cleanup completed for user ${userId}`)
-      return true
-    } catch (error) {
-      this.logger.e(`Error in force cleanup for user ${userId}:`, error)
-      return false
     }
   }
 }

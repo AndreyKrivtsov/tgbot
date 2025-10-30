@@ -220,11 +220,6 @@ export class AntiSpamService implements IService {
       return { isSpam: false, error: "Service not running" }
     }
 
-    if (!this.config.ANTISPAM_URL) {
-      this.logger.w("❌ ANTISPAM_URL not configured")
-      return { isSpam: false, error: "API URL not configured" }
-    }
-
     if (!message || message.trim().length === 0) {
       return { isSpam: false, reason: "Empty message" }
     }

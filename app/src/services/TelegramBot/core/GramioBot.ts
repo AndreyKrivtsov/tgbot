@@ -87,9 +87,50 @@ export class GramioBot {
 
   /**
    * Получение информации о боте
+   * При ошибке подключения повторяет попытку каждую секунду
    */
   async getMe() {
-    return await this.bot.api.getMe()
+    let attempt = 0
+    const startTime = Date.now()
+
+    while (true) {
+      attempt++
+
+      try {
+        if (attempt === 1) {
+          this.logger.i(`🔍 Getting bot info...`)
+        } else {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000)
+          this.logger.w(`⚠️ [Attempt ${attempt}] Retrying to get bot info... (elapsed: ${elapsed}s)`)
+        }
+        
+        const botInfo = await this.bot.api.getMe()
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        this.logger.i(`✅ Bot info retrieved successfully (${elapsed}s, ${attempt} attempt${attempt > 1 ? 's' : ''})`)
+        return botInfo
+      } catch (error: any) {
+        // Проверяем, является ли это сетевой ошибкой
+        const isNetworkError = error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' || 
+                               error?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
+                               error?.message?.includes('fetch failed') ||
+                               error?.message?.includes('timeout')
+
+        if (isNetworkError) {
+          // Логируем детали ошибки только на первых попытках и периодически
+          if (attempt === 1 || attempt % 10 === 0) {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000)
+            const errorCode = error?.cause?.code || error?.code || 'UNKNOWN'
+            this.logger.w(`⚠️ Network error (${errorCode}) on attempt ${attempt} (${elapsed}s elapsed). Retrying...`)
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } else {
+          // Если это не сетевая ошибка, логируем детали и пробрасываем дальше
+          const elapsed = Math.floor((Date.now() - startTime) / 1000)
+          this.logger.e(`❌ Non-network error after ${attempt} attempt(s) (${elapsed}s elapsed):`, error)
+          throw error
+        }
+      }
+    }
   }
 
   /**

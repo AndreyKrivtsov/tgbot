@@ -3,6 +3,7 @@ import { CaptchaService } from "../../services/CaptchaService/index.js"
 import { MemberHandler } from "../../services/TelegramBot/handlers/MemberHandler.js"
 import { CallbackHandler } from "../../services/TelegramBot/handlers/CallbackHandler.js"
 import { makeEventBus, makeConfig, makeLogger, makeUser } from "../test-utils/mocks.js"
+import { EVENTS } from "../../core/EventBus.js"
 
 describe("captcha integration (MemberHandler + CallbackHandler)", () => {
   it("полный поток: новый участник -> вопрос -> корректный ответ -> снятие ограничений", async () => {
@@ -13,6 +14,8 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       now: () => Date.now(),
       policy: { duplicateWindowMs: 2000 },
     })
+
+    await service.initialize()
 
     const chatRepository = { isChatActive: async () => true } as any
     const userManager = {
@@ -35,9 +38,13 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       userManager,
       chatRepository,
       service,
+      eventBus,
     )
 
     const callbackHandler = new CallbackHandler(logger, {} as any, service)
+
+    // Перехватываем обработчик MEMBER_JOINED для CaptchaService
+    const memberJoinedHandler = (eventBus as any).onMemberJoined.mock.calls.find((call: any[]) => call[0] !== undefined)?.[0]
 
     // Используем handleChatMember вместо handleNewChatMembers
     await memberHandler.handleChatMember({
@@ -54,7 +61,23 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       },
     } as any)
 
-    // Проверяем, что было эмитировано событие captcha.challenge
+    // Проверяем, что было эмитировано событие MEMBER_JOINED
+    expect((eventBus as any).emit).toHaveBeenCalledWith(EVENTS.MEMBER_JOINED, expect.objectContaining({
+      userId: 777,
+      chatId: 1,
+    }))
+
+    // Вызываем обработчик вручную, так как мок не делает это автоматически
+    if (memberJoinedHandler) {
+      await memberJoinedHandler({
+        chatId: 1,
+        userId: 777,
+        username: "user777",
+        firstName: "John",
+      })
+    }
+
+    // Проверяем, что CaptchaService обработал событие и эмитировал captcha.challenge
     expect((eventBus as any).emit).toHaveBeenCalledWith("captcha.challenge", expect.objectContaining({
       userId: 777,
       chatId: 1,
@@ -79,6 +102,8 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
     const logger = makeLogger()
     const service = new CaptchaService(makeConfig(), logger, { eventBus })
 
+    await service.initialize()
+
     const chatRepository = { isChatActive: async () => false } as any
     const userManager = {
       saveUserMapping: jest.fn<(
@@ -100,6 +125,7 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       userManager,
       chatRepository,
       service,
+      eventBus,
     )
 
     await memberHandler.handleChatMember({
@@ -116,13 +142,16 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       },
     } as any)
 
-    expect((eventBus as any).emit).not.toHaveBeenCalled()
+    // Неактивный чат — событие MEMBER_JOINED не эмитируется
+    expect((eventBus as any).emit).not.toHaveBeenCalledWith(EVENTS.MEMBER_JOINED, expect.anything())
   })
 
   it("memberHandler: боты игнорируются", async () => {
     const eventBus = makeEventBus()
     const logger = makeLogger()
     const service = new CaptchaService(makeConfig(), logger, { eventBus })
+
+    await service.initialize()
 
     const chatRepository = { isChatActive: async () => true } as any
     const userManager = {
@@ -145,6 +174,7 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       userManager,
       chatRepository,
       service,
+      eventBus,
     )
 
     await memberHandler.handleChatMember({
@@ -161,13 +191,16 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       },
     } as any)
 
-    expect((eventBus as any).emit).not.toHaveBeenCalled()
+    // Боты игнорируются — событие MEMBER_JOINED не эмитируется
+    expect((eventBus as any).emit).not.toHaveBeenCalledWith(EVENTS.MEMBER_JOINED, expect.anything())
   })
 
   it("callbackHandler: чужая капча игнорируется", async () => {
     const eventBus = makeEventBus()
     const logger = makeLogger()
     const service = new CaptchaService(makeConfig(), logger, { eventBus })
+
+    await service.initialize()
 
     const callbackHandler = new CallbackHandler(logger, {} as any, service)
 

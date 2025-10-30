@@ -244,7 +244,13 @@ export class TelegramBotService implements IService {
       this.isRunning = true
 
       // Получаем информацию о боте
-      const botInfo = await this.bot.getMe()
+      let botInfo: any = null
+      try {
+        botInfo = await this.bot.getMe()
+      } catch (error: any) {
+        this.logger.e("❌ Failed to get bot info:", error)
+        throw error
+      }
 
       // Кешируем информацию о боте в Redis
       if (this.dependencies.redisService) {

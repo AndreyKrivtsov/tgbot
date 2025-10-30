@@ -5,6 +5,7 @@ import { EVENTS } from "../../core/EventBus.js"
 import { AI_MODERATION_CONFIG } from "../../constants.js"
 import type { GeminiAdapter } from "../AIChatService/providers/GeminiAdapter.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
+import type { RedisService } from "../RedisService/index.js"
 
 interface BufferedMessage {
   id: number
@@ -15,10 +16,22 @@ interface BufferedMessage {
   name?: string
 }
 
+interface WarningRecord {
+  username: string
+  timestamp: number
+  reason: string
+  action: "warn" | "mute" | "ban" | "kick"
+}
+
+interface WarningHistoryForAI {
+  username: string
+  reason: string
+}
+
 interface ModerationViolation {
   messageId: number
   reason: string
-  action: "delete" | "warn" | "mute" | "kick" | "ban"
+  action: "warn" | "mute" | "kick" | "ban"
 }
 
 export class AIModerationService {
@@ -27,10 +40,13 @@ export class AIModerationService {
   private eventBus?: EventBus
   private geminiAdapter?: GeminiAdapter
   private chatRepository?: ChatRepository
+  private redisService?: RedisService
 
   private buffers = new Map<number, BufferedMessage[]>()
   private windowStartByChat = new Map<number, number>()
   private intervalId?: NodeJS.Timeout
+
+  private static readonly WARNING_HISTORY_TTL_SEC = 3600 // 1 час
 
   constructor(
     config: AppConfig,
@@ -39,6 +55,7 @@ export class AIModerationService {
       eventBus?: EventBus
       geminiAdapter?: GeminiAdapter
       chatRepository?: ChatRepository
+      redisService?: RedisService
     } = {},
   ) {
     this.config = config
@@ -46,6 +63,51 @@ export class AIModerationService {
     this.eventBus = deps.eventBus
     this.geminiAdapter = deps.geminiAdapter
     this.chatRepository = deps.chatRepository
+    this.redisService = deps.redisService
+  }
+
+  private getWarningHistoryKey(chatId: number): string {
+    return `moderation:warnings:${chatId}`
+  }
+
+  private async getWarningHistory(chatId: number): Promise<WarningHistoryForAI[]> {
+    if (!this.redisService) {
+      return []
+    }
+
+    const key = this.getWarningHistoryKey(chatId)
+    const history = await this.redisService.get<WarningRecord[]>(key)
+
+    if (!history) {
+      return []
+    }
+
+    const now = Date.now()
+    const oneHourAgo = now - 3600_000
+
+    const filtered = history.filter(w => w.timestamp >= oneHourAgo)
+
+    return filtered.map(w => ({
+      username: w.username,
+      reason: w.reason,
+    }))
+  }
+
+  private async saveWarning(chatId: number, warning: WarningRecord): Promise<void> {
+    if (!this.redisService) {
+      return
+    }
+
+    const key = this.getWarningHistoryKey(chatId)
+    const history = await this.redisService.get<WarningRecord[]>(key) || []
+
+    history.push(warning)
+
+    const now = Date.now()
+    const oneHourAgo = now - 3600_000
+    const filtered = history.filter(w => w.timestamp >= oneHourAgo)
+
+    await this.redisService.set(key, filtered, AIModerationService.WARNING_HISTORY_TTL_SEC)
   }
 
   async initialize(): Promise<void> {}
@@ -96,7 +158,6 @@ export class AIModerationService {
   }
 
   private receiveMessage(message: BufferedMessage, chatId: number): void {
-    console.log("receiveMessage", message, chatId)
     if (!this.windowStartByChat.has(chatId)) {
       this.windowStartByChat.set(chatId, Date.now())
     }
@@ -118,8 +179,6 @@ export class AIModerationService {
     }
 
     this.buffers.set(chatId, buf)
-
-    console.log("buffers", this.buffers)
   }
 
   private async flushAll(): Promise<void> {
@@ -131,12 +190,14 @@ export class AIModerationService {
       if (!messages.length)
         continue
 
+      // Очищаем буфер сразу, чтобы новые сообщения не терялись
+      this.buffers.set(chatId, [])
+
       try {
         await this.moderateMessages(chatId, messages)
       } catch (error) {
         this.logger.e(`AIModerationService error for chat ${chatId}:`, error)
       } finally {
-        this.buffers.set(chatId, [])
         this.windowStartByChat.set(chatId, Date.now())
       }
     }
@@ -163,6 +224,16 @@ export class AIModerationService {
       return
     }
 
+    // Получаем историю предупреждений для чата
+    const warningHistory = await this.getWarningHistory(chatId)
+
+    // Формируем текст истории для промпта
+    let historyText = ""
+    if (warningHistory.length > 0) {
+      const historyLines = warningHistory.map(w => `  - ${w.username}: ${w.reason}`).join("\n")
+      historyText = `\n\nИстория предупреждений за последний час:\n${historyLines}`
+    }
+
     // Подготавливаем промпт с сообщениями
     const messagesText = messages
       .slice(0, AI_MODERATION_CONFIG.MAX_BATCH)
@@ -170,7 +241,7 @@ export class AIModerationService {
       .join("\n")
 
     const prompt = `Сообщения для проверки:
-${messagesText}`
+${messagesText}${historyText}`
 
     try {
       const response = await this.geminiAdapter.generateContent(
@@ -185,9 +256,8 @@ ${messagesText}`
       )
 
       // Парсим ответ
-      const violations = this.parseViolations(response, messages)
-
-      console.log("violations", violations)
+      this.logger.d(`AI moderation response for chat ${chatId}:`, response)
+      const violations = await this.parseViolations(response, messages, chatId)
 
       if (violations.length > 0) {
         const windowStart = this.windowStartByChat.get(chatId) || (Date.now() - AI_MODERATION_CONFIG.INTERVAL_MS)
@@ -201,14 +271,16 @@ ${messagesText}`
           messages,
         })
 
-        this.logger.i(`Found ${violations.length} violations in chat ${chatId}`)
+        this.logger.i(`Found ${violations.length} violations in chat ${chatId}:`, violations)
+      } else {
+        this.logger.d(`No violations found in chat ${chatId}`)
       }
     } catch (error) {
       this.logger.e(`Failed to moderate messages for chat ${chatId}:`, error)
     }
   }
 
-  private parseViolations(response: string, messages: BufferedMessage[]): ModerationViolation[] {
+  private async parseViolations(response: string, messages: BufferedMessage[], chatId: number): Promise<ModerationViolation[]> {
     try {
       // Пытаемся найти JSON в ответе
       const jsonMatch = response.match(/\{[\s\S]*"violations"[\s\S]*\}/)
@@ -224,7 +296,15 @@ ${messagesText}`
         return []
       }
 
-      // Валидируем каждое нарушение
+      this.logger.d(`Parsed violations from AI:`, parsed.violations)
+
+      // Создаём маппинг messageId -> userId для быстрого поиска
+      const messageToUser = new Map<number, BufferedMessage>()
+      for (const msg of messages) {
+        messageToUser.set(msg.id, msg)
+      }
+
+      // Валидируем каждое нарушение и сохраняем предупреждения
       const validViolations: ModerationViolation[] = []
       for (const v of parsed.violations) {
         if (
@@ -232,17 +312,30 @@ ${messagesText}`
           && typeof v.messageId === "number"
           && typeof v.reason === "string"
           && typeof v.action === "string"
-          && ["delete", "warn", "mute", "kick", "ban"].includes(v.action)
+          && ["warn", "mute", "kick", "ban"].includes(v.action)
         ) {
           // Проверяем, что messageId существует в наших сообщениях
-          const messageExists = messages.some(m => m.id === v.messageId)
-          if (messageExists) {
-            validViolations.push({
-              messageId: v.messageId,
+          const message = messageToUser.get(v.messageId)
+          if (!message) {
+            continue
+          }
+
+          // Сохраняем в историю ТОЛЬКО предупреждения (warn)
+          if (v.action === "warn") {
+            const username = message.username || message.name || `User${message.userId}`
+            await this.saveWarning(chatId, {
+              username,
+              timestamp: Date.now(),
               reason: v.reason,
-              action: v.action as "delete" | "warn" | "mute" | "kick" | "ban",
+              action: "warn",
             })
           }
+
+          validViolations.push({
+            messageId: v.messageId,
+            reason: v.reason,
+            action: v.action as "warn" | "mute" | "kick" | "ban",
+          })
         }
       }
 

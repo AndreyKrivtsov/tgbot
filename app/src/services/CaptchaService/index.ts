@@ -2,6 +2,7 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import type { EventBus } from "../../core/EventBus.js"
+import { getMessage } from "../TelegramBot/utils/Messages.js"
 
 interface CaptchaDependencies {
   now?: () => number
@@ -259,6 +260,8 @@ export class CaptchaService implements IService {
 
     // Генерируем событие для отправки капчи
     if (this.eventBus) {
+      const userMention = username ? `@${username}` : (firstName || getMessage("generic_user"))
+      const questionText = `${challenge.question[0]} + ${challenge.question[1]}`
       await this.eventBus.emit("captcha.challenge", {
         chatId,
         userId,
@@ -271,7 +274,7 @@ export class CaptchaService implements IService {
           {
             type: "sendMessage",
             params: {
-              text: `Ответьте на пример: ${challenge.question[0]} + ${challenge.question[1]} = ?`,
+              text: getMessage("captcha_welcome", { userMention, question: questionText }),
               inlineKeyboard: challenge.options.map((option: number, index: number) => [{
                 text: `${option}`,
                 callback_data: `captcha_${userId}_${index}_${option === challenge.answer ? "correct" : "wrong"}`,

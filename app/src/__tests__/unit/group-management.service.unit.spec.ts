@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals"
 import { GroupManagementService } from "../../services/GroupManagementService/index.js"
 import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 import { EVENTS } from "../../core/EventBus.js"
@@ -39,13 +40,17 @@ describe("groupManagementService (unit)", () => {
     mockAuthorizationService.checkGroupAdmin.mockResolvedValueOnce({ authorized: false, reason: "no_group_admin_permission" })
 
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_REGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "user",
-      chatTitle: "Test Group",
-    })
+    // Получаем обработчик из мока
+    const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "user",
+        chatTitle: "Test Group",
+      })
+    }
 
     expect(mockAuthorizationService.checkGroupAdmin).toHaveBeenCalledWith(-456, 123, "user")
   })
@@ -54,13 +59,16 @@ describe("groupManagementService (unit)", () => {
     mockChatRepository.getChat.mockResolvedValueOnce(null)
 
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_REGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "user",
-      chatTitle: "Test Group",
-    })
+    const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "user",
+        chatTitle: "Test Group",
+      })
+    }
 
     expect(mockTelegramPort.getChatAdministrators).toHaveBeenCalledWith(-456)
     expect(mockChatRepository.addAdmin).toHaveBeenCalledTimes(2)
@@ -68,13 +76,16 @@ describe("groupManagementService (unit)", () => {
 
   it("handleRegister: регистрирует чат при успешной проверке прав", async () => {
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_REGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "user",
-      chatTitle: "Test Group",
-    })
+    const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "user",
+        chatTitle: "Test Group",
+      })
+    }
 
     expect(mockChatRepository.registerChat).toHaveBeenCalledWith(-456, "Test Group")
     expect(eventBus.emitAIResponse).toHaveBeenCalled()
@@ -82,12 +93,15 @@ describe("groupManagementService (unit)", () => {
 
   it("handleUnregister: проверяет права и удаляет чат", async () => {
     await service.initialize()
-    await eventBus.emit(EVENTS.COMMAND_UNREGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "user",
-    })
+    const handler = (eventBus as any).onCommandUnregister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "user",
+      })
+    }
 
     expect(mockAuthorizationService.checkGroupAdmin).toHaveBeenCalledWith(-456, 123, "user")
     expect(mockChatRepository.unregisterChat).toHaveBeenCalledWith(-456)

@@ -9,7 +9,6 @@ export function makeConfig(): AppConfig {
     BOT_TOKEN: "test",
     DATABASE_URL: "postgres://test",
     ANTISPAM_URL: "http://127.0.0.1:6323",
-    LLAMA_URL: "http://127.0.0.1:11434",
     REDIS_URL: "redis://127.0.0.1:6379",
     PORT: 3000,
     ADMIN_USERNAME: "admin",

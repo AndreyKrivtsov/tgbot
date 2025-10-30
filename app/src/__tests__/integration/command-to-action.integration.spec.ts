@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals"
 import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
 import { GroupManagementService } from "../../services/GroupManagementService/index.js"
 import { ModerationService } from "../../services/ModerationService/index.js"
@@ -42,9 +43,9 @@ describe("command-to-action flow (integration)", () => {
     }
 
     const mockTelegramPort = {
-      getChatAdministrators: jest.fn().mockResolvedValue([{ user: { id: 1 } }]),
-      getChatMember: jest.fn().mockResolvedValue({ user: { id: 999 } }),
-      getChat: jest.fn().mockResolvedValue({ id: -123, title: "Test" }),
+      getChatAdministrators: jest.fn().mockResolvedValue([{ user: { id: 1 } }]) as any,
+      getChatMember: jest.fn().mockResolvedValue({ user: { id: 999 } }) as any,
+      getChat: jest.fn().mockResolvedValue({ id: -123, title: "Test" }) as any,
     }
     const mockUserManager = {
       getUserIdByUsername: jest.fn().mockResolvedValue(999),
@@ -79,13 +80,16 @@ describe("command-to-action flow (integration)", () => {
     await groupManagementService.initialize()
     await telegramActionsAdapter.initialize()
 
-    await eventBus.emit(EVENTS.COMMAND_REGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "admin",
-      chatTitle: "Test Group",
-    })
+    const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "admin",
+        chatTitle: "Test Group",
+      })
+    }
 
     expect(mockChatRepository.registerChat).toHaveBeenCalledWith(-456, "Test Group")
     expect(eventBus.emitAIResponse).toHaveBeenCalled()
@@ -95,13 +99,16 @@ describe("command-to-action flow (integration)", () => {
     await moderationService.initialize()
     await telegramActionsAdapter.initialize()
 
-    await eventBus.emit(EVENTS.COMMAND_BAN, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      target: { userId: 999 },
-      actorUsername: "admin",
-    })
+    const handler = (eventBus as any).onCommandBan.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        target: { userId: 999 },
+        actorUsername: "admin",
+      })
+    }
 
     expect(eventBus.emitAIResponse).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -116,13 +123,16 @@ describe("command-to-action flow (integration)", () => {
     await chatConfigurationService.initialize()
     await telegramActionsAdapter.initialize()
 
-    await eventBus.emit(EVENTS.COMMAND_ULTRON_TOGGLE, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      enabled: true,
-      actorUsername: "admin",
-    })
+    const handler = (eventBus as any).onCommandUltronToggle.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        enabled: true,
+        actorUsername: "admin",
+      })
+    }
 
     expect(mockChatRepository.toggleAi).toHaveBeenCalledWith(-456, true)
     expect(eventBus.emitAIResponse).toHaveBeenCalled()
@@ -132,19 +142,22 @@ describe("command-to-action flow (integration)", () => {
     await groupManagementService.initialize()
     await telegramActionsAdapter.initialize()
 
-    await eventBus.emit(EVENTS.COMMAND_REGISTER, {
-      actorId: 123,
-      chatId: -456,
-      messageId: 789,
-      actorUsername: "admin",
-      chatTitle: "Test Group",
-    })
+    const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
+    if (handler) {
+      await handler({
+        actorId: 123,
+        chatId: -456,
+        messageId: 789,
+        actorUsername: "admin",
+        chatTitle: "Test Group",
+      })
+    }
 
-    const aiResponseCall = (eventBus.emitAIResponse as jest.Mock).mock.calls[0][0]
-    expect(aiResponseCall.actions).toContainEqual(
+    const aiResponseCall = (eventBus.emitAIResponse as jest.Mock).mock.calls[0]?.[0] as any
+    expect(aiResponseCall?.actions).toContainEqual(
       expect.objectContaining({ type: "deleteMessage" }),
     )
-    expect(aiResponseCall.actions).toContainEqual(
+    expect(aiResponseCall?.actions).toContainEqual(
       expect.objectContaining({ type: "sendMessage" }),
     )
   })
