@@ -3,7 +3,7 @@ import type { AppConfig } from "../../config.js"
 import type { DatabaseService } from "../DatabaseService/index.js"
 import type { RedisService } from "../RedisService/index.js"
 import type { EventBus } from "../../core/EventBus.js"
-import { EVENTS } from "../../core/EventBus.js"
+// EVENTS не используется в ordered-сценарии
 // ChatConfigService удалён: используется ChatSettingsRepositoryAdapter
 import { MessageProcessor } from "./MessageProcessor.js"
 import { AIResponseService } from "./AIResponseService.js"
@@ -357,21 +357,23 @@ export class AIChatService {
   public setupEventBusListeners(eventBus?: EventBus): void {
     if (!eventBus)
       return
-    eventBus.on(EVENTS.MESSAGE_RECEIVED, async (context: any) => {
+    // AIChatService первый, пытается "забрать" упоминания бота
+    eventBus.onMessageGroupOrdered(async (context: any) => {
       try {
         const { from, text, chat } = context
         if (!from || !text || !chat)
-          return
-        // Получаем botInfo через actions порт при необходимости
+          return false
         const botInfo = await this.dependencies.actions?.getBotInfo?.()
         const isReplyToBotMessage = context.replyMessage?.from?.id === botInfo?.id
         const isMention = this.isBotMention(text, botInfo?.username, isReplyToBotMessage)
         if (!isMention)
-          return
-        await this.processMessage(from.id, chat.id, text, from.username, from.firstName, context.id)
+          return false
+        this.processMessage(from.id, chat.id, text, from.username, from.firstName, context.id)
+        return true // поглощаем событие
       } catch (error) {
         this.logger.e("AIChatService EventBus handler error:", error)
+        return false
       }
-    })
+    }, 100)
   }
 }

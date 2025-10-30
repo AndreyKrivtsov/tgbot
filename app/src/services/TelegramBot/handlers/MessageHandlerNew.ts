@@ -8,7 +8,7 @@ import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import type { TelegramBotService } from "../index.js"
 import type { EventBus } from "../../../core/EventBus.js"
-import { EVENTS } from "../../../core/EventBus.js"
+// no EVENTS import needed here; we use typed emitters
 
 export class MessageHandlerNew {
   private logger: Logger
@@ -56,7 +56,7 @@ export class MessageHandlerNew {
   }
 
   private setupEventHandlers(): void {
-    this.eventBus.on(EVENTS.MESSAGE_RECEIVED, this.handleMessageEvent.bind(this))
+    // Подписки на EventBus здесь больше не нужны для сообщений
   }
 
   private async handleMessageEvent(context: TelegramMessageContext): Promise<void> {
@@ -70,26 +70,57 @@ export class MessageHandlerNew {
     try {
       const { from, chat, text: messageText } = context
 
+      // Общая валидация
       if (!from || !chat || !messageText) {
         this.logger.w("Incomplete message data, skipping")
         return
       }
 
-      if (chat.id < 0) {
+      // Игнорируем сообщения от ботов
+      if ((from as any).is_bot) {
+        return
+      }
+
+      const chatType = (chat as any).type
+      const isGroup = chatType === "group" || chatType === "supergroup" || chat.id < 0
+      const isPrivate = chatType === "private" || chat.id > 0
+
+      // Сначала проверяем команды (и в группах, и в приватах)
+      const isCommand = messageText.startsWith("/")
+      if (isCommand && this.commandHandler) {
+        await this.commandHandler.handleCommand(context)
+        return
+      }
+
+      if (isGroup) {
+        // Проверка активности группы
         const isActive = await this.chatRepository.isChatActive(chat.id)
         if (!isActive) {
           this.logger.w(`Chat ${chat.id} is not active or not found in database, skipping message processing`)
           return
         }
+
+        // Подготовка контекста пользователя для антиспама и т.п.
+        await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
+        await this.userManager.saveUserMapping(chat.id, from.id, from.username)
+
+        // Эмитим валидное групповое сообщение
+        await this.eventBus.emitMessageGroup({
+          from: { id: from.id, username: from.username, firstName: from.firstName },
+          chat: { id: chat.id, type: chatType || (chat.id < 0 ? "supergroup" : "group") },
+          text: messageText,
+          id: (context as any).id || (context as any).messageId || Date.now(),
+          replyMessage: (context as any).replyMessage,
+        })
+        return
       }
 
-      await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
-      await this.userManager.saveUserMapping(chat.id, from.id, from.username)
-
-      // Обработка команд (если есть командный хендлер)
-      if (messageText.startsWith("/") && this.commandHandler) {
-        await this.commandHandler.handleCommand(context)
+      if (isPrivate) {
+        // Приватные НЕ-командные сообщения не эмитим
+        // Просто выходим из обработчика без дополнительной логики
       }
+
+      // Обработка команд больше не требуется здесь
 
       // AntiSpamService и AIChatService слушают MESSAGE_RECEIVED через EventBus
     } catch (error) {
@@ -100,7 +131,8 @@ export class MessageHandlerNew {
   }
 
   async handleMessage(context: TelegramMessageContext): Promise<void> {
-    this.eventBus.emit(EVENTS.MESSAGE_RECEIVED, context)
+    // Сразу валидируем и маршрутизируем
+    await this.handleMessageEvent(context)
   }
 
   getMessageStats(): object {

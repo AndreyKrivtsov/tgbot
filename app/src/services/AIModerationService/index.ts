@@ -136,11 +136,12 @@ export class AIModerationService {
   private setupEventBus(): void {
     if (!this.eventBus)
       return
-    this.eventBus.on(EVENTS.MESSAGE_RECEIVED, async (ctx: any) => {
+    // AIModerationService — последний обработчик
+    this.eventBus.onMessageGroupOrdered(async (ctx: any) => {
       try {
         const { id, date, from, chat, text } = ctx
         if (!chat?.id || !from?.id || !text)
-          return
+          return false
 
         const chatId = chat.id as number
         this.receiveMessage({
@@ -151,10 +152,12 @@ export class AIModerationService {
           name: `${from.first_name || ""} ${from.last_name || ""}`.trim(),
           text: text as string,
         }, chatId)
+        return true // поглощаем событие как последний обработчик
       } catch (e) {
         this.logger.e("AIModerationService buffer error:", e)
+        return false
       }
-    })
+    }, 10)
   }
 
   private receiveMessage(message: BufferedMessage, chatId: number): void {

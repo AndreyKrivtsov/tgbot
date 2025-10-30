@@ -48,23 +48,6 @@ export class SettingsManager {
   updateSettings(newSettings: Partial<TelegramBotSettings>): void {
     this.settings = { ...this.settings, ...newSettings }
     this.logger.i("📝 Telegram bot settings updated")
-
-    // Передаем настройки капчи в CaptchaService
-    if (this.dependencies.captchaService
-      && (newSettings.captchaTimeoutMs !== undefined || newSettings.captchaCheckIntervalMs !== undefined)) {
-      const captchaSettings: any = {}
-      if (newSettings.captchaTimeoutMs !== undefined) {
-        captchaSettings.timeoutMs = newSettings.captchaTimeoutMs
-      }
-      if (newSettings.captchaCheckIntervalMs !== undefined) {
-        captchaSettings.checkIntervalMs = newSettings.captchaCheckIntervalMs
-      }
-
-      // Если CaptchaService поддерживает updateSettings
-      if (typeof (this.dependencies.captchaService as any).updateSettings === "function") {
-        (this.dependencies.captchaService as any).updateSettings(captchaSettings)
-      }
-    }
   }
 
   /**

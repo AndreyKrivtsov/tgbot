@@ -103,14 +103,14 @@ export class AntiSpamService implements IService {
     if (!this.eventBus)
       return
 
-    // Слушаем все входящие сообщения
-    this.eventBus.on(EVENTS.MESSAGE_RECEIVED, async (event: MessageReceivedEvent) => {
+    // Слушаем валидные групповые сообщения во втором приоритете
+    this.eventBus.onMessageGroupOrdered(async (event: MessageReceivedEvent) => {
       try {
         // Проверяем только первые 5 сообщений пользователя
         if (this.userManager) {
           const userCounter = await this.userManager.getUserCounter(event.from.id)
           if (userCounter && userCounter.messageCount > 5) {
-            return // Пропускаем проверку для опытных пользователей
+            return false // Пропускаем проверку для опытных пользователей, передаем дальше
           }
         }
 
@@ -179,11 +179,14 @@ export class AntiSpamService implements IService {
             spamCount,
             actions,
           })
+          return true // Спам обнаружен — поглощаем событие
         }
+        return false // Не спам — передаем дальше
       } catch (error) {
         this.logger.e("Error in spam detection:", error)
+        return false
       }
-    })
+    }, 50)
   }
 
   /**

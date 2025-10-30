@@ -275,10 +275,12 @@ export class CaptchaService implements IService {
             type: "sendMessage",
             params: {
               text: getMessage("captcha_welcome", { userMention, question: questionText }),
-              inlineKeyboard: challenge.options.map((option: number, index: number) => [{
-                text: `${option}`,
-                callback_data: `captcha_${userId}_${index}_${option === challenge.answer ? "correct" : "wrong"}`,
-              }]),
+              inlineKeyboard: [
+                challenge.options.map((option: number, index: number) => ({
+                  text: `${option}`,
+                  callback_data: `captcha_${userId}_${index}_${option === challenge.answer ? "correct" : "wrong"}`,
+                })),
+              ],
             },
           },
           {
@@ -519,24 +521,6 @@ export class CaptchaService implements IService {
     }
   }
 
-  // Колбэки для обработки событий капчи
-  // legacy callbacks удалены — оркестрация внутри сервиса
-
-  /**
-   * Получение текущих настроек
-   */
-  getSettings(): CaptchaSettings {
-    return { ...this.settings }
-  }
-
-  /**
-   * Обновление настроек
-   */
-  updateSettings(newSettings: Partial<CaptchaSettings>): void {
-    this.settings = { ...this.settings, ...newSettings }
-    this.logger.i("⚙️ Captcha settings updated:", newSettings)
-  }
-
   /**
    * Получение статистики
    */
@@ -568,12 +552,6 @@ export class CaptchaService implements IService {
     restricted.questionId = messageId
     await this.saveRestrictedToStore(restricted)
     this.logger.d(`✅ Updated questionId=${messageId} for user ${userId}`)
-  }
-
-  // ===================== Policy wiring =====================
-  updatePolicy(newPolicy: Partial<CaptchaPolicy>): void {
-    this.policy = { ...this.policy, ...newPolicy }
-    this.logger.i("⚙️ Captcha policy updated", newPolicy)
   }
 
   private async saveRestrictedToStore(user: RestrictedUser): Promise<void> {

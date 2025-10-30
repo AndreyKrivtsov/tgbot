@@ -5,7 +5,8 @@
  */
 export const EVENTS = {
   // События сообщений
-  MESSAGE_RECEIVED: "message.received",
+  MESSAGE_GROUP: "message.group",
+  MESSAGE_PRIVATE: "message.private",
 
   // События модерации
   MODERATION_BATCH_RESULT: "moderation.batchResult",
@@ -189,6 +190,7 @@ export interface AddAltronKeyCommand extends BaseCommand {
  */
 export class EventBus {
   private listeners: Map<string, ((data: any) => Promise<void>)[]> = new Map()
+  private orderedListeners: Map<string, { priority: number, handler: (data: any) => Promise<boolean | void> }[]> = new Map()
 
   /**
    * Подписка на событие с типизацией
@@ -210,16 +212,73 @@ export class EventBus {
   }
 
   /**
+   * Регистрация упорядоченного слушателя с приоритетом.
+   * Возврат true из handler означает "событие поглощено" и дальнейшие слушатели вызваны не будут.
+   */
+  onOrdered<T = any>(event: string, handler: (data: T) => Promise<boolean | void>, priority: number = 0): void {
+    if (!this.orderedListeners.has(event)) {
+      this.orderedListeners.set(event, [])
+    }
+    const arr = this.orderedListeners.get(event)!
+    arr.push({ priority, handler: handler as any })
+    // Сортируем по убыванию приоритета, чтобы более высокие шли первыми
+    arr.sort((a, b) => b.priority - a.priority)
+  }
+
+  /**
+   * Последовательная доставка события упорядоченным слушателям с коротким замыканием.
+   */
+  async emitOrdered<T = any>(event: string, data: T): Promise<void> {
+    const arr = this.orderedListeners.get(event) || []
+    for (const { handler } of arr) {
+      try {
+        const consumed = await handler(data)
+        if (consumed === true) {
+          break
+        }
+      } catch {
+        // Ошибку проглатываем, продолжаем к следующему слушателю
+        // (логирование на усмотрение вызывающей стороны/слушателя)
+        continue
+      }
+    }
+  }
+
+  /**
    * Типизированные методы для конкретных событий
    */
 
   // События сообщений
-  onMessageReceived(handler: (data: MessageReceivedEvent) => Promise<void>): void {
-    this.on(EVENTS.MESSAGE_RECEIVED, handler)
+  onMessageGroup(handler: (data: MessageReceivedEvent) => Promise<void>): void {
+    this.on(EVENTS.MESSAGE_GROUP, handler)
   }
 
-  emitMessageReceived(data: MessageReceivedEvent): Promise<void> {
-    return this.emit(EVENTS.MESSAGE_RECEIVED, data)
+  emitMessageGroup(data: MessageReceivedEvent): Promise<void> {
+    return this.emit(EVENTS.MESSAGE_GROUP, data)
+  }
+
+  onMessageGroupOrdered(handler: (data: MessageReceivedEvent) => Promise<boolean | void>, priority: number = 0): void {
+    this.onOrdered(EVENTS.MESSAGE_GROUP, handler, priority)
+  }
+
+  emitMessageGroupOrdered(data: MessageReceivedEvent): Promise<void> {
+    return this.emitOrdered(EVENTS.MESSAGE_GROUP, data)
+  }
+
+  onMessagePrivate(handler: (data: MessageReceivedEvent) => Promise<void>): void {
+    this.on(EVENTS.MESSAGE_PRIVATE, handler)
+  }
+
+  emitMessagePrivate(data: MessageReceivedEvent): Promise<void> {
+    return this.emit(EVENTS.MESSAGE_PRIVATE, data)
+  }
+
+  onMessagePrivateOrdered(handler: (data: MessageReceivedEvent) => Promise<boolean | void>, priority: number = 0): void {
+    this.onOrdered(EVENTS.MESSAGE_PRIVATE, handler, priority)
+  }
+
+  emitMessagePrivateOrdered(data: MessageReceivedEvent): Promise<void> {
+    return this.emitOrdered(EVENTS.MESSAGE_PRIVATE, data)
   }
 
   // События модерации

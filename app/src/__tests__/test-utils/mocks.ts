@@ -35,12 +35,19 @@ export function makeLogger(): Logger {
 export function makeEventBus(): EventBus {
   const emit = jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
   const emitFunc = jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
-  
+
   return ({
     on: jest.fn(),
     emit,
-    onMessageReceived: jest.fn(),
-    emitMessageReceived: emitFunc,
+    // Сообщения (новая схема)
+    onMessageGroup: jest.fn(),
+    emitMessageGroup: emitFunc,
+    onMessagePrivate: jest.fn(),
+    emitMessagePrivate: emitFunc,
+    onMessageGroupOrdered: jest.fn(),
+    emitMessageGroupOrdered: emitFunc,
+    onMessagePrivateOrdered: jest.fn(),
+    emitMessagePrivateOrdered: emitFunc,
     onSpamDetected: jest.fn(),
     emitSpamDetected: emitFunc,
     onCaptchaPassed: jest.fn(),
