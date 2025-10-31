@@ -169,6 +169,21 @@ export class Application {
             redis,
             eventBus,
             repository,
+            actions: {
+              sendTyping: async (chatId: number) => {
+                const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
+                if (telegramBot?.sendTyping) {
+                  await telegramBot.sendTyping(chatId)
+                }
+              },
+              getBotInfo: async (): Promise<{ id: number, username?: string } | null> => {
+                const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
+                if (telegramBot?.getBotInfo) {
+                  return await telegramBot.getBotInfo()
+                }
+                return null
+              },
+            },
           },
           aiProvider,
           throttleManager,
@@ -220,9 +235,11 @@ export class Application {
           eventBus,
           chatRepository,
           authorizationService,
-          telegramPort: telegramBot ? {
-            getChatAdministrators: (chatId: number) => telegramBot.getChatAdministrators(chatId),
-          } : undefined,
+          telegramPort: telegramBot
+            ? {
+                getChatAdministrators: (chatId: number) => telegramBot.getChatAdministrators(chatId),
+              }
+            : undefined,
         })
       })
     }
@@ -243,9 +260,11 @@ export class Application {
           eventBus,
           authorizationService,
           userManager,
-          telegramPort: telegramBot ? {
-            getChatMember: (params: { chat_id: number, user_id: number | string }) => telegramBot.getChatMember(params),
-          } : undefined,
+          telegramPort: telegramBot
+            ? {
+                getChatMember: (params: { chat_id: number, user_id: number | string }) => telegramBot.getChatMember(params),
+              }
+            : undefined,
         })
       })
     }
@@ -263,9 +282,11 @@ export class Application {
           eventBus,
           authorizationService,
           chatRepository,
-          telegramPort: telegramBot ? {
-            getChat: (params: { chat_id: string }) => telegramBot.getChat(params as any),
-          } : undefined,
+          telegramPort: telegramBot
+            ? {
+                getChat: (params: { chat_id: string }) => telegramBot.getChat(params as any),
+              }
+            : undefined,
         })
       })
     }

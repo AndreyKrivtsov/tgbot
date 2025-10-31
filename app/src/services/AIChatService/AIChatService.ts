@@ -43,10 +43,6 @@ export class AIChatService {
   private contextSaveTimer?: NodeJS.Timeout
   private processingContexts: Set<string> = new Set()
 
-  public setSendTypingAction(sendTypingAction: (chatId: number) => Promise<void>): void {
-    this.typingManager = new TypingManager(this.logger, sendTypingAction)
-  }
-
   constructor(
     config: AppConfig,
     logger: Logger,
@@ -67,9 +63,9 @@ export class AIChatService {
     const repo = dependencies.repository
     this.chatConfigService = {
       loadAllChatSettings: async () => {},
-      isAiEnabledForChat: repo.isAiEnabledForChat,
-      getApiKeyForChat: repo.getApiKeyForChat,
-      getSystemPromptForChat: repo.getSystemPromptForChat,
+      isAiEnabledForChat: repo.isAiEnabledForChat.bind(repo),
+      getApiKeyForChat: repo.getApiKeyForChat.bind(repo),
+      getSystemPromptForChat: repo.getSystemPromptForChat.bind(repo),
     } as any
 
     this.messageProcessor = new MessageProcessor(logger)
@@ -303,6 +299,9 @@ export class AIChatService {
         return
       }
 
+      // Применяем троттлинг ДО обращения к AI API, основываясь на размере входного сообщения
+      await this.throttleManager.waitForThrottle(queueItem.contextId, queueItem.message.length)
+
       this.appendUserMessage(context, queueItem.message)
 
       const responseResult: AIResponseResult = await this.aiResponseService.generateResponse({
@@ -324,7 +323,6 @@ export class AIChatService {
       this.commitContext(queueItem.contextId, context)
 
       const responseText = responseResult.response!
-      await this.throttleManager.waitForThrottle(queueItem.contextId, responseText.length)
       this.emitSuccess(queueItem.contextId, responseText, queueItem.id, queueItem.userMessageId)
     } catch (error) {
       this.logger.e("Error processing queued message:", error)
@@ -364,7 +362,8 @@ export class AIChatService {
         if (!from || !text || !chat)
           return false
         const botInfo = await this.dependencies.actions?.getBotInfo?.()
-        const isReplyToBotMessage = context.replyMessage?.from?.id === botInfo?.id
+        const replyFromId = context.replyMessage?.from?.id
+        const isReplyToBotMessage = !!botInfo?.id && replyFromId === botInfo?.id
         const isMention = this.isBotMention(text, botInfo?.username, isReplyToBotMessage)
         if (!isMention)
           return false

@@ -43,15 +43,20 @@ export class GeminiAdapter implements IAIProvider {
     // Подготавливаем содержимое запроса
     const contents: any[] = []
 
-    // Добавляем историю разговора если есть
+    // 1) Системное сообщение — строго первым элементом
+    if (systemPrompt && systemPrompt.trim().length > 0) {
+      contents.push({
+        role: "user",
+        parts: [{ text: systemPrompt }],
+      })
+    }
+
+    // 2) История разговора (только валидные роли и контент)
     if (conversationHistory && conversationHistory.length > 0) {
       for (const msg of conversationHistory) {
-        // Пропускаем системные сообщения (не поддерживаются Gemini)
-        // и невалидные сообщения
-        if (msg?.role === "system" || !msg?.role || !msg?.content) {
+        if (!msg?.role || !msg?.content) {
           continue
         }
-
         // Конвертируем в формат Gemini API
         contents.push({
           role: msg.role, // "user" или "model"
@@ -60,16 +65,10 @@ export class GeminiAdapter implements IAIProvider {
       }
     }
 
-    // Объединяем системный промпт с пользовательским сообщением
-    let finalPrompt = prompt
-    if (systemPrompt) {
-      finalPrompt = `${systemPrompt}\n\nUser message: ${prompt}`
-    }
-
-    // Добавляем новый промпт пользователя
+    // 3) Текущее сообщение пользователя — последним
     contents.push({
       role: "user",
-      parts: [{ text: finalPrompt }],
+      parts: [{ text: prompt }],
     })
 
     // Объединяем конфигурацию по умолчанию с пользовательской

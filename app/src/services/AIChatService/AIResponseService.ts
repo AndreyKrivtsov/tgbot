@@ -120,27 +120,15 @@ export class AIResponseService implements IAIResponseService {
   /**
    * Подготовка сообщений для AI провайдера
    */
-  private prepareMessages(context: ChatContext, newMessage: string, systemPrompt: string): any[] {
+  private prepareMessages(context: ChatContext, _newMessage: string, _systemPrompt: string): any[] {
     const messages: any[] = []
 
-    // Добавляем системный промпт
-    messages.push({
-      role: "system",
-      content: systemPrompt,
-    })
-
-    // Добавляем контекст предыдущих сообщений
+    // Только история контекста; системный промпт и новое сообщение добавляются на уровне провайдера
     context.messages.forEach((msg) => {
       messages.push({
         role: msg.role,
         content: msg.content,
       })
-    })
-
-    // Добавляем новое сообщение
-    messages.push({
-      role: "user",
-      content: newMessage,
     })
 
     return messages

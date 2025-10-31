@@ -23,7 +23,7 @@ import { UserManager } from "./utils/UserManager.js"
 import { MessageDeletionManager } from "./utils/MessageDeletionManager.js"
 
 // Обработчики
-import { MessageHandlerNew as MessageHandler } from "./handlers/MessageHandlerNew.js"
+import { MessageHandler } from "./handlers/MessageHandler.js"
 import { MemberHandler } from "./handlers/MemberHandler.js"
 import { CallbackHandler } from "./handlers/CallbackHandler.js"
 import { CommandHandler } from "./handlers/CommandHandler.js"
@@ -445,6 +445,19 @@ export class TelegramBotService implements IService {
       throw new Error("Bot is not initialized")
     }
     return this.bot.api
+  }
+
+  /**
+   * Отправка индикатора печати в чат
+   */
+  async sendTyping(chatId: number): Promise<void> {
+    if (!this.bot)
+      return
+    try {
+      await this.bot.sendChatAction(chatId, "typing" as any)
+    } catch {
+      // не прерываем выполнение цепочки
+    }
   }
 
   /**

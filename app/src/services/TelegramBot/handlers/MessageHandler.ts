@@ -10,7 +10,7 @@ import type { TelegramBotService } from "../index.js"
 import type { EventBus } from "../../../core/EventBus.js"
 // no EVENTS import needed here; we use typed emitters
 
-export class MessageHandlerNew {
+export class MessageHandler {
   private logger: Logger
   private config: AppConfig
   private bot: TelegramBot
@@ -51,8 +51,6 @@ export class MessageHandlerNew {
     this.antiSpamService = antiSpamService
     this.commandHandler = commandHandler
     this.chatService = chatService
-
-    this.setupEventHandlers()
   }
 
   private setupEventHandlers(): void {
@@ -104,8 +102,8 @@ export class MessageHandlerNew {
         await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
         await this.userManager.saveUserMapping(chat.id, from.id, from.username)
 
-        // Эмитим валидное групповое сообщение
-        await this.eventBus.emitMessageGroup({
+        // Эмитим валидное групповое сообщение (ordered)
+        await this.eventBus.emitMessageGroupOrdered({
           from: { id: from.id, username: from.username, firstName: from.firstName },
           chat: { id: chat.id, type: chatType || (chat.id < 0 ? "supergroup" : "group") },
           text: messageText,
@@ -121,8 +119,6 @@ export class MessageHandlerNew {
       }
 
       // Обработка команд больше не требуется здесь
-
-      // AntiSpamService и AIChatService слушают MESSAGE_RECEIVED через EventBus
     } catch (error) {
       this.logger.e("Error handling message event:", error)
     } finally {

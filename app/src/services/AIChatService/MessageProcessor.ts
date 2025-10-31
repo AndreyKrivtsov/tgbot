@@ -109,20 +109,22 @@ export class MessageProcessor implements IMessageProcessor {
    * Подготовка контекстного сообщения с информацией о пользователе
    */
   prepareContextualMessage(message: string, username?: string, firstName?: string): ContextualMessage {
-    let contextualMessage = message
+    // Формат: [YYYY-MM-DD HH:mm][@username][Name]: message (время в UTC)
+    const now = new Date()
+    const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+    const ts = `${now.getUTCFullYear()}-${pad2(now.getUTCMonth() + 1)}-${pad2(now.getUTCDate())} ${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())}`
 
-    // Добавляем информацию о пользователе если она есть
-    if (username || firstName) {
-      const userInfo = []
-      if (firstName)
-        userInfo.push(`имя: ${firstName}`)
-      if (username)
-        userInfo.push(`@${username}`)
-
-      if (userInfo.length > 0) {
-        contextualMessage = `[${userInfo.join(", ")}]: ${message}`
-      }
+    const blocks: string[] = []
+    blocks.push(ts)
+    if (username) {
+      blocks.push(`@${username}`)
     }
+    if (firstName) {
+      blocks.push(`${firstName}`)
+    }
+
+    const header = `[${blocks.join("][")}]:`
+    const contextualMessage = `${header} ${message}`
 
     return {
       content: contextualMessage,
