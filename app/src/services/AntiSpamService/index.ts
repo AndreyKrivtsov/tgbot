@@ -2,13 +2,15 @@ import type { AppConfig } from "../../config.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { IService } from "../../core/Container.js"
 import type { EventBus, MessageReceivedEvent } from "../../core/EventBus.js"
-import { EVENTS } from "../../core/EventBus.js"
+import type { RedisService } from "../../RedisService/index.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 import { ANTI_SPAM_CONFIG } from "../../constants.js"
+import { UserCounters } from "./UserCounters.js"
 
 interface AntiSpamDependencies {
   eventBus?: EventBus
-  userManager?: any // Для получения счетчиков пользователей
+  redisService?: RedisService
 }
 
 interface AntiSpamResult {
@@ -40,7 +42,7 @@ export class AntiSpamService implements IService {
   private settings: AntiSpamSettings
   private isRunning = false
   private eventBus?: EventBus
-  private userManager?: any
+  private userCounters?: UserCounters
 
   constructor(
     config: AppConfig,
@@ -61,7 +63,11 @@ export class AntiSpamService implements IService {
     }
 
     this.eventBus = dependencies.eventBus
-    this.userManager = dependencies.userManager
+
+    // Инициализируем UserCounters если доступен Redis
+    if (dependencies.redisService) {
+      this.userCounters = new UserCounters(logger, dependencies.redisService)
+    }
   }
 
   /**
@@ -106,9 +112,9 @@ export class AntiSpamService implements IService {
     // Слушаем валидные групповые сообщения во втором приоритете
     this.eventBus.onMessageGroupOrdered(async (event: MessageReceivedEvent) => {
       try {
-        // Проверяем только первые 5 сообщений пользователя
-        if (this.userManager) {
-          const userCounter = await this.userManager.getUserCounter(event.from.id)
+        // Инкрементируем счетчик сообщений и проверяем только первые 5 сообщений пользователя
+        if (this.userCounters) {
+          const userCounter = await this.userCounters.incrementMessageCount(event.from.id)
           if (userCounter && userCounter.messageCount > 5) {
             return false // Пропускаем проверку для опытных пользователей, передаем дальше
           }
@@ -118,13 +124,13 @@ export class AntiSpamService implements IService {
         const spamResult = await this.checkMessage(event.from.id, event.text)
 
         if (spamResult.isSpam) {
-          // Получаем текущий счетчик спама
+          // Получаем текущий счетчик спама и увеличиваем его
           let spamCount = 0
-          if (this.userManager) {
-            const userCounter = await this.userManager.getUserCounter(event.from.id)
+          if (this.userCounters) {
+            const userCounter = await this.userCounters.getUserCounter(event.from.id)
             spamCount = userCounter?.spamCount || 0
-            // Увеличиваем счетчик
-            await this.userManager.incrementSpamCounter(event.from.id)
+            // Увеличиваем счетчик спама
+            await this.userCounters.incrementSpamCounter(event.from.id)
           }
 
           // Определяем действия в зависимости от счетчика спама
@@ -137,25 +143,27 @@ export class AntiSpamService implements IService {
 
           if (spamCount < 2) {
             // Предупреждение
-            const modifier = spamCount > 0 ? "Повторное c" : ""
-            const escapedName = event.from.firstName.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")
+            const modifier = spamCount > 0 ? "Повторное с" : ""
+            const name = event.from.username ? `@${event.from.username}` : event.from.firstName
+            const admin = "" // Можно будет добавить информацию об админе позже
+
             actions.push({
               type: "sendMessage",
               params: {
-                text: `⚠️ ${modifier}Предупреждение для ${escapedName}: обнаружен спам`,
-                parseMode: "MarkdownV2",
+                text: getMessage("spam_warning", { modifier, name, admin }),
                 autoDelete: 20000,
               },
             })
           } else {
             // Кик пользователя
-            const escapedName = event.from.firstName.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")
+            const name = event.from.username ? `@${event.from.username}` : event.from.firstName
+            const admin = "" // Можно будет добавить информацию об админе позже
+
             actions.push(
               {
                 type: "sendMessage",
                 params: {
-                  text: `🚫 ${escapedName} удален за спам`,
-                  parseMode: "MarkdownV2",
+                  text: getMessage("spam_kick", { name, admin }),
                   autoDelete: 20000,
                 },
               },
@@ -163,7 +171,7 @@ export class AntiSpamService implements IService {
                 type: "kick",
                 params: {
                   userId: event.from.id,
-                  clearCounter: true,
+                  clearCounter: true, // Будет очищен через UserCounters в адаптере
                 },
               },
             )

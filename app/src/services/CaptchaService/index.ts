@@ -2,7 +2,7 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import type { EventBus } from "../../core/EventBus.js"
-import { getMessage } from "../TelegramBot/utils/Messages.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 interface CaptchaDependencies {
   now?: () => number

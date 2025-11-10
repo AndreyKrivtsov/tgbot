@@ -2,7 +2,6 @@ import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot, TelegramBotSettings, TelegramChatMemberContext, TelegramLeftMemberContext, TelegramNewMembersContext } from "../types/index.js"
 import type { EventBus } from "../../../core/EventBus.js"
 import { EVENTS } from "../../../core/EventBus.js"
-import type { UserManager } from "../utils/UserManager.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 
@@ -13,7 +12,6 @@ export class MemberHandler {
   private logger: Logger
   private settings: TelegramBotSettings
   private bot?: TelegramBot
-  private userManager: UserManager
   private chatRepository: ChatRepository
   private captchaService?: CaptchaService
   private eventBus?: EventBus
@@ -22,7 +20,6 @@ export class MemberHandler {
     settings: TelegramBotSettings,
     botOrUndefined: TelegramBot | undefined,
     userRestrictions: any,
-    userManager: UserManager,
     chatRepository: ChatRepository,
     captchaService?: CaptchaService,
     eventBus?: EventBus,
@@ -30,7 +27,6 @@ export class MemberHandler {
     this.logger = logger
     this.settings = settings
     this.bot = botOrUndefined
-    this.userManager = userManager
     this.chatRepository = chatRepository
     this.captchaService = captchaService
     this.eventBus = eventBus
@@ -134,9 +130,6 @@ export class MemberHandler {
         && (newMember.status === "member" || newMember.status === "restricted")
       ) {
         this.logger.i(`👋 User ${user.id} (@${user.username || "no_username"}) joined chat ${chatId}`)
-
-        // Сохраняем маппинг пользователя
-        await this.userManager.saveUserMapping(chatId, user.id, user.username)
 
         // Эмитим member.joined
         if (this.eventBus) {

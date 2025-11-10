@@ -13,8 +13,9 @@ import { TypingManager } from "../../helpers/ai/TypingManager.js"
 import { ChatQueueManager } from "../../helpers/ai/ChatQueueManager.js"
 import { AdaptiveChatThrottleManager } from "../../helpers/ai/AdaptiveThrottleManager.js"
 import type { MessageQueueItem } from "../../helpers/ai/MessageQueue.js"
-import type { IAIProvider } from "./providers/IAIProvider.js"
+import type { LLMPort } from "../ai/llm.models.js"
 import type { AIChatActionsPort, AIChatRepositoryPort, AIResponseResult, IAIResponseService, IChatConfigService, IMessageProcessor, ITypingManager, ProcessMessageResult } from "./interfaces.js"
+import { getMaxContextMessages } from "../ai/chat.policy.js"
 import { AI_CHAT_CONFIG } from "../../constants.js"
 
 interface AIChatDependencies {
@@ -47,7 +48,7 @@ export class AIChatService {
     config: AppConfig,
     logger: Logger,
     dependencies: AIChatDependencies = {},
-    aiProvider: IAIProvider,
+    aiProvider: LLMPort,
     throttleManager?: AdaptiveChatThrottleManager,
     _sendTypingAction?: (chatId: number) => Promise<void>,
   ) {
@@ -319,7 +320,7 @@ export class AIChatService {
 
       this.appendModelMessage(context, responseResult.response!)
       this.touchContext(context, true)
-      this.pruneContextByLimit(context, AI_CHAT_CONFIG.MAX_CONTEXT_MESSAGES)
+      this.pruneContextByLimit(context, getMaxContextMessages())
       this.commitContext(queueItem.contextId, context)
 
       const responseText = responseResult.response!

@@ -1,7 +1,11 @@
 import type { Logger } from "../../helpers/Logger.js"
-import type { IAIProvider } from "./providers/IAIProvider.js"
 import type { ChatContext } from "./ChatContextManager.js"
 import { AI_CHAT_CONFIG } from "../../constants.js"
+import type { LLMPort } from "../ai/llm.models.js"
+import { prepareMessages } from "../ai/chat.messageBuilder.js"
+import { formatResponse as formatRespHelper, validateResponse as validateRespHelper } from "../ai/chat.responseFormatter.js"
+import { getChatGenerationLimits, getChatModel } from "../ai/chat.policy.js"
+import { isFunctionCall as isFnCall, parseFunctionCall as parseFnCall } from "../ai/chat.functions.js"
 
 /**
  * Интерфейс для результата генерации ответа
@@ -44,34 +48,40 @@ export interface IAIResponseService {
  */
 export class AIResponseService implements IAIResponseService {
   private logger: Logger
-  private aiProvider: IAIProvider
+  private llm: LLMPort
 
-  constructor(logger: Logger, aiProvider: IAIProvider) {
+  constructor(logger: Logger, llm: LLMPort) {
     this.logger = logger
-    this.aiProvider = aiProvider
+    this.llm = llm
   }
 
   /**
    * Генерация ответа с использованием AI провайдера
    */
   async generateResponse(params: AIResponseParams): Promise<AIResponseResult> {
-    const { message, context, systemPrompt, apiKey, maxRetries: _maxRetries = 3, tools } = params
+    const { message, context, systemPrompt, apiKey, maxRetries: _maxRetries = 3 } = params
     const startTime = Date.now()
 
     this.logger.d(`Generating AI response for context ${context.chatId}`)
 
     try {
-      // Подготавливаем сообщения для AI
-      const messages = this.prepareMessages(context, message, systemPrompt)
-
-      // Генерируем ответ с инструментами
-      const response = await this.aiProvider.generateContent(apiKey, message, messages, systemPrompt, {}, tools)
+      const messages = prepareMessages(context, message, systemPrompt)
+      const chat = await this.llm.generateChatResponse({
+        chatId: context.chatId,
+        messages,
+        systemPrompt,
+        model: getChatModel(),
+        maxTokens: getChatGenerationLimits().maxTokens,
+        temperature: getChatGenerationLimits().temperature,
+        apiKey,
+      })
+      const response = chat.content
 
       const processingTime = Date.now() - startTime
 
       // Проверяем на вызов функции
-      if (this.isFunctionCall(response)) {
-        const functionCall = this.parseFunctionCall(response)
+      if (isFnCall(response)) {
+        const functionCall = parseFnCall(response)
         this.logger.d(`Function call detected: ${functionCall.name}`)
 
         return {
@@ -120,76 +130,18 @@ export class AIResponseService implements IAIResponseService {
   /**
    * Подготовка сообщений для AI провайдера
    */
-  private prepareMessages(context: ChatContext, _newMessage: string, _systemPrompt: string): any[] {
-    const messages: any[] = []
-
-    // Только история контекста; системный промпт и новое сообщение добавляются на уровне провайдера
-    context.messages.forEach((msg) => {
-      messages.push({
-        role: msg.role,
-        content: msg.content,
-      })
-    })
-
-    return messages
-  }
-
   /**
    * Форматирование ответа
    */
   formatResponse(response: string): string {
-    let formatted = response.trim()
-
-    // Убираем лишние пробелы и переносы
-    formatted = formatted.replace(/\n\s*\n/g, "\n\n")
-    formatted = formatted.replace(/\s+/g, " ")
-
-    // Обрезаем слишком длинные ответы
-    if (formatted.length > AI_CHAT_CONFIG.MAX_RESPONSE_LENGTH) {
-      formatted = `${formatted.substring(0, AI_CHAT_CONFIG.MAX_RESPONSE_LENGTH - 3)}...`
-      this.logger.w("Response truncated due to length limit")
-    }
-
-    return formatted
+    return formatRespHelper(response)
   }
 
   /**
    * Валидация ответа
    */
   validateResponse(response: string): { isValid: boolean, reason?: string } {
-    if (!response || response.trim().length === 0) {
-      return { isValid: false, reason: "Пустой ответ" }
-    }
-
-    if (response.length > AI_CHAT_CONFIG.MAX_RESPONSE_LENGTH * 2) {
-      return { isValid: false, reason: "Ответ слишком длинный" }
-    }
-
-    // Проверка на спам или мусор
-    if (this.isSpamResponse(response)) {
-      return { isValid: false, reason: "Ответ похож на спам" }
-    }
-
-    return { isValid: true }
-  }
-
-  /**
-   * Проверка на спам в ответе
-   */
-  private isSpamResponse(response: string): boolean {
-    // Простая эвристика: если много повторяющихся символов или слов
-    const words = response.split(/\s+/)
-    const wordCount = new Map<string, number>()
-
-    words.forEach((word) => {
-      if (word.length > 2) {
-        wordCount.set(word.toLowerCase(), (wordCount.get(word.toLowerCase()) || 0) + 1)
-      }
-    })
-
-    // Если какое-то слово повторяется более 30% от общего количества
-    const maxCount = Math.max(...wordCount.values())
-    return words.length > 10 && maxCount / words.length > 0.3
+    return validateRespHelper(response)
   }
 
   /**
@@ -217,25 +169,6 @@ export class AIResponseService implements IAIResponseService {
     } catch (error) {
       throw new Error(`Invalid function call format: ${error}`)
     }
-  }
-
-  /**
-   * Создание сообщения об ошибке для пользователя
-   */
-  createErrorMessage(_error: string): string {
-    // Возвращаем простое сообщение об ошибке
-    const errorMessages = [
-      "Произошла ошибка при генерации ответа",
-      "Не удалось получить ответ от AI",
-      "Сервис временно недоступен",
-    ]
-
-    // Выбираем случайное сообщение об ошибке
-    const randomMessage = errorMessages[Math.floor(Math.random() * errorMessages.length)]
-
-    this.logger.d(`Using error message: ${randomMessage}`)
-
-    return randomMessage!
   }
 
   /**

@@ -103,23 +103,23 @@ export class GramioBot {
           const elapsed = Math.floor((Date.now() - startTime) / 1000)
           this.logger.w(`⚠️ [Attempt ${attempt}] Retrying to get bot info... (elapsed: ${elapsed}s)`)
         }
-        
+
         const botInfo = await this.bot.api.getMe()
         const elapsed = Math.floor((Date.now() - startTime) / 1000)
-        this.logger.i(`✅ Bot info retrieved successfully (${elapsed}s, ${attempt} attempt${attempt > 1 ? 's' : ''})`)
+        this.logger.i(`✅ Bot info retrieved successfully (${elapsed}s, ${attempt} attempt${attempt > 1 ? "s" : ""})`)
         return botInfo
       } catch (error: any) {
         // Проверяем, является ли это сетевой ошибкой
-        const isNetworkError = error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' || 
-                               error?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
-                               error?.message?.includes('fetch failed') ||
-                               error?.message?.includes('timeout')
+        const isNetworkError = error?.cause?.code === "UND_ERR_CONNECT_TIMEOUT"
+          || error?.code === "UND_ERR_CONNECT_TIMEOUT"
+          || error?.message?.includes("fetch failed")
+          || error?.message?.includes("timeout")
 
         if (isNetworkError) {
           // Логируем детали ошибки только на первых попытках и периодически
           if (attempt === 1 || attempt % 10 === 0) {
             const elapsed = Math.floor((Date.now() - startTime) / 1000)
-            const errorCode = error?.cause?.code || error?.code || 'UNKNOWN'
+            const errorCode = error?.cause?.code || error?.code || "UNKNOWN"
             this.logger.w(`⚠️ Network error (${errorCode}) on attempt ${attempt} (${elapsed}s elapsed). Retrying...`)
           }
           await new Promise(resolve => setTimeout(resolve, 1000))
@@ -287,30 +287,6 @@ export class GramioBot {
         this.logger.e(`Failed to unban user ${userId} after kick:`, error)
       }
     }, autoUnbanDelayMs)
-  }
-
-  /**
-   * Временный бан пользователя
-   */
-  async temporaryBanUser(chatId: number, userId: number, durationSec: number): Promise<void> {
-    const untilDate = Math.floor(Date.now() / 1000) + durationSec
-    await this.banUser(chatId, userId, untilDate)
-  }
-
-  /**
-   * Отправка сообщения с автоудалением (упрощенный интерфейс)
-   */
-  async sendTempMessage(
-    chatId: number,
-    text: string,
-    deleteAfterMs: number,
-    parseMode?: "HTML" | "Markdown" | "MarkdownV2",
-  ): Promise<MessageResult> {
-    return await this.sendAutoDeleteMessage({
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    }, deleteAfterMs)
   }
 
   /**

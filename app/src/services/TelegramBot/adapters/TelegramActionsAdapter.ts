@@ -1,7 +1,6 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot } from "../types/index.js"
 import type { EventBus, TelegramAction } from "../../../core/EventBus.js"
-import type { UserManager } from "../utils/UserManager.js"
 
 /**
  * Адаптер для выполнения Telegram действий на основе событий
@@ -13,7 +12,6 @@ export class TelegramActionsAdapter {
     private bot: TelegramBot,
     private logger: Logger,
     private eventBus: EventBus,
-    private userManager?: UserManager,
   ) {}
 
   /**
@@ -250,10 +248,8 @@ export class TelegramActionsAdapter {
       user_id: params.userId,
     })
 
-    // Очищаем счетчик если требуется
-    if (params.clearCounter && this.userManager) {
-      await this.userManager.clearUserCounter(params.userId)
-    }
+    // Счетчики очищаются автоматически через TTL в Redis
+    // clearCounter параметр игнорируется
 
     this.logger.i(`User ${params.userId} kicked from chat ${chatId}`)
   }
@@ -278,6 +274,10 @@ export class TelegramActionsAdapter {
     const messageParams: any = {
       chat_id: chatId,
       text: params.text,
+    }
+
+    if (params.replyToMessageId) {
+      messageParams.reply_to_message_id = params.replyToMessageId
     }
 
     if (params.parseMode) {
@@ -309,6 +309,10 @@ export class TelegramActionsAdapter {
     const messageParams: any = {
       chat_id: chatId,
       text: params.text,
+    }
+
+    if (params.replyToMessageId) {
+      messageParams.reply_to_message_id = params.replyToMessageId
     }
 
     if (params.parseMode) {

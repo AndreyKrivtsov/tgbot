@@ -53,10 +53,6 @@ export class MessageHandler {
     this.chatService = chatService
   }
 
-  private setupEventHandlers(): void {
-    // Подписки на EventBus здесь больше не нужны для сообщений
-  }
-
   private async handleMessageEvent(context: TelegramMessageContext): Promise<void> {
     if (this.isProcessing) {
       this.logger.w("Message handler is already processing, skipping message")
@@ -131,20 +127,7 @@ export class MessageHandler {
     await this.handleMessageEvent(context)
   }
 
-  getMessageStats(): object {
-    return {
-      isProcessing: this.isProcessing,
-      hasAntiSpam: !!this.antiSpamService,
-      hasCommandHandler: !!this.commandHandler,
-      hasChatService: !!this.chatService,
-    }
-  }
-
   hasAIService(): boolean {
     return !!this.chatService
-  }
-
-  setAIService(chatService: AIChatService): void {
-    this.chatService = chatService
   }
 }

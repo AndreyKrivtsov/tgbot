@@ -5,7 +5,7 @@ import type { EventBus, RegisterGroupCommand, TelegramAction, UnregisterGroupCom
 import { EVENTS } from "../../core/EventBus.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
 import type { AuthorizationService } from "../AuthorizationService/index.js"
-import { getMessage } from "../TelegramBot/utils/Messages.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 interface TelegramPort {
   getChatAdministrators: (chatId: number) => Promise<any[]>

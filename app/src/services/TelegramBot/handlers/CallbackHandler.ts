@@ -1,7 +1,7 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot } from "../types/index.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
-import { getMessage } from "../utils/Messages.js"
+import { getMessage } from "../../../shared/messages/index.js"
 
 /**
  * Обработчик callback запросов (inline кнопки)
@@ -92,63 +92,4 @@ export class CallbackHandler {
     }
   }
 
-  /**
-   * Валидация callback data
-   */
-  private isValidCallbackData(callbackData: string): boolean {
-    if (!callbackData || typeof callbackData !== "string") {
-      return false
-    }
-
-    // Проверяем известные форматы
-    if (callbackData.startsWith("captcha_")) {
-      const parts = callbackData.split("_")
-      const userIdStr = parts[1]
-      return Boolean(parts.length === 4 && userIdStr && !Number.isNaN(Number.parseInt(userIdStr, 10)))
-    }
-
-    return false
-  }
-
-  /**
-   * Получение информации о callback'e
-   */
-  parseCallbackData(callbackData: string): { type: string, userId?: number, action?: string } | null {
-    if (!this.isValidCallbackData(callbackData)) {
-      return null
-    }
-
-    if (callbackData.startsWith("captcha_")) {
-      const parts = callbackData.split("_")
-      const userIdStr = parts[1]
-
-      if (!userIdStr) {
-        return null
-      }
-
-      return {
-        type: "captcha",
-        userId: Number.parseInt(userIdStr, 10),
-        action: parts[3], // "correct" или "wrong"
-      }
-    }
-
-    return null
-  }
-
-  /**
-   * Проверка доступности капча менеджера
-   */
-  hasCaptchaManager(): boolean {
-    return !!this.captchaService
-  }
-
-  /**
-   * Получение статистики callback'ов
-   */
-  getCallbackStats(): { captchaAvailable: boolean } {
-    return {
-      captchaAvailable: this.hasCaptchaManager(),
-    }
-  }
 }

@@ -2,7 +2,7 @@ import type { RedisService } from "../RedisService/index.js"
 
 export interface ChatContext {
   chatId: string
-  messages: Array<{ role: "user" | "assistant" | "model", content: string, timestamp: number }>
+  messages: Array<{ role: "user" | "model", content: string, timestamp: number }>
   lastActivity: number
   requestCount: number
 }

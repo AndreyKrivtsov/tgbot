@@ -4,7 +4,7 @@ import type { AppConfig } from "../../config.js"
 import type { AddAltronKeyCommand, EventBus, TelegramAction, UltronToggleCommand } from "../../core/EventBus.js"
 import type { AuthorizationService } from "../AuthorizationService/index.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
-import { getMessage } from "../TelegramBot/utils/Messages.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 interface TelegramPort {
   getChat: (params: { chat_id: string }) => Promise<any>

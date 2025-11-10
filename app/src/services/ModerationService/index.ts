@@ -4,8 +4,7 @@ import type { AppConfig } from "../../config.js"
 import type { BanUserCommand, EventBus, MuteUserCommand, TelegramAction, UnbanUserCommand, UnmuteUserCommand } from "../../core/EventBus.js"
 import { EVENTS } from "../../core/EventBus.js"
 import type { AuthorizationService } from "../AuthorizationService/index.js"
-import type { UserManager } from "../TelegramBot/utils/UserManager.js"
-import { getMessage } from "../TelegramBot/utils/Messages.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 interface TelegramPort {
   getChatMember: (params: { chat_id: number, user_id: number | string }) => Promise<any>
@@ -14,7 +13,6 @@ interface TelegramPort {
 interface ModerationDependencies {
   eventBus?: EventBus
   authorizationService?: AuthorizationService
-  userManager?: UserManager
   telegramPort?: TelegramPort
 }
 
@@ -342,27 +340,20 @@ export class ModerationService implements IService {
       return { userId: target.userId, username: target.username || "user" }
     }
 
-    if (target.username && this.deps.userManager) {
-      const userIdFromCache = await this.deps.userManager.getUserIdByUsername(chatId, target.username)
-      if (userIdFromCache) {
-        return { userId: userIdFromCache, username: target.username }
-      }
-
-      if (this.deps.telegramPort) {
-        try {
-          const member = await this.deps.telegramPort.getChatMember({
-            chat_id: chatId,
-            user_id: `@${target.username}`,
-          })
-          if (member && member.user && member.user.id) {
-            return {
-              userId: member.user.id,
-              username: member.user.username || target.username,
-            }
+    if (target.username && this.deps.telegramPort) {
+      try {
+        const member = await this.deps.telegramPort.getChatMember({
+          chat_id: chatId,
+          user_id: `@${target.username}`,
+        })
+        if (member && member.user && member.user.id) {
+          return {
+            userId: member.user.id,
+            username: member.user.username || target.username,
           }
-        } catch {
-          return { userId: null, username: target.username }
         }
+      } catch {
+        return { userId: null, username: target.username }
       }
     }
 
@@ -386,11 +377,19 @@ export class ModerationService implements IService {
   }
 
   private async getActorUsername(userId: number, chatId: number): Promise<string | undefined> {
-    if (!this.deps.userManager) {
-      return undefined
+    // Получаем username через Telegram API если нужно
+    if (this.deps.telegramPort) {
+      try {
+        const member = await this.deps.telegramPort.getChatMember({
+          chat_id: chatId,
+          user_id: userId,
+        })
+        return member?.user?.username
+      } catch {
+        return undefined
+      }
     }
-
-    return await this.deps.userManager.getUsernameByUserId(chatId, userId) || undefined
+    return undefined
   }
 
   private async sendMessage(chatId: number, text: string, replyToMessageId?: number): Promise<void> {

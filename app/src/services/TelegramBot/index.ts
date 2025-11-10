@@ -14,12 +14,12 @@ import type { EventBus } from "../../core/EventBus.js"
 // EVENTS not used here
 
 // Утилиты
-import { SettingsManager } from "./utils/SettingsManager.js"
+// SettingsManager removed; inline settings are used instead
 // UserRestrictions removed; use TelegramModerationAdapter instead
 
 // Feature модули
 // Utils for user and message management
-import { UserManager } from "./utils/UserManager.js"
+// UserManager removed; counters moved to AntiSpamService/UserCounters.ts
 import { MessageDeletionManager } from "./utils/MessageDeletionManager.js"
 
 // Обработчики
@@ -41,12 +41,11 @@ export class TelegramBotService implements IService {
   private hasGramIO = false
 
   // Управляющие модули
-  private settingsManager: SettingsManager
+  private settings: TelegramBotSettings
   // private userRestrictions: removed; use TelegramModerationAdapter in handlers/adapters
 
   // Feature модули
   // feature managers removed
-  private userManager: UserManager
   private messageDeletionManager: MessageDeletionManager | null = null
 
   // Обработчики
@@ -66,16 +65,17 @@ export class TelegramBotService implements IService {
     this.logger = logger
     this.dependencies = dependencies
 
-    // Инициализируем менеджер настроек
-    this.settingsManager = new SettingsManager(settings || {}, logger, dependencies)
-
-    // Инициализируем менеджер пользователей с Redis
-    if (!dependencies.redisService) {
-      this.logger.e("❌ RedisService is required for UserManager")
-      this.logger.w("💡 Start Redis server and check REDIS_URL in .env file")
-      throw new Error("RedisService is required for UserManager")
+    // Инициализируем настройки (инлайн вместо SettingsManager)
+    this.settings = {
+      captchaTimeoutMs: BOT_CONFIG.CAPTCHA_TIMEOUT_MS,
+      captchaCheckIntervalMs: BOT_CONFIG.CAPTCHA_CHECK_INTERVAL_MS,
+      errorMessageDeleteTimeoutMs: BOT_CONFIG.MESSAGE_DELETE_LONG_TIMEOUT_MS,
+      deleteSystemMessages: true,
+      temporaryBanDurationSec: BOT_CONFIG.TEMPORARY_BAN_DURATION_SEC,
+      autoUnbanDelayMs: BOT_CONFIG.AUTO_UNBAN_DELAY_MS,
+      maxMessagesForSpamCheck: BOT_CONFIG.MAX_MESSAGES_FOR_SPAM_CHECK,
+      ...(settings || {}),
     }
-    this.userManager = new UserManager(logger, dependencies.redisService)
   }
 
   /**
@@ -144,7 +144,7 @@ export class TelegramBotService implements IService {
       return
     }
 
-    const settings = this.settingsManager.getSettings()
+    const settings = this.settings
 
     // Для обработчиков требуется EventBus
     const eventBus = this.eventBusRef as EventBus
@@ -164,7 +164,6 @@ export class TelegramBotService implements IService {
       this.logger,
       this.config,
       null as any,
-      this.userManager,
       this.dependencies.chatRepository,
       this,
       this.dependencies.chatService,
@@ -177,7 +176,6 @@ export class TelegramBotService implements IService {
       this.config,
       this.bot,
       settings,
-      this.userManager,
       this.dependencies.chatRepository,
       null as any,
       this,
@@ -192,7 +190,6 @@ export class TelegramBotService implements IService {
       settings,
       this.bot,
       null as any,
-      this.userManager,
       this.dependencies.chatRepository,
       this.dependencies.captchaService,
       eventBus,
@@ -261,8 +258,7 @@ export class TelegramBotService implements IService {
         })
       }
 
-      // Запускаем автоматическую очистку старых записей
-      this.userManager.startCleanupTimer()
+      // Счетчики обрабатываются в AntiSpamService
 
       this.logger.i(`✅ TelegramBot service started: @${botInfo.username}`)
     } catch (error) {
@@ -288,8 +284,7 @@ export class TelegramBotService implements IService {
 
         this.isRunning = false
 
-        // Останавливаем автоматическую очистку
-        this.userManager.stopCleanupTimer()
+        // Счетчики обрабатываются в AntiSpamService
 
         this.logger.i("✅ Telegram bot stopped")
       } catch (error) {
@@ -305,9 +300,6 @@ export class TelegramBotService implements IService {
     this.logger.i("🗑️ Disposing Telegram bot service...")
 
     await this.stop()
-
-    // Освобождаем ресурсы модулей
-    this.userManager.dispose()
 
     // Освобождаем ресурсы MessageDeletionManager
     if (this.messageDeletionManager) {
@@ -384,7 +376,7 @@ export class TelegramBotService implements IService {
       version: BOT_CONFIG.VERSION,
       isRunning: this.isRunning,
       hasBot: !!this.bot,
-      settings: this.settingsManager.getSettings(),
+      settings: this.settings,
       dependencies: {
         captcha: !!this.dependencies.captchaService,
         antiSpam: !!this.dependencies.antiSpamService,
@@ -392,7 +384,6 @@ export class TelegramBotService implements IService {
         redis: !!this.dependencies.redisService,
       },
       modules: {
-        userManager: !!this.userManager,
         messageHandler: !!this.messageHandler,
         memberHandler: !!this.memberHandler,
         callbackHandler: !!this.callbackHandler,
@@ -409,22 +400,17 @@ export class TelegramBotService implements IService {
    * Получение текущих настроек
    */
   getSettings(): TelegramBotSettings {
-    return this.settingsManager.getSettings()
+    return { ...this.settings }
   }
 
   /**
    * Обновление настроек
    */
   updateSettings(newSettings: Partial<TelegramBotSettings>): void {
-    this.settingsManager.updateSettings(newSettings)
+    this.settings = { ...this.settings, ...newSettings }
   }
 
-  /**
-   * Очистка счетчика сообщений для пользователя
-   */
-  async clearUserMessageCounter(userId: number): Promise<boolean> {
-    return await this.userManager.clearUserCounter(userId)
-  }
+  // clearUserMessageCounter removed; counters managed by AntiSpamService
 
   /**
    * Получение статистики модулей
@@ -498,11 +484,10 @@ export class TelegramBotService implements IService {
     // Инициализируем TelegramActionsAdapter для обработки событий
     if (this.bot) {
       import("./adapters/TelegramActionsAdapter.js").then(({ TelegramActionsAdapter }) => {
-        const actionsAdapter = new TelegramActionsAdapter(
+        const         actionsAdapter = new TelegramActionsAdapter(
           this.bot!,
           this.logger,
           eventBus,
-          this.userManager,
         )
         actionsAdapter.initialize()
       }).catch((error) => {

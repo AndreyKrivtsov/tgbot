@@ -59,6 +59,14 @@ export class Application {
    * Регистрация core сервисов
    */
   async registerCoreServices(): Promise<void> {
+    // Message Provider
+    if (!this.isSkipped("message_provider")) {
+      this.container.register("messageProvider", async () => {
+        const { createMessageProvider } = await import("../shared/messages/index.js")
+        return createMessageProvider()
+      })
+    }
+
     // Database Service
     if (!this.isSkipped("db")) {
       this.container.register("database", async () => {
@@ -133,6 +141,7 @@ export class Application {
       this.container.register("antiSpam", async () => {
         const { AntiSpamService } = await import("../services/AntiSpamService/index.js")
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
 
         // Настройки антиспама (можно перенести в БД позже)
         const antiSpamSettings = {
@@ -141,7 +150,7 @@ export class Application {
           retryDelayMs: 1000, // 1 секунда
         }
 
-        return new AntiSpamService(this.config, this.logger, { eventBus }, antiSpamSettings)
+        return new AntiSpamService(this.config, this.logger, { eventBus, redisService }, antiSpamSettings)
       })
     }
 
@@ -149,14 +158,14 @@ export class Application {
     if (!this.isSkipped("ai")) {
       this.container.register("chat", async () => {
         const { AIChatService } = await import("../services/AIChatService/AIChatService.js")
-        const { GeminiAdapter } = await import("../services/AIChatService/providers/GeminiAdapter.js")
+        const { GeminiLLMAdapter } = await import("../services/ai/GeminiLLMAdapter.js")
         const { AdaptiveChatThrottleManager } = await import("../helpers/ai/AdaptiveThrottleManager.js")
         const { ChatSettingsRepositoryAdapter } = await import("../services/AIChatService/adapters/ChatSettingsRepositoryAdapter.js")
         const database = this.container.has("database") ? await this.container.getAsync("database") as any : undefined
         const redis = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
         const logger = await this.container.getAsync("logger") as any
-        const aiProvider = new GeminiAdapter(logger)
+        const aiProvider = new GeminiLLMAdapter(logger)
         const throttleManager = new AdaptiveChatThrottleManager(logger)
         // Преобразуем ChatSettingsService в репозиторийный порт AI
         const chatRepository = await this.container.getAsync("chatRepository") as any
@@ -183,7 +192,7 @@ export class Application {
                 }
                 return null
               },
-            },
+            } as any,
           },
           aiProvider,
           throttleManager,
@@ -197,15 +206,15 @@ export class Application {
     if (!this.isSkipped("ai_moderation")) {
       this.container.register("aiModeration", async () => {
         const { AIModerationService } = await import("../services/AIModerationService/index.js")
-        const { GeminiAdapter } = await import("../services/AIChatService/providers/GeminiAdapter.js")
+        const { GeminiLLMAdapter } = await import("../services/ai/GeminiLLMAdapter.js")
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
         const logger = await this.container.getAsync("logger") as any
         const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
         const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
-        const geminiAdapter = new GeminiAdapter(logger)
+        const llm = new GeminiLLMAdapter(logger)
         return new AIModerationService(this.config, logger, {
           eventBus,
-          geminiAdapter,
+          llm,
           chatRepository,
           redisService,
         })
@@ -253,13 +262,9 @@ export class Application {
         const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
         const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
 
-        const { UserManager } = await import("../services/TelegramBot/utils/UserManager.js")
-        const userManager = redisService ? new UserManager(this.logger, redisService) : undefined
-
         return new ModerationService(this.config, this.logger, {
           eventBus,
           authorizationService,
-          userManager,
           telegramPort: telegramBot
             ? {
                 getChatMember: (params: { chat_id: number, user_id: number | string }) => telegramBot.getChatMember(params),

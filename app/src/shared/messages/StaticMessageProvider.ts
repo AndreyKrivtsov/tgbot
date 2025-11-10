@@ -1,3 +1,5 @@
+import type { IMessageProvider } from "./interfaces.js"
+
 /**
  * Централизованное хранилище сообщений бота
  * Перед изменением необходимо запросить разрешение
@@ -142,34 +144,47 @@ const MESSAGES = {
   generic_user: "пользователь",
 } as const
 
-/**
- * Получение сообщения с подстановкой переменных
- * @param key - ключ сообщения
- * @param params - объект с переменными для подстановки
- * @returns отформатированное сообщение
- */
-export function getMessage(key: keyof typeof MESSAGES, params: Record<string, string | number> = {}): string {
-  let message = MESSAGES[key] as string
-
-  // Простая подстановка переменных {variable}
-  Object.entries(params).forEach(([paramKey, value]) => {
-    const placeholder = `{${paramKey}}`
-    message = message.replace(new RegExp(placeholder, "g"), String(value))
-  })
-
-  return message
-}
+export type MessageKey = keyof typeof MESSAGES
 
 /**
- * Проверка существования сообщения
+ * Статический провайдер сообщений
+ * Реализует IMessageProvider с хранением сообщений в памяти
  */
-export function hasMessage(key: string): key is keyof typeof MESSAGES {
-  return key in MESSAGES
-}
+export class StaticMessageProvider implements IMessageProvider {
+  private messages: typeof MESSAGES
 
-/**
- * Получение всех доступных ключей сообщений (для отладки)
- */
-export function getMessageKeys(): string[] {
-  return Object.keys(MESSAGES)
+  constructor(messages: typeof MESSAGES = MESSAGES) {
+    this.messages = messages
+  }
+
+  getMessage(key: string, params: Record<string, string | number> = {}): string {
+    if (!(key in this.messages)) {
+      return `[Message not found: ${key}]`
+    }
+
+    let message = this.messages[key as MessageKey] as string
+
+    // Простая подстановка переменных {variable}
+    Object.entries(params).forEach(([paramKey, value]) => {
+      const placeholder = `{${paramKey}}`
+      message = message.replace(new RegExp(placeholder, "g"), String(value))
+    })
+
+    return message
+  }
+
+  hasMessage(key: string): boolean {
+    return key in this.messages
+  }
+
+  getMessageKeys(): string[] {
+    return Object.keys(this.messages)
+  }
+
+  /**
+   * Получение типизированного ключа (для TypeScript)
+   */
+  getTypedMessage(key: MessageKey, params: Record<string, string | number> = {}): string {
+    return this.getMessage(key, params)
+  }
 }

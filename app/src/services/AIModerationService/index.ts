@@ -3,7 +3,10 @@ import type { Logger } from "../../helpers/Logger.js"
 import type { EventBus } from "../../core/EventBus.js"
 import { EVENTS } from "../../core/EventBus.js"
 import { AI_MODERATION_CONFIG } from "../../constants.js"
-import type { GeminiAdapter } from "../AIChatService/providers/GeminiAdapter.js"
+import type { LLMPort } from "../ai/llm.models.js"
+import { buildModerationPrompt } from "../ai/moderation.promptBuilder.js"
+import { getModel, getSystemPrompt } from "../ai/moderation.policy.js"
+import { decisionsToViolations } from "../ai/moderation.postprocess.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
 import type { RedisService } from "../RedisService/index.js"
 
@@ -38,7 +41,7 @@ export class AIModerationService {
   private config: AppConfig
   private logger: Logger
   private eventBus?: EventBus
-  private geminiAdapter?: GeminiAdapter
+  private llm?: LLMPort
   private chatRepository?: ChatRepository
   private redisService?: RedisService
 
@@ -53,7 +56,7 @@ export class AIModerationService {
     logger: Logger,
     deps: {
       eventBus?: EventBus
-      geminiAdapter?: GeminiAdapter
+      llm?: LLMPort
       chatRepository?: ChatRepository
       redisService?: RedisService
     } = {},
@@ -61,7 +64,7 @@ export class AIModerationService {
     this.config = config
     this.logger = logger
     this.eventBus = deps.eventBus
-    this.geminiAdapter = deps.geminiAdapter
+    this.llm = deps.llm
     this.chatRepository = deps.chatRepository
     this.redisService = deps.redisService
   }
@@ -207,8 +210,8 @@ export class AIModerationService {
   }
 
   private async moderateMessages(chatId: number, messages: BufferedMessage[]): Promise<void> {
-    if (!this.geminiAdapter || !this.chatRepository) {
-      this.logger.w("AIModerationService: GeminiAdapter or ChatSettingsService not available")
+    if (!this.llm || !this.chatRepository) {
+      this.logger.w("AIModerationService: LLM or ChatSettingsService not available")
       return
     }
 
@@ -243,24 +246,32 @@ export class AIModerationService {
       .map((msg, idx) => `[${idx + 1}] ID:${msg.id} User:${msg.username || msg.name || msg.userId} Text:"${msg.text}"`)
       .join("\n")
 
-    const prompt = `Сообщения для проверки:
-${messagesText}${historyText}`
+    const prompt = buildModerationPrompt(
+      messages.slice(0, AI_MODERATION_CONFIG.MAX_BATCH).map(m => ({ id: m.id, user: m.username || m.name || m.userId, text: m.text })),
+      warningHistory,
+    )
 
     try {
-      const response = await this.geminiAdapter.generateContent(
+      const result = await this.llm.moderateBatch({
+        chatId,
+        prompt: `${getSystemPrompt()}\n\n${prompt}`,
+        model: getModel(),
         apiKey,
-        prompt,
-        [],
-        AI_MODERATION_CONFIG.SYSTEM_PROMPT,
-        {
-          temperature: 0.3,
-          maxOutputTokens: 2000,
-        },
-      )
+      })
 
-      // Парсим ответ
-      this.logger.d(`AI moderation response for chat ${chatId}:`, response)
-      const violations = await this.parseViolations(response, messages, chatId)
+      const messageToUser = new Map<number, BufferedMessage>()
+      for (const msg of messages) messageToUser.set(msg.id, msg)
+      const violations = decisionsToViolations(result.decisions)
+        .filter(v => messageToUser.has(v.messageId))
+
+      // Сохраняем WARN в историю (для промпта следующей итерации)
+      for (const v of violations) {
+        if (v.action === "warn") {
+          const m = messageToUser.get(v.messageId)!
+          const username = m.username || m.name || `User${m.userId}`
+          await this.saveWarning(chatId, { username, timestamp: Date.now(), reason: v.reason, action: "warn" })
+        }
+      }
 
       if (violations.length > 0) {
         const windowStart = this.windowStartByChat.get(chatId) || (Date.now() - AI_MODERATION_CONFIG.INTERVAL_MS)
@@ -283,69 +294,5 @@ ${messagesText}${historyText}`
     }
   }
 
-  private async parseViolations(response: string, messages: BufferedMessage[], chatId: number): Promise<ModerationViolation[]> {
-    try {
-      // Пытаемся найти JSON в ответе
-      const jsonMatch = response.match(/\{[\s\S]*"violations"[\s\S]*\}/)
-      if (!jsonMatch) {
-        this.logger.w("No JSON found in moderation response")
-        return []
-      }
-
-      const parsed = JSON.parse(jsonMatch[0])
-
-      if (!Array.isArray(parsed.violations)) {
-        this.logger.w("Invalid violations format in response")
-        return []
-      }
-
-      this.logger.d(`Parsed violations from AI:`, parsed.violations)
-
-      // Создаём маппинг messageId -> userId для быстрого поиска
-      const messageToUser = new Map<number, BufferedMessage>()
-      for (const msg of messages) {
-        messageToUser.set(msg.id, msg)
-      }
-
-      // Валидируем каждое нарушение и сохраняем предупреждения
-      const validViolations: ModerationViolation[] = []
-      for (const v of parsed.violations) {
-        if (
-          typeof v === "object"
-          && typeof v.messageId === "number"
-          && typeof v.reason === "string"
-          && typeof v.action === "string"
-          && ["warn", "mute", "kick", "ban"].includes(v.action)
-        ) {
-          // Проверяем, что messageId существует в наших сообщениях
-          const message = messageToUser.get(v.messageId)
-          if (!message) {
-            continue
-          }
-
-          // Сохраняем в историю ТОЛЬКО предупреждения (warn)
-          if (v.action === "warn") {
-            const username = message.username || message.name || `User${message.userId}`
-            await this.saveWarning(chatId, {
-              username,
-              timestamp: Date.now(),
-              reason: v.reason,
-              action: "warn",
-            })
-          }
-
-          validViolations.push({
-            messageId: v.messageId,
-            reason: v.reason,
-            action: v.action as "warn" | "mute" | "kick" | "ban",
-          })
-        }
-      }
-
-      return validViolations
-    } catch (error) {
-      this.logger.e("Failed to parse moderation response:", error)
-      return []
-    }
-  }
+  private async parseViolations(_response: string, _messages: BufferedMessage[], _chatId: number): Promise<ModerationViolation[]> { return [] }
 }
