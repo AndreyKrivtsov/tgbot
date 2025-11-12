@@ -39,7 +39,8 @@ interface GeminiResponse {
   }
 }
 
-const GEMINI_MODEL = "gemini-2.0-flash"
+// const GEMINI_MODEL = "gemini-2.0-flash"
+const GEMINI_MODEL = "gemma-3-27b-it"
 
 function extractTextFromResponse(data: GeminiResponse): string | null {
   if (!data) {

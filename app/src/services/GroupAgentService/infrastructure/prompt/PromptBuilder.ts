@@ -43,7 +43,7 @@ export interface PromptSections {
   history: string
   newMessages: string
   moderationRules: string
-  responseRules: string
+  rules: string
   formatBlock: string
 }
 
@@ -66,7 +66,7 @@ export function buildPromptSections(params: {
   const historySection = renderHistorySection(history)
   const newMessagesSection = renderNewMessagesSection(messages)
   const moderationRules = instructions.moderation.rules
-  const responseRules = [
+  const rules = [
     `Триггеры для ответов: ${instructions.responses.triggers.join(", ")}.`,
     instructions.responses.rules,
   ].join("\n")
@@ -78,7 +78,7 @@ export function buildPromptSections(params: {
     history: historySection,
     newMessages: newMessagesSection,
     moderationRules,
-    responseRules,
+    rules,
     formatBlock,
   }
 }
@@ -92,10 +92,10 @@ export function buildClassificationPrompt(params: {
 
   return [
     sections.system,
+    "ПРАВИЛА ОТВЕТОВ:",
+    sections.rules,
     "ПРАВИЛА МОДЕРАЦИИ:",
     sections.moderationRules,
-    "ПРАВИЛА ОТВЕТОВ:",
-    sections.responseRules,
     sections.formatBlock,
     "ИСТОРИЯ СООБЩЕНИЙ (уже обработанные):",
     sections.history || "<история отсутствует>",

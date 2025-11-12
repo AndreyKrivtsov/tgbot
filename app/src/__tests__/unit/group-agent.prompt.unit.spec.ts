@@ -77,7 +77,7 @@ describe("PromptBuilder", () => {
     expect(sections.history).toContain("обработано")
     expect(sections.newMessages).toContain("[ID:201]")
     expect(sections.moderationRules.length).toBeGreaterThan(0)
-    expect(sections.responseRules).toContain("bot_mention")
+    expect(sections.rules).toContain("bot_mention")
     expect(sections.formatBlock).toContain(`"results": [`)
   })
 
