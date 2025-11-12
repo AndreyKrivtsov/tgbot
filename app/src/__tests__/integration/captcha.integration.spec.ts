@@ -2,7 +2,7 @@ import { jest } from "@jest/globals"
 import { CaptchaService } from "../../services/CaptchaService/index.js"
 import { MemberHandler } from "../../services/TelegramBot/handlers/MemberHandler.js"
 import { CallbackHandler } from "../../services/TelegramBot/handlers/CallbackHandler.js"
-import { makeEventBus, makeConfig, makeLogger, makeUser } from "../test-utils/mocks.js"
+import { makeConfig, makeEventBus, makeLogger, makeUser } from "../test-utils/mocks.js"
 import { EVENTS } from "../../core/EventBus.js"
 
 describe("captcha integration (MemberHandler + CallbackHandler)", () => {
@@ -18,16 +18,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
     await service.initialize()
 
     const chatRepository = { isChatActive: async () => true } as any
-    const userManager = {
-      saveUserMapping: jest.fn<(
-        chatId: number,
-        userId: number,
-        username?: string,
-      ) => Promise<void>>().mockResolvedValue(undefined),
-      hasMessageCounter: jest.fn<(userId: number) => Promise<boolean>>().mockResolvedValue(false),
-      deleteMessageCounter: jest.fn<(userId: number) => Promise<void>>().mockResolvedValue(undefined),
-    } as any
-
     const settings = { deleteSystemMessages: false } as any
 
     const memberHandler = new MemberHandler(
@@ -35,7 +25,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       settings,
       undefined,
       undefined,
-      userManager,
       chatRepository,
       service,
       eventBus,
@@ -105,16 +94,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
     await service.initialize()
 
     const chatRepository = { isChatActive: async () => false } as any
-    const userManager = {
-      saveUserMapping: jest.fn<(
-        chatId: number,
-        userId: number,
-        username?: string,
-      ) => Promise<void>>().mockResolvedValue(undefined),
-      hasMessageCounter: jest.fn<(userId: number) => Promise<boolean>>().mockResolvedValue(false),
-      deleteMessageCounter: jest.fn<(userId: number) => Promise<void>>().mockResolvedValue(undefined),
-    } as any
-
     const settings = { deleteSystemMessages: false } as any
 
     const memberHandler = new MemberHandler(
@@ -122,7 +101,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       settings,
       undefined,
       undefined,
-      userManager,
       chatRepository,
       service,
       eventBus,
@@ -154,16 +132,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
     await service.initialize()
 
     const chatRepository = { isChatActive: async () => true } as any
-    const userManager = {
-      saveUserMapping: jest.fn<(
-        chatId: number,
-        userId: number,
-        username?: string,
-      ) => Promise<void>>().mockResolvedValue(undefined),
-      hasMessageCounter: jest.fn<(userId: number) => Promise<boolean>>().mockResolvedValue(false),
-      deleteMessageCounter: jest.fn<(userId: number) => Promise<void>>().mockResolvedValue(undefined),
-    } as any
-
     const settings = { deleteSystemMessages: false } as any
 
     const memberHandler = new MemberHandler(
@@ -171,7 +139,6 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       settings,
       undefined,
       undefined,
-      userManager,
       chatRepository,
       service,
       eventBus,

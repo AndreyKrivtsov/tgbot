@@ -25,6 +25,8 @@ export const EVENTS = {
 
   // События AI
   AI_RESPONSE: "ai.response",
+  GROUP_AGENT_MODERATION_ACTION: "group_agent.moderationAction",
+  GROUP_AGENT_RESPONSE: "group_agent.response",
 
   // Команды от пользователей (через CommandHandler)
   COMMAND_REGISTER: "command.register",
@@ -134,6 +136,29 @@ export interface AIResponseEvent {
   replyToMessageId?: number
   isError?: boolean
   actions: TelegramAction[]
+}
+
+export type GroupAgentModerationAction =
+  | { type: "deleteMessage", messageId: number, reason?: string }
+  | { type: "warn", userId: number, reason: string }
+  | { type: "mute", userId: number, duration: number, reason: string }
+  | { type: "unmute", userId: number, reason?: string }
+  | { type: "kick", userId: number, reason: string }
+  | { type: "ban", userId: number, reason: string }
+  | { type: "unban", userId: number, reason?: string }
+
+export interface GroupAgentModerationEvent {
+  chatId: number
+  actions: GroupAgentModerationAction[]
+}
+
+export interface GroupAgentResponseEvent {
+  chatId: number
+  actions: Array<{
+    type: "sendMessage"
+    text: string
+    replyToMessageId?: number
+  }>
 }
 
 export interface NewMemberEvent {
@@ -363,6 +388,22 @@ export class EventBus {
 
   emitAIResponse(data: AIResponseEvent): Promise<void> {
     return this.emit(EVENTS.AI_RESPONSE, data)
+  }
+
+  onGroupAgentModerationAction(handler: (data: GroupAgentModerationEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_MODERATION_ACTION, handler)
+  }
+
+  emitGroupAgentModerationAction(data: GroupAgentModerationEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_MODERATION_ACTION, data)
+  }
+
+  onGroupAgentResponse(handler: (data: GroupAgentResponseEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_RESPONSE, handler)
+  }
+
+  emitGroupAgentResponse(data: GroupAgentResponseEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_RESPONSE, data)
   }
 
   // Команды пользователей

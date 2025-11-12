@@ -1,21 +1,15 @@
 import { jest } from "@jest/globals"
 import { ModerationService } from "../../services/ModerationService/index.js"
 import { makeConfig, makeEventBus, makeLogger } from "../test-utils/mocks.js"
-import { EVENTS } from "../../core/EventBus.js"
 
 describe("moderationService (unit)", () => {
   let service: ModerationService
-  let mockChatRepository: any
   let mockAuthorizationService: any
   let mockTelegramPort: any
-  let mockUserManager: any
   let eventBus: any
 
   beforeEach(() => {
     eventBus = makeEventBus()
-    mockChatRepository = {
-      isAdmin: jest.fn().mockResolvedValue(false),
-    } as any
     mockAuthorizationService = {
       checkGroupAdmin: jest.fn().mockResolvedValue({ authorized: true }),
       isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -25,15 +19,9 @@ describe("moderationService (unit)", () => {
         user: { id: 123, username: "target" },
       }),
     } as any
-    mockUserManager = {
-      getUserIdByUsername: jest.fn().mockResolvedValue(null),
-      getUsernameByUserId: jest.fn().mockResolvedValue(null),
-    } as any
-
     service = new ModerationService(makeConfig(), makeLogger(), {
       eventBus,
       authorizationService: mockAuthorizationService,
-      userManager: mockUserManager,
       telegramPort: mockTelegramPort,
     })
   })
@@ -160,9 +148,7 @@ describe("moderationService (unit)", () => {
     )
   })
 
-  it("resolveTarget: ищет userId по username через UserManager", async () => {
-    mockUserManager.getUserIdByUsername.mockResolvedValueOnce(999)
-
+  it("resolveTarget: запрашивает userId по username через Telegram API", async () => {
     await service.initialize()
     const handler = (eventBus as any).onCommandBan.mock.calls[0]?.[0]
     if (handler) {
@@ -175,6 +161,9 @@ describe("moderationService (unit)", () => {
       })
     }
 
-    expect(mockUserManager.getUserIdByUsername).toHaveBeenCalledWith(-456, "target")
+    expect(mockTelegramPort.getChatMember).toHaveBeenCalledWith({
+      chat_id: -456,
+      user_id: "@target",
+    })
   })
 })

@@ -1,7 +1,6 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
 import type { TelegramBot, TelegramBotSettings, TelegramMessageContext } from "../types/index.js"
-import type { UserManager } from "../utils/UserManager.js"
 import type { CommandHandler } from "./CommandHandler.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
@@ -15,7 +14,6 @@ export class MessageHandler {
   private config: AppConfig
   private bot: TelegramBot
   private settings: TelegramBotSettings
-  private userManager: UserManager
   private chatRepository: ChatRepository
   private botService: TelegramBotService
   private eventBus: EventBus
@@ -31,7 +29,6 @@ export class MessageHandler {
     config: AppConfig,
     bot: TelegramBot,
     settings: TelegramBotSettings,
-    userManager: UserManager,
     chatRepository: ChatRepository,
     userRestrictions: any,
     botService: TelegramBotService,
@@ -44,7 +41,6 @@ export class MessageHandler {
     this.config = config
     this.bot = bot
     this.settings = settings
-    this.userManager = userManager
     this.chatRepository = chatRepository
     this.botService = botService
     this.eventBus = eventBus
@@ -94,11 +90,8 @@ export class MessageHandler {
           return
         }
 
-        // Подготовка контекста пользователя для антиспама и т.п.
-        await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
-        await this.userManager.saveUserMapping(chat.id, from.id, from.username)
-
         // Эмитим валидное групповое сообщение (ordered)
+        // Счетчики сообщений обрабатываются в AntiSpamService
         await this.eventBus.emitMessageGroupOrdered({
           from: { id: from.id, username: from.username, firstName: from.firstName },
           chat: { id: chat.id, type: chatType || (chat.id < 0 ? "supergroup" : "group") },

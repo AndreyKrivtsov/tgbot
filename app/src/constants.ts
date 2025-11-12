@@ -178,6 +178,20 @@ ${AI_MODERATION_RULES}
 } as const
 
 // =============================================================================
+// GROUP AGENT SERVICE
+// =============================================================================
+
+export const GROUP_AGENT_CONFIG = {
+  BATCH_INTERVAL_MS: 10_000,
+  MAX_BATCH_SIZE: 50,
+  AI_REQUEST_TIMEOUT_MS: 10_000,
+  AI_MAX_RETRIES: 2,
+  AI_MAX_RESPONSE_LENGTH: 2_000,
+  HISTORY_MAX_MESSAGES: 100,
+  BUFFER_TTL_SECONDS: 3_600,
+} as const
+
+// =============================================================================
 // ANTI-SPAM SERVICE
 // =============================================================================
 
@@ -300,6 +314,7 @@ export const CACHE_CONFIG = {
 export type BotConfigType = typeof BOT_CONFIG
 export type AIChatConfigType = typeof AI_CHAT_CONFIG
 export type AIThrottleConfigType = typeof AI_THROTTLE_CONFIG
+export type GroupAgentConfigType = typeof GROUP_AGENT_CONFIG
 export type AntiSpamConfigType = typeof ANTI_SPAM_CONFIG
 export type WeatherConfigType = typeof WEATHER_CONFIG
 export type HttpConfigType = typeof HTTP_CONFIG

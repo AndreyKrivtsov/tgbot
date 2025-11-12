@@ -233,19 +233,6 @@ export class AIModerationService {
     // Получаем историю предупреждений для чата
     const warningHistory = await this.getWarningHistory(chatId)
 
-    // Формируем текст истории для промпта
-    let historyText = ""
-    if (warningHistory.length > 0) {
-      const historyLines = warningHistory.map(w => `  - ${w.username}: ${w.reason}`).join("\n")
-      historyText = `\n\nИстория предупреждений за последний час:\n${historyLines}`
-    }
-
-    // Подготавливаем промпт с сообщениями
-    const messagesText = messages
-      .slice(0, AI_MODERATION_CONFIG.MAX_BATCH)
-      .map((msg, idx) => `[${idx + 1}] ID:${msg.id} User:${msg.username || msg.name || msg.userId} Text:"${msg.text}"`)
-      .join("\n")
-
     const prompt = buildModerationPrompt(
       messages.slice(0, AI_MODERATION_CONFIG.MAX_BATCH).map(m => ({ id: m.id, user: m.username || m.name || m.userId, text: m.text })),
       warningHistory,

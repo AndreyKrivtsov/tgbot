@@ -1,6 +1,11 @@
 import type { Logger } from "../../../helpers/Logger.js"
 import type { TelegramBot } from "../types/index.js"
-import type { EventBus, TelegramAction } from "../../../core/EventBus.js"
+import type {
+  EventBus,
+  GroupAgentModerationEvent,
+  GroupAgentResponseEvent,
+  TelegramAction,
+} from "../../../core/EventBus.js"
 
 /**
  * Адаптер для выполнения Telegram действий на основе событий
@@ -64,7 +69,103 @@ export class TelegramActionsAdapter {
       }
     })
 
+    // События нового GroupAgent сервиса
+    this.eventBus.onGroupAgentModerationAction(async (event) => {
+      try {
+        const actions = this.convertGroupAgentModerationEvent(event)
+        if (actions.length > 0) {
+          await this.executeActions(event.chatId, actions)
+        }
+      } catch (error) {
+        this.logger.e("Error handling group agent moderation action:", error)
+      }
+    })
+
+    this.eventBus.onGroupAgentResponse(async (event) => {
+      try {
+        const actions = this.convertGroupAgentResponseEvent(event)
+        if (actions.length > 0) {
+          await this.executeActions(event.chatId, actions)
+        }
+      } catch (error) {
+        this.logger.e("Error handling group agent response:", error)
+      }
+    })
+
     this.logger.i("✅ TelegramActionsAdapter initialized")
+  }
+
+  private convertGroupAgentModerationEvent(event: GroupAgentModerationEvent): TelegramAction[] {
+    return event.actions.flatMap(action => this.mapModerationAction(action))
+  }
+
+  private mapModerationAction(action: GroupAgentModerationEvent["actions"][number]): TelegramAction[] {
+    switch (action.type) {
+      case "deleteMessage":
+        if (!action.messageId) {
+          return []
+        }
+        return [{
+          type: "deleteMessage",
+          params: { messageId: action.messageId },
+        }]
+      case "warn":
+        return []
+      case "mute":
+        return [
+          {
+            type: "restrict",
+            params: {
+              userId: action.userId,
+              permissions: "none",
+              durationMinutes: action.duration,
+            },
+          },
+        ]
+      case "unmute":
+        return [
+          {
+            type: "unrestrict",
+            params: {
+              userId: action.userId,
+              permissions: "full",
+            },
+          },
+        ]
+      case "kick":
+        return [
+          {
+            type: "kick",
+            params: { userId: action.userId },
+          },
+        ]
+      case "ban":
+        return [
+          {
+            type: "ban",
+            params: { userId: action.userId },
+          },
+        ]
+      case "unban":
+        return [
+          {
+            type: "unban",
+            params: { userId: action.userId },
+          },
+        ]
+      default:
+        return []
+    }
+  }
+
+  private convertGroupAgentResponseEvent(event: GroupAgentResponseEvent): TelegramAction[] {
+    return event.actions.map(action => ({
+      type: "sendMessage",
+      params: {
+        text: action.text,
+        replyToMessageId: action.replyToMessageId,
+      },
+    }))
   }
 
   /**
@@ -198,11 +299,19 @@ export class TelegramActionsAdapter {
         }
       : params.permissions
 
-    await this.bot.api.restrictChatMember({
+    const request: any = {
       chat_id: chatId,
       user_id: params.userId,
       permissions,
-    })
+    }
+
+    if (typeof params.durationMinutes === "number" && params.durationMinutes > 0) {
+      request.until_date = Math.floor(Date.now() / 1000) + Math.floor(params.durationMinutes * 60)
+    } else if (typeof params.untilDate === "number") {
+      request.until_date = params.untilDate
+    }
+
+    await this.bot.api.restrictChatMember(request)
 
     this.logger.i(`User ${params.userId} restricted in chat ${chatId}`)
   }
