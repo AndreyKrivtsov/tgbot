@@ -187,8 +187,10 @@ export const GROUP_AGENT_CONFIG = {
   AI_REQUEST_TIMEOUT_MS: 10_000,
   AI_MAX_RETRIES: 2,
   AI_MAX_RESPONSE_LENGTH: 2_000,
-  HISTORY_MAX_MESSAGES: 100,
+  HISTORY_PROMPT_TOKEN_THRESHOLD: 30_000,
   BUFFER_TTL_SECONDS: 3_600,
+  REVIEW_TTL_SECONDS: 3 * 60 * 60,
+  REVIEW_EXPIRATION_CHECK_INTERVAL_MS: 60_000,
 } as const
 
 // =============================================================================

@@ -5,13 +5,21 @@ import type { AIProviderPort } from "../ports/AIProviderPort.js"
 import type { StateStorePort } from "../ports/StateStorePort.js"
 import type { EventBusPort } from "../ports/EventBusPort.js"
 import type { ChatConfigPort } from "../ports/ChatConfigPort.js"
-import type { AgentInstructions, BufferedMessage, ChatHistory, HistoryEntry } from "../domain/types.js"
+import type {
+  AgentInstructions,
+  BatchUsageMetadata,
+  ChatHistory,
+  HistoryEntry,
+  ModerationDecision,
+} from "../domain/types.js"
 import { formatMessageForAI } from "../domain/MessageFormatter.js"
+import type { ReviewRequestBuilder } from "./ReviewRequestBuilder.js"
+import type { ModerationReviewManager } from "./ModerationReviewManager.js"
 
 export interface BatchProcessorConfig {
   batchIntervalMs: number
   maxBatchSize: number
-  historyMaxMessages: number
+  historyTrimTokenThreshold: number
 }
 
 export interface InstructionsProvider {
@@ -27,6 +35,8 @@ interface Dependencies {
   eventBus: EventBusPort
   chatConfig: ChatConfigPort
   instructionsProvider: InstructionsProvider
+  reviewRequestBuilder: ReviewRequestBuilder
+  reviewManager: ModerationReviewManager
 }
 
 export class BatchProcessor {
@@ -85,21 +95,21 @@ export class BatchProcessor {
       return
     }
 
-    const toProcess = pending.slice(0, this.config.maxBatchSize)
-    console.log("[GroupAgentService] toProcess messages:", toProcess.length)
-
-    const messageIds = toProcess.map(message => message.messageId)
-
-    // Очищаем буфер сразу, чтобы исключить повторные обработки
-    this.deps.buffer.remove(chatId, messageIds)
-
     const config = await this.deps.chatConfig.getChatConfig(chatId)
     if (!config?.groupAgentEnabled) {
       return
     }
 
+    const toProcess = pending.slice(0, this.config.maxBatchSize)
+    console.log("[GroupAgentService] toProcess messages:", toProcess.length)
+
+    const messageIds = toProcess.map(message => message.messageId)
+
+    // Очищаем буфер сразу после проверки конфигурации, чтобы не терять сообщения при выключенном агенте
+    this.deps.buffer.remove(chatId, messageIds)
+
     const history = await this.deps.stateStore.loadHistory(chatId)
-    const historyEntries = this.selectHistoryEntries(history)
+    const historyEntries = history?.entries ?? []
     const instructions = await this.deps.instructionsProvider.getInstructions(chatId)
 
     const classification = await this.deps.aiProvider.classifyBatch({
@@ -119,7 +129,15 @@ export class BatchProcessor {
     const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
     const responseDecision = resolutions.find(resolution => resolution.response)?.response ?? null
 
-    const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, moderationDecisions)
+    const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions)
+    const reviewDecisionKeys = new Set(
+      reviewRequests.map(request => this.decisionKey(request.decision)),
+    )
+    const immediateDecisions = moderationDecisions.filter(
+      decision => !reviewDecisionKeys.has(this.decisionKey(decision)),
+    )
+
+    const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
     const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecision)
 
     if (moderationEvent) {
@@ -130,22 +148,32 @@ export class BatchProcessor {
       await this.deps.eventBus.emitAgentResponse(responseEvent)
     }
 
-    await this.persistHistory(chatId, history, resolutions)
+    if (reviewRequests.length > 0) {
+      await this.deps.reviewManager.enqueueRequests(reviewRequests)
+    }
+
+    await this.persistHistory(chatId, history, resolutions, classification.usage)
   }
 
-  private selectHistoryEntries(history: ChatHistory | null): HistoryEntry[] {
-    if (!history) {
-      return []
-    }
-    return history.entries.slice(-this.config.historyMaxMessages)
+  private decisionKey(decision: ModerationDecision): string {
+    const parts = [
+      decision.messageId,
+      decision.userId,
+      decision.action,
+      decision.durationMinutes ?? "",
+      decision.targetMessageId ?? "",
+    ]
+    return parts.join(":")
   }
 
   private async persistHistory(
     chatId: number,
     history: ChatHistory | null,
     resolutions: NonNullable<ReturnType<DecisionOrchestrator["buildResolutions"]>>,
+    usage?: BatchUsageMetadata,
   ): Promise<void> {
     const existingEntries = history?.entries ?? []
+    const baseEntries = this.applyHistoryTrim(existingEntries, usage)
 
     const newEntries: HistoryEntry[] = []
     for (const resolution of resolutions) {
@@ -164,10 +192,28 @@ export class BatchProcessor {
       })
     }
 
-    const merged = [...existingEntries, ...newEntries].slice(-this.config.historyMaxMessages)
+    const merged = [...baseEntries, ...newEntries]
     await this.deps.stateStore.saveHistory({
       chatId,
       entries: merged,
     })
+  }
+
+  private applyHistoryTrim(
+    entries: HistoryEntry[],
+    usage?: BatchUsageMetadata,
+  ): HistoryEntry[] {
+    const promptTokens = usage?.promptTokens
+    if (!promptTokens || promptTokens < this.config.historyTrimTokenThreshold) {
+      return entries
+    }
+
+    if (entries.length <= 1) {
+      return entries
+    }
+
+    const keepCount = Math.max(1, Math.ceil(entries.length / 2))
+    const trimmed = entries.slice(-keepCount)
+    return trimmed
   }
 }

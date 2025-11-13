@@ -30,7 +30,13 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
       eventBus,
     )
 
-    const callbackHandler = new CallbackHandler(logger, {} as any, service)
+    const callbackHandler = new CallbackHandler(
+      logger,
+      {} as any,
+      { isAdmin: jest.fn().mockResolvedValue(true) } as any,
+      eventBus,
+      service,
+    )
 
     // Перехватываем обработчик MEMBER_JOINED для CaptchaService
     const memberJoinedHandler = (eventBus as any).onMemberJoined.mock.calls.find((call: any[]) => call[0] !== undefined)?.[0]
@@ -169,7 +175,13 @@ describe("captcha integration (MemberHandler + CallbackHandler)", () => {
 
     await service.initialize()
 
-    const callbackHandler = new CallbackHandler(logger, {} as any, service)
+    const callbackHandler = new CallbackHandler(
+      logger,
+      {} as any,
+      { isAdmin: jest.fn().mockResolvedValue(true) } as any,
+      eventBus,
+      service,
+    )
 
     await callbackHandler.handleCallbackQuery({
       from: { id: 999 },

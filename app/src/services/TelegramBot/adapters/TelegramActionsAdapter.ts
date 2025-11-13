@@ -92,6 +92,38 @@ export class TelegramActionsAdapter {
       }
     })
 
+    this.eventBus.onGroupAgentReviewPrompt(async (event) => {
+      try {
+        const messageId = await this.sendMessageAndGetId(event.chatId, {
+          text: event.text,
+          inlineKeyboard: event.inlineKeyboard,
+        })
+        await this.eventBus.emitGroupAgentReviewPromptSent({
+          reviewId: event.reviewId,
+          chatId: event.chatId,
+          messageId,
+        })
+      } catch (error) {
+        this.logger.e("Error handling group agent review prompt:", error)
+      }
+    })
+
+    this.eventBus.onGroupAgentReviewDeletePrompt(async (event) => {
+      try {
+        await this.deleteMessage(event.chatId, { messageId: event.messageId })
+      } catch (error) {
+        this.logger.e("Error deleting review prompt message:", error)
+      }
+    })
+
+    this.eventBus.onGroupAgentReviewDisablePrompt(async (event) => {
+      try {
+        await this.removeInlineKeyboard(event.chatId, event.messageId)
+      } catch (error) {
+        this.logger.e("Error disabling review prompt:", error)
+      }
+    })
+
     this.logger.i("✅ TelegramActionsAdapter initialized")
   }
 
@@ -250,29 +282,13 @@ export class TelegramActionsAdapter {
    * Снятие ограничений с пользователя
    */
   private async unrestrict(chatId: number, params: any): Promise<void> {
-    const permissions = params.permissions === "full"
-      ? {
-          can_send_messages: true,
-          can_send_audios: true,
-          can_send_documents: true,
-          can_send_photos: true,
-          can_send_videos: true,
-          can_send_video_notes: true,
-          can_send_voice_notes: true,
-          can_send_polls: true,
-          can_send_other_messages: true,
-          can_add_web_page_previews: true,
-          can_change_info: false,
-          can_invite_users: true,
-          can_pin_messages: false,
-        }
-      : params.permissions
+    if (params.permissions && params.permissions !== "full") {
+      await this.bot.unrestrictUser(chatId, params.userId, params.permissions)
+      this.logger.i(`User ${params.userId} unrestricted in chat ${chatId}`)
+      return
+    }
 
-    await this.bot.api.restrictChatMember({
-      chat_id: chatId,
-      user_id: params.userId,
-      permissions,
-    })
+    await this.bot.unmuteUser(chatId, params.userId)
 
     this.logger.i(`User ${params.userId} unrestricted in chat ${chatId}`)
   }
@@ -281,55 +297,28 @@ export class TelegramActionsAdapter {
    * Ограничение пользователя
    */
   private async restrict(chatId: number, params: any): Promise<void> {
-    const permissions = params.permissions === "none"
-      ? {
-          can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false,
-        }
-      : params.permissions
-
-    const request: any = {
-      chat_id: chatId,
-      user_id: params.userId,
-      permissions,
+    if (params.permissions && params.permissions !== "none") {
+      const untilDate = typeof params.untilDate === "number" ? params.untilDate : undefined
+      await this.bot.restrictUser(chatId, params.userId, params.permissions, untilDate)
+      this.logger.i(`User ${params.userId} restricted in chat ${chatId}`)
+      return
     }
 
-    if (typeof params.durationMinutes === "number" && params.durationMinutes > 0) {
-      request.until_date = Math.floor(Date.now() / 1000) + Math.floor(params.durationMinutes * 60)
-    } else if (typeof params.untilDate === "number") {
-      request.until_date = params.untilDate
-    }
+    await this.bot.muteUser(chatId, params.userId, params.durationMinutes)
 
-    await this.bot.api.restrictChatMember(request)
-
-    this.logger.i(`User ${params.userId} restricted in chat ${chatId}`)
+    this.logger.i(`User ${params.userId} muted in chat ${chatId}`)
   }
 
   /**
    * Бан пользователя
    */
   private async ban(chatId: number, params: any): Promise<void> {
-    const banParams: any = {
-      chat_id: chatId,
-      user_id: params.userId,
-    }
-
+    let untilDate: number | undefined
     if (params.durationSec) {
-      banParams.until_date = Math.floor(Date.now() / 1000) + params.durationSec
+      untilDate = Math.floor(Date.now() / 1000) + params.durationSec
     }
 
-    await this.bot.api.banChatMember(banParams)
+    await this.bot.banUser(chatId, params.userId, untilDate)
 
     this.logger.i(
       `User ${params.userId} banned in chat ${chatId}${params.durationSec ? ` for ${params.durationSec}s` : " permanently"}`,
@@ -340,10 +329,7 @@ export class TelegramActionsAdapter {
    * Разбан пользователя
    */
   private async unban(chatId: number, params: any): Promise<void> {
-    await this.bot.api.unbanChatMember({
-      chat_id: chatId,
-      user_id: params.userId,
-    })
+    await this.bot.unbanUser(chatId, params.userId)
 
     this.logger.i(`User ${params.userId} unbanned in chat ${chatId}`)
   }
@@ -352,10 +338,9 @@ export class TelegramActionsAdapter {
    * Кик пользователя (бан с автоматическим разбаном)
    */
   private async kick(chatId: number, params: any): Promise<void> {
-    await this.bot.api.banChatMember({
-      chat_id: chatId,
-      user_id: params.userId,
-    })
+    const autoUnbanDelayMs = typeof params.autoUnbanDelayMs === "number" ? params.autoUnbanDelayMs : undefined
+
+    await this.bot.kickUser(chatId, params.userId, autoUnbanDelayMs)
 
     // Счетчики очищаются автоматически через TTL в Redis
     // clearCounter параметр игнорируется
@@ -374,6 +359,18 @@ export class TelegramActionsAdapter {
 
     await this.bot.deleteMessage(chatId, params.messageId)
     this.logger.d(`Message ${params.messageId} deleted from chat ${chatId}`)
+  }
+
+  private async removeInlineKeyboard(chatId: number, messageId: number): Promise<void> {
+    try {
+      await this.bot.api.editMessageReplyMarkup({
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: { inline_keyboard: [] },
+      })
+    } catch (error) {
+      this.logger.e(`Error removing inline keyboard for message ${messageId} in chat ${chatId}:`, error)
+    }
   }
 
   /**
@@ -395,7 +392,7 @@ export class TelegramActionsAdapter {
 
     if (params.inlineKeyboard) {
       messageParams.reply_markup = {
-        inline_keyboard: params.inlineKeyboard,
+        inline_keyboard: this.normalizeInlineKeyboard(params.inlineKeyboard),
       }
     }
 
@@ -430,7 +427,7 @@ export class TelegramActionsAdapter {
 
     if (params.inlineKeyboard) {
       messageParams.reply_markup = {
-        inline_keyboard: params.inlineKeyboard,
+        inline_keyboard: this.normalizeInlineKeyboard(params.inlineKeyboard),
       }
     }
 
@@ -442,5 +439,23 @@ export class TelegramActionsAdapter {
     }
 
     this.logger.d(`Message sent to chat ${chatId}`)
+  }
+
+  private normalizeInlineKeyboard(
+    inlineKeyboard: Array<Array<Record<string, any>>>,
+  ): Array<Array<Record<string, any>>> {
+    return inlineKeyboard.map(row =>
+      row.map((button) => {
+        if ("callbackData" in button) {
+          const typedButton = button as Record<string, any>
+          const { callbackData, ...rest } = typedButton
+          return {
+            ...rest,
+            callback_data: callbackData,
+          }
+        }
+        return button
+      }),
+    )
   }
 }

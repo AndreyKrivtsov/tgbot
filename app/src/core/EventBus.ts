@@ -27,6 +27,12 @@ export const EVENTS = {
   AI_RESPONSE: "ai.response",
   GROUP_AGENT_MODERATION_ACTION: "group_agent.moderationAction",
   GROUP_AGENT_RESPONSE: "group_agent.response",
+  GROUP_AGENT_REVIEW_PROMPT: "group_agent.review.prompt",
+  GROUP_AGENT_REVIEW_PROMPT_SENT: "group_agent.review.promptSent",
+  GROUP_AGENT_REVIEW_DECISION: "group_agent.review.decision",
+  GROUP_AGENT_REVIEW_RESOLVED: "group_agent.review.resolved",
+  GROUP_AGENT_REVIEW_DELETE_PROMPT: "group_agent.review.deletePrompt",
+  GROUP_AGENT_REVIEW_DISABLE_PROMPT: "group_agent.review.disablePrompt",
 
   // Команды от пользователей (через CommandHandler)
   COMMAND_REGISTER: "command.register",
@@ -159,6 +165,37 @@ export interface GroupAgentResponseEvent {
     text: string
     replyToMessageId?: number
   }>
+}
+
+export interface GroupAgentReviewPromptEvent {
+  reviewId: string
+  chatId: number
+  text: string
+  inlineKeyboard: Array<Array<{ text: string, callbackData: string }>>
+}
+
+export interface GroupAgentReviewPromptSentEvent {
+  reviewId: string
+  chatId: number
+  messageId: number
+}
+
+export interface GroupAgentReviewDecisionEvent {
+  reviewId: string
+  chatId: number
+  moderatorId: number
+  action: "approve" | "reject"
+  response?: {
+    status: "ok" | "error"
+    message: string
+  }
+}
+
+export interface GroupAgentReviewResolvedEvent {
+  reviewId: string
+  chatId: number
+  status: "approved" | "rejected" | "expired"
+  moderatorId?: number
 }
 
 export interface NewMemberEvent {
@@ -404,6 +441,54 @@ export class EventBus {
 
   emitGroupAgentResponse(data: GroupAgentResponseEvent): Promise<void> {
     return this.emit(EVENTS.GROUP_AGENT_RESPONSE, data)
+  }
+
+  onGroupAgentReviewPrompt(handler: (data: GroupAgentReviewPromptEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_PROMPT, handler)
+  }
+
+  emitGroupAgentReviewPrompt(data: GroupAgentReviewPromptEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_PROMPT, data)
+  }
+
+  onGroupAgentReviewPromptSent(handler: (data: GroupAgentReviewPromptSentEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_PROMPT_SENT, handler)
+  }
+
+  emitGroupAgentReviewPromptSent(data: GroupAgentReviewPromptSentEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_PROMPT_SENT, data)
+  }
+
+  onGroupAgentReviewDecision(handler: (data: GroupAgentReviewDecisionEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_DECISION, handler)
+  }
+
+  emitGroupAgentReviewDecision(data: GroupAgentReviewDecisionEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_DECISION, data)
+  }
+
+  onGroupAgentReviewResolved(handler: (data: GroupAgentReviewResolvedEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_RESOLVED, handler)
+  }
+
+  emitGroupAgentReviewResolved(data: GroupAgentReviewResolvedEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_RESOLVED, data)
+  }
+
+  onGroupAgentReviewDeletePrompt(handler: (data: { chatId: number, messageId: number }) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_DELETE_PROMPT, handler)
+  }
+
+  emitGroupAgentReviewDeletePrompt(data: { chatId: number, messageId: number }): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_DELETE_PROMPT, data)
+  }
+
+  onGroupAgentReviewDisablePrompt(handler: (data: { chatId: number, messageId: number }) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_REVIEW_DISABLE_PROMPT, handler)
+  }
+
+  emitGroupAgentReviewDisablePrompt(data: { chatId: number, messageId: number }): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_REVIEW_DISABLE_PROMPT, data)
   }
 
   // Команды пользователей

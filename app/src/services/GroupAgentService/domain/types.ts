@@ -56,8 +56,15 @@ export interface ClassificationResult {
   durationMinutes?: number
 }
 
+export interface BatchUsageMetadata {
+  promptTokens?: number
+  totalTokens?: number
+  modelVersion?: string
+}
+
 export interface BatchClassificationResult {
   results: ClassificationResult[]
+  usage?: BatchUsageMetadata
 }
 
 export interface ModerationDecision {
@@ -67,6 +74,34 @@ export interface ModerationDecision {
   durationMinutes?: number
   targetMessageId?: number
   text: string
+}
+
+export type ReviewableModerationAction = Extract<ModerationActionKind, "kick" | "ban">
+
+export type ModerationReviewStatus = "pending" | "approved" | "rejected" | "expired"
+
+export function isReviewableAction(action: ModerationActionKind): action is ReviewableModerationAction {
+  return action === "kick" || action === "ban"
+}
+
+export interface ModerationReviewRequest {
+  id: string
+  chatId: number
+  decision: ModerationDecision
+  targetUser: {
+    id: number
+    username?: string
+    firstName?: string
+  }
+  reason: string
+  createdAt: number
+  expiresAt: number
+  promptText: string
+}
+
+export interface ModerationReviewRecord extends ModerationReviewRequest {
+  status: ModerationReviewStatus
+  promptMessageId?: number
 }
 
 export interface AgentResponseDecision {

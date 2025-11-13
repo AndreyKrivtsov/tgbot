@@ -37,10 +37,16 @@ interface GeminiResponse {
     code?: number
     status?: string
   }
+  usageMetadata?: {
+    promptTokenCount?: number
+    totalTokenCount?: number
+  }
+  modelVersion?: string
 }
 
 // const GEMINI_MODEL = "gemini-2.0-flash"
 const GEMINI_MODEL = "gemma-3-27b-it"
+// const GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 function extractTextFromResponse(data: GeminiResponse): string | null {
   if (!data) {
@@ -159,15 +165,14 @@ export class GeminiAdapter implements AIProviderPort {
     const requestBody = {
       contents: [
         {
-          role: "user",
           parts: [{ text: prompt }],
         },
       ],
       generationConfig: {
-        temperature: 1.1,
-        topP: 0.8,
-        topK: 32,
-        maxOutputTokens: 1024,
+        temperature: 1.9,
+        // topP: 0.7,
+        // topK: 32,
+        maxOutputTokens: 200,
       },
     }
 
@@ -187,7 +192,14 @@ export class GeminiAdapter implements AIProviderPort {
           responseType: "json",
         })
 
-        const text = extractTextFromResponse(response.data as GeminiResponse)
+        const data = response.data as GeminiResponse
+
+        console.log("[GroupAgentService][GeminiAdapter] usage stats", {
+          promptTokenCount: data.usageMetadata?.promptTokenCount,
+          modelVersion: data.modelVersion,
+        })
+
+        const text = extractTextFromResponse(data)
         if (!text) {
           return { results: [] }
         }
@@ -197,7 +209,13 @@ export class GeminiAdapter implements AIProviderPort {
           return null
         }
 
-        return normalizeResults(parsed, allowedMessageIds)
+        const normalized = normalizeResults(parsed, allowedMessageIds)
+        normalized.usage = {
+          promptTokens: data.usageMetadata?.promptTokenCount,
+          totalTokens: data.usageMetadata?.totalTokenCount,
+          modelVersion: data.modelVersion,
+        }
+        return normalized
       } catch (error) {
         console.error("[GroupAgentService][GeminiAdapter] request failed", {
           attempt,

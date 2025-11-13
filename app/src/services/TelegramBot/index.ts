@@ -198,6 +198,8 @@ export class TelegramBotService implements IService {
     this.callbackHandler = new CallbackHandler(
       this.logger,
       this.bot,
+      this.dependencies.chatRepository,
+      eventBus,
       this.dependencies.captchaService,
     )
 
@@ -484,7 +486,7 @@ export class TelegramBotService implements IService {
     // Инициализируем TelegramActionsAdapter для обработки событий
     if (this.bot) {
       import("./adapters/TelegramActionsAdapter.js").then(({ TelegramActionsAdapter }) => {
-        const         actionsAdapter = new TelegramActionsAdapter(
+        const actionsAdapter = new TelegramActionsAdapter(
           this.bot!,
           this.logger,
           eventBus,

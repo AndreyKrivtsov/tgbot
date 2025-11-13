@@ -41,7 +41,9 @@ GroupAgentService/
 │   ├── ActionsBuilder.ts
 │   ├── BatchProcessor.ts
 │   ├── DecisionOrchestrator.ts
-│   └── MessageBuffer.ts
+│   ├── MessageBuffer.ts
+│   ├── ModerationReviewManager.ts
+│   └── ReviewRequestBuilder.ts
 ├── domain/
 │   ├── MessageFormatter.ts
 │   ├── ModerationPolicy.ts
@@ -52,6 +54,7 @@ GroupAgentService/
 │   │   ├── ChatRepositoryAdapter.ts
 │   │   ├── EventBusAdapter.ts
 │   │   ├── GeminiAdapter.ts
+│   │   ├── RedisReviewStateAdapter.ts
 │   │   └── RedisStateStoreAdapter.ts
 │   ├── config/
 │   │   └── defaultInstructions.ts
@@ -61,6 +64,7 @@ GroupAgentService/
 │   ├── AIProviderPort.ts
 │   ├── ChatConfigPort.ts
 │   ├── EventBusPort.ts
+│   ├── ReviewStatePort.ts
 │   └── StateStorePort.ts
 └── index.ts
 ```
@@ -75,8 +79,9 @@ GroupAgentService/
 4. Из Redis подтягивается история (до `HISTORY_MAX_MESSAGES` записей), загружается инструкция агента.
 5. AI-провайдер (`GeminiAdapter`) получает промпт, возвращает `BatchClassificationResult`.
 6. `DecisionOrchestrator` связывает результаты AI с исходными сообщениями, строит решения.
-7. `ActionsBuilder` превращает решения в события для `EventBus`.
-8. История обновляется в Redis; буфер батча очищается.
+7. `ReviewRequestBuilder` делит решения на мгновенные и требующие подтверждения (`kick`, `ban`). Для подтверждений `ModerationReviewManager` создаёт заявки, отправляет промпт модераторам через `EventBus` и ждёт решения/истечения TTL.
+8. `ActionsBuilder` превращает оставшиеся решения в события для `EventBus`.
+9. История обновляется в Redis; буфер батча очищается.
 
 ---
 
@@ -162,9 +167,16 @@ interface GroupAgentResponseEvent {
 }
 ```
 
-- Если действий нет, событие не отправляется.
+- Если действий нет, событие не отправляется. Действия `kick`/`ban` попадают сюда только после ручного подтверждения.
 
-### FR-5: Инструкции агента
+### FR-5: Ручное подтверждение критичных действий
+
+- `ReviewRequestBuilder` выделяет решения, требующие подтверждения (`kick`, `ban`).
+- `ModerationReviewManager` сохраняет заявку в Redis (`group_agent:review:{id}`) с TTL `REVIEW_TTL_SECONDS` и отправляет модераторам промпт с клавишами «Подтвердить»/«Отменить».
+- После подтверждения `ModerationReviewManager` эмитит стандартное событие `GROUP_AGENT_MODERATION_ACTION` и удаляет промпт. При отмене или истечении срока кнопка деактивируется, заявка удаляется.
+- Промпты отправляются через `TelegramActionsAdapter`, решения возвращаются через `CallbackHandler`, который проверяет права администратора.
+
+### FR-6: Инструкции агента
 
 - В текущей версии инструкции берутся из `defaultInstructions.ts`.
 - Структура `AgentInstructions`:
@@ -199,7 +211,7 @@ interface AgentInstructions {
 ### EventBus
 
 - Подписка: `eventBus.onMessageGroupOrdered(handler, priority = 5)`.
-- Эмиссия: `emitGroupAgentModerationAction`, `emitGroupAgentResponse`.
+- Эмиссия: `emitGroupAgentModerationAction`, `emitGroupAgentResponse`, а также события подтверждения: `GROUP_AGENT_REVIEW_PROMPT`, `GROUP_AGENT_REVIEW_PROMPT_SENT`, `GROUP_AGENT_REVIEW_DECISION`, `GROUP_AGENT_REVIEW_RESOLVED`, `GROUP_AGENT_REVIEW_DELETE_PROMPT`, `GROUP_AGENT_REVIEW_DISABLE_PROMPT`.
 - Сервис не зависит от конкретной реализации действий Telegram — этим занимается `TelegramActionsAdapter` на стороне EventBus.
 
 ### ChatRepository
@@ -211,6 +223,7 @@ interface AgentInstructions {
 ### RedisService
 
 - `RedisStateStoreAdapter` хранит историю (`group_agent:history:{chatId}`) и буферы (`group_agent:buffer:{chatId}`) с TTL.
+- `RedisReviewStateAdapter` хранит заявки на подтверждение (`group_agent:review:{id}`) до истечения срока.
 - При остановке сервиса буфер сериализуется и сохраняется, при старте — восстанавливается.
 
 ### AI Провайдер
@@ -232,6 +245,8 @@ export const GROUP_AGENT_CONFIG = {
   AI_MAX_RESPONSE_LENGTH: 2_000,
   HISTORY_MAX_MESSAGES: 100,
   BUFFER_TTL_SECONDS: 3_600,
+  REVIEW_TTL_SECONDS: 10_800, // 3 часа
+  REVIEW_EXPIRATION_CHECK_INTERVAL_MS: 60_000,
 } as const
 ```
 

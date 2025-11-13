@@ -23,6 +23,10 @@ import type { StateStorePort } from "./ports/StateStorePort.js"
 import { DEFAULT_AGENT_INSTRUCTIONS } from "./infrastructure/config/defaultInstructions.js"
 
 import type { AIProviderPort } from "./ports/AIProviderPort.js"
+import type { ReviewStatePort } from "./ports/ReviewStatePort.js"
+import { RedisReviewStateAdapter } from "./infrastructure/adapters/RedisReviewStateAdapter.js"
+import { ReviewRequestBuilder } from "./application/ReviewRequestBuilder.js"
+import { ModerationReviewManager } from "./application/ModerationReviewManager.js"
 
 interface Dependencies {
   eventBus?: EventBus
@@ -45,6 +49,9 @@ export class GroupAgentService implements IService {
   private aiProvider?: AIProviderPort
   private decisionOrchestrator?: DecisionOrchestrator
   private actionsBuilder?: ActionsBuilder
+  private reviewStateStore?: ReviewStatePort
+  private reviewRequestBuilder?: ReviewRequestBuilder
+  private reviewManager?: ModerationReviewManager
 
   private instructionsProvider: InstructionsProvider = {
     async getInstructions(): Promise<AgentInstructions> {
@@ -67,10 +74,12 @@ export class GroupAgentService implements IService {
     const chatConfigPort = new ChatRepositoryAdapter(this.deps.chatRepository)
     const stateStore = new RedisStateStoreAdapter(this.deps.redisService)
     const eventBusPort = new EventBusAdapter(this.deps.eventBus)
+    const reviewStateStore = new RedisReviewStateAdapter(this.deps.redisService)
 
     this.chatConfigPort = chatConfigPort
     this.stateStore = stateStore
     this.eventBusPort = eventBusPort
+    this.reviewStateStore = reviewStateStore
 
     const moderationPolicy = new ModerationPolicy()
 
@@ -82,15 +91,32 @@ export class GroupAgentService implements IService {
     this.decisionOrchestrator = new DecisionOrchestrator(moderationPolicy, responsePolicy)
     this.actionsBuilder = new ActionsBuilder()
     this.aiProvider = new GeminiAdapter(chatConfigPort)
+    this.reviewRequestBuilder = new ReviewRequestBuilder(this.serviceConfig.REVIEW_TTL_SECONDS)
+
+    if (this.actionsBuilder) {
+      this.reviewManager = new ModerationReviewManager({
+        stateStore: reviewStateStore,
+        eventBus: eventBusPort,
+        actionsBuilder: this.actionsBuilder,
+      })
+    }
 
     this.deps.eventBus.onMessageGroupOrdered(async (event) => {
       await this.handleMessage(event)
       return false
     }, 5)
+
+    this.deps.eventBus.onGroupAgentReviewPromptSent(async (event) => {
+      await this.reviewManager?.handlePromptSent(event)
+    })
+
+    this.deps.eventBus.onGroupAgentReviewDecision(async (event) => {
+      await this.reviewManager?.handleDecision(event)
+    })
   }
 
   async start(): Promise<void> {
-    if (!this.stateStore || !this.eventBusPort || !this.chatConfigPort || !this.decisionOrchestrator || !this.actionsBuilder || !this.aiProvider) {
+    if (!this.hasDepsReady()) {
       return
     }
 
@@ -101,7 +127,7 @@ export class GroupAgentService implements IService {
       {
         batchIntervalMs: this.serviceConfig.BATCH_INTERVAL_MS,
         maxBatchSize: this.serviceConfig.MAX_BATCH_SIZE,
-        historyMaxMessages: this.serviceConfig.HISTORY_MAX_MESSAGES,
+        historyTrimTokenThreshold: this.serviceConfig.HISTORY_PROMPT_TOKEN_THRESHOLD,
       },
       {
         buffer: this.messageBuffer,
@@ -112,6 +138,8 @@ export class GroupAgentService implements IService {
         eventBus: this.eventBusPort,
         chatConfig: this.chatConfigPort,
         instructionsProvider: this.instructionsProvider,
+        reviewRequestBuilder: this.reviewRequestBuilder,
+        reviewManager: this.reviewManager,
       },
     )
 
@@ -174,5 +202,18 @@ export class GroupAgentService implements IService {
     }
 
     return message
+  }
+
+  private hasDepsReady(): boolean {
+    return Boolean(
+      this.stateStore
+      && this.eventBusPort
+      && this.chatConfigPort
+      && this.decisionOrchestrator
+      && this.actionsBuilder
+      && this.aiProvider
+      && this.reviewManager
+      && this.reviewRequestBuilder,
+    )
   }
 }
