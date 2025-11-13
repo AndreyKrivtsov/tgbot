@@ -154,13 +154,13 @@ export class BatchProcessor {
         continue
       }
       newEntries.push({
-          message: formatMessageForAI(message),
-          result: {
+        message: formatMessageForAI(message),
+        result: {
           classification: resolution.classification.classification.type,
           moderationAction: resolution.classification.moderationAction,
           responseText: resolution.classification.responseText,
-          },
-          timestamp: message.timestamp,
+        },
+        timestamp: message.timestamp,
       })
     }
 
