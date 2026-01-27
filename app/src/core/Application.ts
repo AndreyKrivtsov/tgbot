@@ -358,10 +358,18 @@ export class Application {
         const { WebApiService } = await import("../services/WebApiService/index.js")
         const database = this.container.has("database") ? await this.container.getAsync("database") : undefined
         const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") : undefined
+        const groupManagement = this.container.has("groupManagement") ? await this.container.getAsync("groupManagement") : undefined
+        const chatConfiguration = this.container.has("chatConfiguration") ? await this.container.getAsync("chatConfiguration") : undefined
+        const authorization = this.container.has("authorization") ? await this.container.getAsync("authorization") : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") : undefined
 
         return new WebApiService(this.config, this.logger, {
           database,
           telegramBot,
+          groupManagement,
+          chatConfiguration,
+          authorizationService: authorization,
+          chatRepository,
         })
       })
     }

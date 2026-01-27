@@ -2,7 +2,7 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import type { AddAltronKeyCommand, EventBus, TelegramAction, UltronToggleCommand } from "../../core/EventBus.js"
-import type { AuthorizationService } from "../AuthorizationService/index.js"
+import type { AuthorizationResult, AuthorizationService } from "../AuthorizationService/index.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
 import { getMessage } from "../../shared/messages/index.js"
 
@@ -17,6 +17,15 @@ interface ChatConfigurationDependencies {
   telegramPort?: TelegramPort
 }
 
+interface ConfigActionResult extends AuthorizationResult {
+  success: boolean
+  error?: string
+}
+
+interface ConfigActionOptions {
+  skipAuthorization?: boolean
+}
+
 export class ChatConfigurationService implements IService {
   private config: AppConfig
   private logger: Logger
@@ -26,6 +35,86 @@ export class ChatConfigurationService implements IService {
     this.config = config
     this.logger = logger
     this.deps = deps
+  }
+
+  private get chatRepository(): ChatRepository | undefined {
+    return this.deps.chatRepository
+  }
+
+  private get authorizationService(): AuthorizationService | undefined {
+    return this.deps.authorizationService
+  }
+
+  private buildUnavailableResult(): ConfigActionResult {
+    return {
+      authorized: false,
+      success: false,
+      reason: "service_unavailable",
+    }
+  }
+
+  async setGeminiApiKey(
+    actorUserId: number,
+    chatId: number,
+    apiKey: string | null,
+    options: ConfigActionOptions = {},
+  ): Promise<ConfigActionResult> {
+    if (!this.chatRepository) {
+      return this.buildUnavailableResult()
+    }
+
+    if (!options.skipAuthorization) {
+      if (!this.authorizationService) {
+        return this.buildUnavailableResult()
+      }
+      const authResult = await this.authorizationService.checkGroupAdmin(chatId, actorUserId)
+      if (!authResult.authorized) {
+        return { ...authResult, success: false }
+      }
+    }
+
+    if (apiKey && apiKey.length > 50) {
+      return {
+        authorized: true,
+        success: false,
+        error: "api_key_too_long",
+      }
+    }
+
+    const success = await this.chatRepository.setApiKey(chatId, apiKey)
+    return {
+      authorized: true,
+      success,
+      error: success ? undefined : "api_key_save_error",
+    }
+  }
+
+  async setGroupAgentEnabled(
+    actorUserId: number,
+    chatId: number,
+    enabled: boolean,
+    options: ConfigActionOptions = {},
+  ): Promise<ConfigActionResult> {
+    if (!this.chatRepository) {
+      return this.buildUnavailableResult()
+    }
+
+    if (!options.skipAuthorization) {
+      if (!this.authorizationService) {
+        return this.buildUnavailableResult()
+      }
+      const authResult = await this.authorizationService.checkGroupAdmin(chatId, actorUserId)
+      if (!authResult.authorized) {
+        return { ...authResult, success: false }
+      }
+    }
+
+    const success = await this.chatRepository.toggleAi(chatId, enabled)
+    return {
+      authorized: true,
+      success,
+      error: success ? undefined : "ultron_error",
+    }
   }
 
   async initialize(): Promise<void> {
@@ -80,9 +169,9 @@ export class ChatConfigurationService implements IService {
         }
       }
 
-      const success = await this.deps.chatRepository.toggleAi(targetChatId, enabled)
+      const result = await this.setGroupAgentEnabled(actorId, targetChatId, enabled, { skipAuthorization: true })
 
-      if (success) {
+      if (result.success) {
         let message: string
         if (targetChatUsername) {
           message = getMessage(
@@ -145,9 +234,9 @@ export class ChatConfigurationService implements IService {
         }
       }
 
-      const success = await this.deps.chatRepository.setApiKey(foundChat.id, apiKey)
+      const result = await this.setGeminiApiKey(actorId, foundChat.id, apiKey, { skipAuthorization: true })
 
-      if (success) {
+      if (result.success) {
         await this.sendMessage(chatId, getMessage("api_key_success", { username: chatUsername }), messageId)
         this.logger.i(`API key added for chat @${chatUsername} by user ${actorId}`)
       } else {

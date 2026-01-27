@@ -53,17 +53,44 @@ export class GroupAgentService implements IService {
   private reviewRequestBuilder?: ReviewRequestBuilder
   private reviewManager?: ModerationReviewManager
 
-  private instructionsProvider: InstructionsProvider = {
-    async getInstructions(): Promise<AgentInstructions> {
-      return DEFAULT_AGENT_INSTRUCTIONS
-    },
-  }
+  private instructionsProvider: InstructionsProvider
 
   constructor(config: AppConfig, deps: Dependencies = {}) {
     this.config = config
     this.deps = deps
     this.serviceConfig = GROUP_AGENT_CONFIG
     this.messageBuffer = new MessageBuffer()
+    this.instructionsProvider = {
+      getInstructions: async (chatId: number): Promise<AgentInstructions> => {
+        const base = DEFAULT_AGENT_INSTRUCTIONS
+
+        if (!this.chatConfigPort || typeof chatId !== "number") {
+          return base
+        }
+
+        try {
+          const adminIds = await this.chatConfigPort.getChatAdmins(chatId)
+          if (adminIds.length === 0) {
+            return base
+          }
+
+          const adminList = adminIds
+            .map(id => `- tg://user?id=${id}`)
+            .join("\n")
+
+          return {
+            ...base,
+            format: {
+              ...base.format,
+              message: `${base.format.message}\n\nАДМИНИСТРАТОРЫ ЧАТА:\n${adminList}`,
+              response: base.format.response,
+            },
+          }
+        } catch {
+          return base
+        }
+      },
+    }
   }
 
   async initialize(): Promise<void> {
@@ -120,7 +147,16 @@ export class GroupAgentService implements IService {
       return
     }
 
-    const buffers = await this.stateStore.loadBuffers()
+    const stateStore = this.stateStore!
+    const aiProvider = this.aiProvider!
+    const decisionOrchestrator = this.decisionOrchestrator!
+    const actionsBuilder = this.actionsBuilder!
+    const eventBusPort = this.eventBusPort!
+    const chatConfigPort = this.chatConfigPort!
+    const reviewRequestBuilder = this.reviewRequestBuilder!
+    const reviewManager = this.reviewManager!
+
+    const buffers = await stateStore.loadBuffers()
     this.messageBuffer = new MessageBuffer(buffers)
 
     this.batchProcessor = new BatchProcessor(
@@ -131,15 +167,15 @@ export class GroupAgentService implements IService {
       },
       {
         buffer: this.messageBuffer,
-        aiProvider: this.aiProvider,
-        stateStore: this.stateStore,
-        decisionOrchestrator: this.decisionOrchestrator,
-        actionsBuilder: this.actionsBuilder,
-        eventBus: this.eventBusPort,
-        chatConfig: this.chatConfigPort,
+        aiProvider,
+        stateStore,
+        decisionOrchestrator,
+        actionsBuilder,
+        eventBus: eventBusPort,
+        chatConfig: chatConfigPort,
         instructionsProvider: this.instructionsProvider,
-        reviewRequestBuilder: this.reviewRequestBuilder,
-        reviewManager: this.reviewManager,
+        reviewRequestBuilder,
+        reviewManager,
       },
     )
 

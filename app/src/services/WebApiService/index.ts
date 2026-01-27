@@ -1,28 +1,19 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
+import type { GroupManagementService } from "../GroupManagementService/index.js"
+import type { ChatConfigurationService } from "../ChatConfigurationService/index.js"
+import type { AuthorizationService } from "../AuthorizationService/index.js"
+import type { ChatRepository } from "../../repository/ChatRepository.js"
+import { registerRoutes } from "./routes/registerRoutes.js"
 
 interface ApiServiceDependencies {
   database?: any
   telegramBot?: any
-}
-
-interface BotConfig {
-  // Captcha настройки
-  captchaEnabled: boolean
-  captchaTimeout: number // в секундах
-
-  // Антиспам настройки
-  antispamEnabled: boolean
-  antispamThreshold: number
-
-  // AI чат настройки
-  aiChatEnabled: boolean
-
-  // Общие настройки
-  welcomeMessage: string
-  adminUsername: string
-  logLevel: number
+  groupManagement?: GroupManagementService
+  chatConfiguration?: ChatConfigurationService
+  authorizationService?: AuthorizationService
+  chatRepository?: ChatRepository
 }
 
 /**
@@ -36,26 +27,12 @@ export class WebApiService implements IService {
   private dependencies: ApiServiceDependencies
   private isRunning = false
   private hasFastify = false
-
-  // Конфигурация бота (будет сохраняться в БД)
-  private botConfig: BotConfig
+  private server?: any
 
   constructor(config: AppConfig, logger: Logger, dependencies: ApiServiceDependencies = {}) {
     this.config = config
     this.logger = logger
     this.dependencies = dependencies
-
-    // Инициализируем конфиг
-    this.botConfig = {
-      captchaEnabled: true,
-      captchaTimeout: 60,
-      antispamEnabled: true,
-      antispamThreshold: 5,
-      aiChatEnabled: true,
-      welcomeMessage: "Добро пожаловать! Пройдите простую проверку:",
-      adminUsername: this.config.ADMIN_USERNAME || "",
-      logLevel: 2,
-    }
   }
 
   /**
@@ -94,7 +71,18 @@ export class WebApiService implements IService {
     }
 
     try {
-      // TODO: Здесь будет код запуска Fastify сервера
+      const { default: fastify } = await import("fastify")
+      this.server = fastify()
+      registerRoutes(this.server, {
+        groupManagement: this.dependencies.groupManagement,
+        chatConfiguration: this.dependencies.chatConfiguration,
+        authorizationService: this.dependencies.authorizationService,
+        chatRepository: this.dependencies.chatRepository,
+      }, this.logger)
+      await this.server.listen({
+        port: this.config.PORT,
+        host: "0.0.0.0",
+      })
       this.isRunning = true
       this.logger.i("✅ API server started")
     }
@@ -110,6 +98,14 @@ export class WebApiService implements IService {
   async stop(): Promise<void> {
     if (this.isRunning) {
       this.logger.i("🛑 Stopping API server...")
+      if (this.server) {
+        try {
+          await this.server.close()
+        } catch (error) {
+          this.logger.e("Error while stopping API server:", error)
+        }
+        this.server = undefined
+      }
       this.isRunning = false
       this.logger.i("✅ API server stopped")
     }
@@ -147,20 +143,4 @@ export class WebApiService implements IService {
     }
   }
 
-  /**
-   * Получение конфигурации бота (для внутреннего использования)
-   */
-  getBotConfig(): BotConfig {
-    return { ...this.botConfig }
-  }
-
-  /**
-   * Обновление конфигурации бота (для внутреннего использования)
-   */
-  updateBotConfig(updates: Partial<BotConfig>): void {
-    this.botConfig = { ...this.botConfig, ...updates }
-    this.logger.i("Bot configuration updated")
-    // TODO: Сохранение в БД
-    // TODO: Уведомление бота об изменениях
-  }
 }

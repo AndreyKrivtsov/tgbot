@@ -35,6 +35,7 @@ describe("command-to-action flow (integration)", () => {
       setApiKey: jest.fn().mockResolvedValue(true),
       isAdmin: jest.fn().mockResolvedValue(true),
       addAdmin: jest.fn().mockResolvedValue(true),
+      replaceAdmins: jest.fn().mockResolvedValue(undefined),
       getActiveAiChats: jest.fn().mockResolvedValue([]),
     }
     mockAuthorizationService = {

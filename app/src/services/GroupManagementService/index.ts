@@ -64,8 +64,8 @@ export class GroupManagementService implements IService {
     }
 
     const existingChat = await this.deps.chatRepository.getChat(chatId)
-    if (!existingChat && this.deps.telegramPort) {
-      await this.fetchAndSaveGroupAdmins(chatId)
+    if (!existingChat) {
+      await this.updateGroupAdmins(chatId)
     }
 
     try {
@@ -118,22 +118,28 @@ export class GroupManagementService implements IService {
     }
   }
 
-  private async fetchAndSaveGroupAdmins(chatId: number): Promise<void> {
+  async updateGroupAdmins(chatId: number): Promise<void> {
     if (!this.deps.telegramPort || !this.deps.chatRepository) {
       return
     }
 
     try {
       const admins = await this.deps.telegramPort.getChatAdministrators(chatId)
-      if (Array.isArray(admins)) {
-        for (const admin of admins) {
-          if (admin.user && admin.user.id) {
-            await this.deps.chatRepository.addAdmin(chatId, admin.user.id)
-          }
-        }
+      if (!Array.isArray(admins)) {
+        return
       }
+
+      const adminIds = Array.from(
+        new Set(
+          admins
+            .map(admin => admin?.user?.id)
+            .filter((id): id is number => typeof id === "number" && id > 0),
+        ),
+      )
+
+      await this.deps.chatRepository.replaceAdmins(chatId, adminIds)
     } catch (error) {
-      this.logger.e(`Не удалось получить или сохранить админов для чата ${chatId}:`, error)
+      this.logger.e(`Не удалось обновить список админов для чата ${chatId}:`, error)
     }
   }
 

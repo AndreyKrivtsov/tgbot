@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { chatConfigs, chats, groupAdmins } from "../db/schema.js"
 import type { Chat, ChatConfig, GroupAdmin, NewChat, NewChatConfig, SystemPromptData } from "../db/schema.js"
 import type { DatabaseService } from "../services/DatabaseService/index.js"
@@ -12,6 +12,28 @@ export class ChatRepository {
   constructor(databaseService: DatabaseService, cacheService?: CacheService) {
     this.databaseService = databaseService
     this.cacheService = cacheService
+  }
+
+  private getAdminsCacheKey(chatId: number): string {
+    return `${CACHE_CONFIG.KEYS.CHAT_ADMINS}:${chatId}`
+  }
+
+  private setAdminsCache(chatId: number, admins: GroupAdmin[]): void {
+    if (!this.cacheService) {
+      return
+    }
+    this.cacheService.set(
+      this.getAdminsCacheKey(chatId),
+      admins,
+      CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
+    )
+  }
+
+  private invalidateAdminsCache(chatId: number): void {
+    if (!this.cacheService) {
+      return
+    }
+    this.cacheService.delete(this.getAdminsCacheKey(chatId))
   }
 
   /**
@@ -308,11 +330,21 @@ export class ChatRepository {
    * Получить администраторов чата
    */
   async getChatAdmins(chatId: number): Promise<GroupAdmin[]> {
+    if (this.cacheService) {
+      const cached = this.cacheService.get(this.getAdminsCacheKey(chatId)) as GroupAdmin[] | null
+      if (cached) {
+        return cached
+      }
+    }
+
     try {
-      return await this.getDb()
+      const admins = await this.getDb()
         .select()
         .from(groupAdmins)
         .where(eq(groupAdmins.groupId, chatId))
+
+      this.setAdminsCache(chatId, admins)
+      return admins
     } catch (error) {
       console.error("Error getting chat admins:", error)
       return []
@@ -332,6 +364,7 @@ export class ChatRepository {
         })
         .onConflictDoNothing()
 
+      this.invalidateAdminsCache(chatId)
       return true
     } catch (error) {
       console.error("Error adding admin:", error)
@@ -350,7 +383,11 @@ export class ChatRepository {
           sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
         )
 
-      return (result.count || 0) > 0
+      const success = (result.count || 0) > 0
+      if (success) {
+        this.invalidateAdminsCache(chatId)
+      }
+      return success
     } catch (error) {
       console.error("Error removing admin:", error)
       return false
@@ -358,23 +395,46 @@ export class ChatRepository {
   }
 
   /**
+   * Полностью заменить список администраторов чата
+   */
+  async replaceAdmins(chatId: number, adminIds: number[]): Promise<void> {
+    try {
+      const db = this.getDb()
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(groupAdmins)
+          .where(eq(groupAdmins.groupId, chatId))
+
+        if (adminIds.length > 0) {
+          const values = adminIds.map(userId => ({
+            groupId: chatId,
+            userId,
+          }))
+          await tx
+            .insert(groupAdmins)
+            .values(values)
+            .onConflictDoNothing()
+        }
+      })
+
+      const admins = await this.getDb()
+        .select()
+        .from(groupAdmins)
+        .where(eq(groupAdmins.groupId, chatId))
+
+      this.setAdminsCache(chatId, admins)
+    } catch (error) {
+      console.error("Error replacing chat admins:", error)
+      this.invalidateAdminsCache(chatId)
+    }
+  }
+
+  /**
    * Проверить, является ли пользователь администратором чата
    */
   async isAdmin(chatId: number, userId: number): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .select({ id: groupAdmins.userId })
-        .from(groupAdmins)
-        .where(
-          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
-        )
-        .limit(1)
-
-      return result.length > 0
-    } catch (error) {
-      console.error("Error checking admin status:", error)
-      return false
-    }
+    const admins = await this.getChatAdmins(chatId)
+    return admins.some(admin => admin.userId === userId)
   }
 
   /**
@@ -420,6 +480,33 @@ export class ChatRepository {
       }))
     } catch (error) {
       console.error("Error getting active AI chats:", error)
+      return []
+    }
+  }
+
+  /**
+   * Получить список активных чатов, где пользователь является администратором
+   */
+  async getAdminChatsWithConfig(userId: number): Promise<Array<Chat & { config?: ChatConfig }>> {
+    try {
+      const result = await this.getDb()
+        .select()
+        .from(groupAdmins)
+        .innerJoin(chats, eq(groupAdmins.groupId, chats.id))
+        .leftJoin(chatConfigs, eq(chats.id, chatConfigs.chatId))
+        .where(
+          and(
+            eq(groupAdmins.userId, userId),
+            eq(chats.active, true),
+          ),
+        )
+
+      return result.map(row => ({
+        ...row.chats,
+        config: row.chat_configs || undefined,
+      }))
+    } catch (error) {
+      console.error("Error getting admin chats:", error)
       return []
     }
   }

@@ -300,12 +300,14 @@ export const CACHE_CONFIG = {
   CHAT_TTL_SECONDS: 300, // 5 минут - кеш для информации о чате
   CHAT_CONFIG_TTL_SECONDS: 600, // 10 минут - кеш для конфигурации чата
   USER_TTL_SECONDS: 300, // 5 минут - кеш для информации о пользователе
+  CHAT_ADMINS_TTL_SECONDS: 120, // 2 минуты - кеш списка админов чата
 
   // Префиксы ключей кеша
   KEYS: {
     CHAT: "chat",
     CHAT_CONFIG: "chat_config",
     USER: "user",
+    CHAT_ADMINS: "chat_admins",
   },
 } as const
 

@@ -44,9 +44,18 @@ interface GeminiResponse {
   modelVersion?: string
 }
 
-// const GEMINI_MODEL = "gemini-2.0-flash"
-const GEMINI_MODEL = "gemma-3-27b-it"
-// const GEMINI_MODEL = "gemini-2.5-flash-lite"
+const GEMINI_MODELS = [
+  "gemini-2.5-flash-lite",
+  "gemma-3-27b-it",
+]
+
+let currentModelIndex = 0
+
+function getNextModel(): string {
+  const model = GEMINI_MODELS[currentModelIndex]
+  currentModelIndex = (currentModelIndex + 1) % GEMINI_MODELS.length
+  return model ?? "gemini-2.5-flash-lite"
+}
 
 function extractTextFromResponse(data: GeminiResponse): string | null {
   if (!data) {
@@ -176,7 +185,8 @@ export class GeminiAdapter implements AIProviderPort {
       },
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${config.geminiApiKey}`
+    const model = getNextModel()
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`
     const allowedMessageIds = new Set(input.messages.map(message => message.messageId))
 
     for (let attempt = 0; attempt <= GROUP_AGENT_CONFIG.AI_MAX_RETRIES; attempt++) {

@@ -74,10 +74,14 @@ describe("PromptBuilder", () => {
     })
 
     expect(sections.system).toContain("Альтрон")
-    expect(sections.history).toContain("обработано")
-    expect(sections.newMessages).toContain("[ID:201]")
+    expect(sections.history).toContain("<entry id=\"1\">")
+    expect(sections.history).toContain("<response classification=\"")
+    expect(sections.newMessages).toContain("<entry id=\"1\">")
+    expect(sections.newMessages).not.toContain("<response")
+    expect(sections.newMessages).toMatch(/timestamp="/)
     expect(sections.moderationRules.length).toBeGreaterThan(0)
     expect(sections.rules).toContain("bot_mention")
+    expect(sections.messageFormat).toContain("<entry")
     expect(sections.formatBlock).toContain(`"results": [`)
   })
 
@@ -88,8 +92,13 @@ describe("PromptBuilder", () => {
       messages: makeMessages(),
     })
 
-    expect(prompt).toContain("ИСТОРИЯ СООБЩЕНИЙ")
-    expect(prompt).toContain("НОВЫЕ СООБЩЕНИЯ ДЛЯ ОБРАБОТКИ")
+    expect(prompt).toContain("<system>")
+    expect(prompt).toContain("<history>")
+    expect(prompt).toContain("<chat>")
+    expect(prompt).toContain("<message chatId=\"-123\" userId=\"11\"")
+    expect(prompt).toMatch(/timestamp="\d+"/)
+    expect(prompt).toContain("<response classification=\"")
+    expect(prompt).toContain("ФОРМАТ СООБЩЕНИЙ")
     expect(prompt).toContain("ПРАВИЛА МОДЕРАЦИИ")
     expect(prompt).toContain("Верни только JSON")
   })

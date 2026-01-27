@@ -16,7 +16,7 @@ describe("groupManagementService (unit)", () => {
       getChat: jest.fn().mockResolvedValue(null),
       registerChat: jest.fn().mockResolvedValue({ success: true }),
       unregisterChat: jest.fn().mockResolvedValue({ success: true }),
-      addAdmin: jest.fn().mockResolvedValue(true),
+      replaceAdmins: jest.fn().mockResolvedValue(undefined),
     }
     mockAuthorizationService = {
       checkGroupAdmin: jest.fn().mockResolvedValue({ authorized: true }),
@@ -71,7 +71,7 @@ describe("groupManagementService (unit)", () => {
     }
 
     expect(mockTelegramPort.getChatAdministrators).toHaveBeenCalledWith(-456)
-    expect(mockChatRepository.addAdmin).toHaveBeenCalledTimes(2)
+    expect(mockChatRepository.replaceAdmins).toHaveBeenCalledWith(-456, [1, 2])
   })
 
   it("handleRegister: регистрирует чат при успешной проверке прав", async () => {

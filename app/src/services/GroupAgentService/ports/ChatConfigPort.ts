@@ -7,6 +7,6 @@ export interface ChatConfig {
 export interface ChatConfigPort {
   getChatConfig(chatId: number): Promise<ChatConfig | null>
   isAdmin(chatId: number, userId: number): Promise<boolean>
+  getChatAdmins(chatId: number): Promise<number[]>
 }
-
 

@@ -18,7 +18,12 @@ export interface BufferedMessage extends IncomingGroupMessage {
 export interface FormattedMessage {
   id: number
   chatId: number
+  userId: number
   text: string
+  timestamp: number
+  isAdmin: boolean
+  username?: string
+  firstName?: string
 }
 
 export interface AgentInstructions {
@@ -35,6 +40,7 @@ export interface AgentInstructions {
     rules: string
   }
   format: {
+    message: string
     response: string
   }
   customRules?: string
@@ -122,7 +128,8 @@ export interface HistoryEntry {
   message: FormattedMessage
   result: {
     classification: ClassificationType
-    moderationAction?: ModerationActionKind
+    requiresResponse: boolean
+    actions: ModerationActionKind[]
     responseText?: string
   }
   timestamp: number

@@ -7,6 +7,7 @@ import type { EventBusPort } from "../ports/EventBusPort.js"
 import type { ChatConfigPort } from "../ports/ChatConfigPort.js"
 import type {
   AgentInstructions,
+  AgentResponseDecision,
   BatchUsageMetadata,
   ChatHistory,
   HistoryEntry,
@@ -127,7 +128,9 @@ export class BatchProcessor {
 
     const resolutions = this.deps.decisionOrchestrator.buildResolutions(toProcess, classification)
     const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
-    const responseDecision = resolutions.find(resolution => resolution.response)?.response ?? null
+    const responseDecisions = resolutions
+      .map(resolution => resolution.response ?? null)
+      .filter((decision): decision is AgentResponseDecision => decision !== null)
 
     const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions)
     const reviewDecisionKeys = new Set(
@@ -138,14 +141,14 @@ export class BatchProcessor {
     )
 
     const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
-    const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecision)
-
-    if (moderationEvent) {
-      await this.deps.eventBus.emitModerationAction(moderationEvent)
-    }
+    const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecisions)
 
     if (responseEvent) {
       await this.deps.eventBus.emitAgentResponse(responseEvent)
+    }
+
+    if (moderationEvent) {
+      await this.deps.eventBus.emitModerationAction(moderationEvent)
     }
 
     if (reviewRequests.length > 0) {
@@ -181,12 +184,25 @@ export class BatchProcessor {
       if (!message) {
         continue
       }
+
+      const actions = resolution.moderationActions.map(action => action.action)
+      if (
+        actions.length === 0
+        && resolution.classification.moderationAction
+        && resolution.classification.moderationAction !== "none"
+      ) {
+        actions.push(resolution.classification.moderationAction)
+      }
+
+      const responseText = resolution.response?.text ?? resolution.classification.responseText
+
       newEntries.push({
         message: formatMessageForAI(message),
         result: {
           classification: resolution.classification.classification.type,
-          moderationAction: resolution.classification.moderationAction,
-          responseText: resolution.classification.responseText,
+          requiresResponse: resolution.classification.classification.requiresResponse,
+          actions,
+          ...(responseText ? { responseText } : {}),
         },
         timestamp: message.timestamp,
       })

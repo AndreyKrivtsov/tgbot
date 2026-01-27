@@ -3,21 +3,61 @@ import type {
   BufferedMessage,
   HistoryEntry,
 } from "../../domain/types.js"
-import { formatMessageForAI } from "../../domain/MessageFormatter.js"
+import { formatMessageForAI, formatMessageTag, formatResponseTag } from "../../domain/MessageFormatter.js"
 
-function formatHistoryEntry(entry: HistoryEntry): string {
-  const base = entry.message.text
-  const fragments: string[] = [`обработано: ${entry.result.classification}`]
+interface NormalizedHistoryResult {
+  classification?: HistoryEntry["result"]["classification"]
+  requiresResponse: boolean
+  actions: HistoryEntry["result"]["actions"]
+  responseText?: string
+}
 
-  if (entry.result.moderationAction && entry.result.moderationAction !== "none") {
-    fragments.push(`действие: ${entry.result.moderationAction}`)
+function normalizeHistoryResult(
+  result: HistoryEntry["result"] | (HistoryEntry["result"] & {
+    moderationAction?: HistoryEntry["result"]["actions"][number]
+    actions?: HistoryEntry["result"]["actions"]
+    requiresResponse?: boolean
+  }),
+): NormalizedHistoryResult {
+  const classification = result?.classification
+  const responseText = result?.responseText
+  const requiresResponse = typeof result?.requiresResponse === "boolean"
+    ? result.requiresResponse
+    : Boolean(responseText)
+
+  const legacyAction = "moderationAction" in result ? result.moderationAction : undefined
+  const actions = Array.isArray(result?.actions)
+    ? result.actions.filter(action => action && action !== "none")
+    : (legacyAction && legacyAction !== "none" ? [legacyAction] : [])
+
+  return {
+    classification,
+    requiresResponse,
+    actions,
+    responseText,
   }
+}
 
-  if (entry.result.responseText) {
-    fragments.push(`ответ: ${entry.result.responseText}`)
+function buildEntry(id: number, messageTag: string, responseTag?: string | null): string {
+  const lines = [`<entry id="${id}">`, `  ${messageTag}`]
+  if (responseTag) {
+    lines.push(`  ${responseTag}`)
   }
+  lines.push("</entry>")
+  return lines.join("\n")
+}
 
-  return `${base} → ${fragments.join(", ")}`
+function formatHistoryEntry(entry: HistoryEntry, index: number): string {
+  const messageTag = formatMessageTag(entry.message)
+  const normalized = normalizeHistoryResult(entry.result)
+  const responseTag = formatResponseTag({
+    classification: normalized.classification,
+    requiresResponse: normalized.requiresResponse,
+    actions: normalized.actions,
+    text: normalized.responseText,
+  })
+
+  return buildEntry(index + 1, messageTag, responseTag)
 }
 
 function renderHistorySection(history: HistoryEntry[]): string {
@@ -25,7 +65,7 @@ function renderHistorySection(history: HistoryEntry[]): string {
     return ""
   }
 
-  return history.map(formatHistoryEntry).join("\n")
+  return history.map((entry, index) => formatHistoryEntry(entry, index)).join("\n")
 }
 
 function renderNewMessagesSection(messages: BufferedMessage[]): string {
@@ -34,7 +74,11 @@ function renderNewMessagesSection(messages: BufferedMessage[]): string {
   }
 
   return messages
-    .map(message => formatMessageForAI(message).text)
+    .map((message, index) => {
+      const formatted = formatMessageForAI(message)
+      const messageTag = formatMessageTag(formatted)
+      return buildEntry(index + 1, messageTag)
+    })
     .join("\n")
 }
 
@@ -44,6 +88,7 @@ export interface PromptSections {
   newMessages: string
   moderationRules: string
   rules: string
+  messageFormat: string
   formatBlock: string
 }
 
@@ -54,14 +99,17 @@ export function buildPromptSections(params: {
 }): PromptSections {
   const { instructions, history, messages } = params
 
-  const system = [
+  const systemLines = [
     `Вы — ${instructions.agent.name}`,
     `Ваша роль: ${instructions.agent.role}.`,
     instructions.agent.character ? `Характер: ${instructions.agent.character}` : null,
-    instructions.customRules ? `Дополнительные правила: ${instructions.customRules}` : null,
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n")
+
+  const system = instructions.customRules
+    ? `${systemLines}\nДополнительные правила: ${instructions.customRules}`
+    : systemLines
 
   const historySection = renderHistorySection(history)
   const newMessagesSection = renderNewMessagesSection(messages)
@@ -71,6 +119,7 @@ export function buildPromptSections(params: {
     instructions.responses.rules,
   ].join("\n")
 
+  const messageFormat = instructions.format.message ?? ""
   const formatBlock = instructions.format.response
 
   return {
@@ -79,6 +128,7 @@ export function buildPromptSections(params: {
     newMessages: newMessagesSection,
     moderationRules,
     rules,
+    messageFormat,
     formatBlock,
   }
 }
@@ -90,17 +140,30 @@ export function buildClassificationPrompt(params: {
 }): string {
   const sections = buildPromptSections(params)
 
-  return [
+  const systemParts = [
     sections.system,
     "ПРАВИЛА ОТВЕТОВ:",
     sections.rules,
     "ПРАВИЛА МОДЕРАЦИИ:",
     sections.moderationRules,
+    "ФОРМАТ СООБЩЕНИЙ:",
+    sections.messageFormat,
+    "ФОРМАТ ОТВЕТА:",
     sections.formatBlock,
-    "ИСТОРИЯ СООБЩЕНИЙ (уже обработанные):",
-    sections.history || "<история отсутствует>",
-    "НОВЫЕ СООБЩЕНИЯ ДЛЯ ОБРАБОТКИ:",
-    sections.newMessages || "<нет новых сообщений>",
-    "Верни только JSON без лишнего текста.",
-  ].join("\n\n")
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+
+  const historyBlock = sections.history
+    ? `<history>\n${sections.history}\n</history>`
+    : "<history></history>"
+
+  const chatBlock = sections.newMessages
+    ? `<chat>\n${sections.newMessages}\n</chat>`
+    : "<chat></chat>"
+
+  const systemBlock = `<system>\n${systemParts}\n</system>`
+  const taskBlock = "<task>\nВерни только JSON без лишнего текста.\n</task>"
+
+  return [systemBlock, historyBlock, chatBlock, taskBlock].join("\n\n")
 }

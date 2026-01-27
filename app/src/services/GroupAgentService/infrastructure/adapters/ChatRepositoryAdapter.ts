@@ -26,7 +26,7 @@ export class ChatRepositoryAdapter implements ChatConfigPort {
     const normalized: ChatConfig = {
       chatId,
       geminiApiKey: config.geminiApiKey ?? undefined,
-      groupAgentEnabled: (config as any).groupAgentEnabled ?? true,
+      groupAgentEnabled: (config as any).groupAgentEnabled ?? config.aiEnabled ?? true,
     }
 
     this.cache.set(chatId, { value: normalized, ts: now })
@@ -35,6 +35,11 @@ export class ChatRepositoryAdapter implements ChatConfigPort {
 
   isAdmin(chatId: number, userId: number): Promise<boolean> {
     return this.chatRepository.isAdmin(chatId, userId)
+  }
+
+  async getChatAdmins(chatId: number): Promise<number[]> {
+    const admins = await this.chatRepository.getChatAdmins(chatId)
+    return admins.map(admin => admin.userId)
   }
 }
 

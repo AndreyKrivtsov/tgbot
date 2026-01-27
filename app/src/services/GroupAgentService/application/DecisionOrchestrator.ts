@@ -21,13 +21,13 @@ export class DecisionOrchestrator {
     }
 
     const messageMap = new Map(messages.map(message => [message.messageId, message]))
-    const response = this.responsePolicy.selectResponse(messages, classification.results)
-    const responseMessageId = response?.messageId
+    const responses = this.responsePolicy.buildResponses(messages, classification.results)
+    const responseMap = new Map(responses.map(response => [response.messageId, response]))
 
     return classification.results.map((result) => {
       const message = messageMap.get(result.messageId) ?? null
       const moderationActions = message ? this.moderationPolicy.evaluate(message, result) : []
-      const responseDecision = responseMessageId === result.messageId ? response ?? null : null
+      const responseDecision = responseMap.get(result.messageId) ?? null
 
       return {
         message,

@@ -1,8 +1,11 @@
-import type { BufferedMessage, FormattedMessage } from "./types.js"
+import type {
+  BufferedMessage,
+  ClassificationType,
+  FormattedMessage,
+  ModerationActionKind,
+} from "./types.js"
 
 const MAX_TEXT_LENGTH = 300
-
-const pad2 = (value: number): string => value.toString().padStart(2, "0")
 
 function truncate(text: string): string {
   if (text.length <= MAX_TEXT_LENGTH) {
@@ -13,30 +16,74 @@ function truncate(text: string): string {
 }
 
 export function formatMessageForAI(message: BufferedMessage): FormattedMessage {
-  const date = new Date(message.timestamp)
-  const time = `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`
-
-  const parts: string[] = [`[ID:${message.messageId}]`, `[UID:${message.userId}]`]
-
-  if (message.isAdmin) {
-    parts.push("[ADMIN]")
-  }
-
-  parts.push(`[${time}]`)
-
-  if (message.username) {
-    parts.push(`[@${message.username}]`)
-  }
-
-  if (message.firstName) {
-    parts.push(`[${message.firstName}]`)
-  }
-
-  const formatted = `${parts.join("")}: ${truncate(message.text)}`
-
   return {
     id: message.messageId,
     chatId: message.chatId,
-    text: formatted,
+    userId: message.userId,
+    text: truncate(message.text),
+    timestamp: message.timestamp,
+    isAdmin: Boolean(message.isAdmin),
+    username: message.username,
+    firstName: message.firstName,
   }
+}
+
+function escapeContent(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+}
+
+function escapeAttribute(value: string): string {
+  return escapeContent(value).replace(/"/g, "&quot;")
+}
+
+interface MessageTagOptions {
+  classification?: string
+  moderationAction?: string
+}
+
+export function formatMessageTag(message: FormattedMessage, options: MessageTagOptions = {}): string {
+  const attributes = [
+    `chatId="${message.chatId}"`,
+    `userId="${message.userId}"`,
+    `messageId="${message.id}"`,
+    `timestamp="${message.timestamp}"`,
+    `isAdmin="${message.isAdmin ? "true" : "false"}"`,
+    message.username ? `username="${escapeAttribute(message.username)}"` : null,
+    message.firstName ? `firstName="${escapeAttribute(message.firstName)}"` : null,
+    options.classification ? `classification="${escapeAttribute(options.classification)}"` : null,
+    options.moderationAction ? `moderationAction="${escapeAttribute(options.moderationAction)}"` : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+
+  const text = escapeContent(message.text)
+  return `<message ${attributes}>${text}</message>`
+}
+
+export interface ResponseTagInput {
+  classification?: ClassificationType
+  requiresResponse?: boolean
+  actions?: ModerationActionKind[]
+  text?: string
+}
+
+export function formatResponseTag(input: ResponseTagInput): string | null {
+  const { classification, requiresResponse = false, actions = [], text } = input
+  if (!classification && actions.length === 0 && !text && !requiresResponse) {
+    return null
+  }
+
+  const attributes = [
+    classification ? `classification="${escapeAttribute(classification)}"` : null,
+    actions.length > 0 ? `actions="${escapeAttribute(actions.join(","))}"` : null,
+    `requiresResponse="${requiresResponse ? "true" : "false"}"`,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+
+  const payload = text ? escapeContent(text) : ""
+  return `<response${attributes ? ` ${attributes}` : ""}>${payload}</response>`
 }

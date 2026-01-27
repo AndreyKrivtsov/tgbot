@@ -60,20 +60,23 @@ export class ActionsBuilder {
     }
   }
 
-  buildResponseEvent(decision: AgentResponseDecision | null): GroupAgentResponseEvent | null {
-    if (!decision) {
+  buildResponseEvent(decisions: AgentResponseDecision[]): GroupAgentResponseEvent | null {
+    if (decisions.length === 0) {
+      return null
+    }
+
+    const [firstDecision] = decisions
+    if (!firstDecision) {
       return null
     }
 
     return {
-      chatId: decision.chatId,
-      actions: [
-        {
-          type: "sendMessage",
-          text: decision.text,
-          replyToMessageId: decision.replyToMessageId,
-        },
-      ],
+      chatId: firstDecision.chatId,
+      actions: decisions.map(decision => ({
+        type: "sendMessage",
+        text: decision.text,
+        replyToMessageId: decision.replyToMessageId,
+      })),
     }
   }
 }
