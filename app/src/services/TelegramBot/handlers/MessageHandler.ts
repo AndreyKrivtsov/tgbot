@@ -4,7 +4,6 @@ import type { TelegramBot, TelegramBotSettings, TelegramMessageContext } from ".
 import type { CommandHandler } from "./CommandHandler.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
-import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import type { TelegramBotService } from "../index.js"
 import type { EventBus } from "../../../core/EventBus.js"
 // no EVENTS import needed here; we use typed emitters
@@ -22,7 +21,6 @@ export class MessageHandler {
   // Опциональные сервисы
   private antiSpamService?: AntiSpamService
   private commandHandler?: CommandHandler
-  private chatService?: AIChatService
 
   constructor(
     logger: Logger,
@@ -35,7 +33,6 @@ export class MessageHandler {
     eventBus: EventBus,
     antiSpamService?: AntiSpamService,
     commandHandler?: CommandHandler,
-    chatService?: AIChatService,
   ) {
     this.logger = logger
     this.config = config
@@ -46,7 +43,6 @@ export class MessageHandler {
     this.eventBus = eventBus
     this.antiSpamService = antiSpamService
     this.commandHandler = commandHandler
-    this.chatService = chatService
   }
 
   private async handleMessageEvent(context: TelegramMessageContext): Promise<void> {
@@ -120,7 +116,4 @@ export class MessageHandler {
     await this.handleMessageEvent(context)
   }
 
-  hasAIService(): boolean {
-    return !!this.chatService
-  }
 }

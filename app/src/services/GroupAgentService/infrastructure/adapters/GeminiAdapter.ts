@@ -1,6 +1,8 @@
 import { axiosWithProxy } from "../../../../helpers/axiosWithProxy.js"
 import { GROUP_AGENT_CONFIG } from "../../../../constants.js"
+import { Logger } from "../../../../helpers/Logger.js"
 import type { AIProviderPort } from "../../ports/AIProviderPort.js"
+import { AIProviderError } from "../../ports/AIProviderError.js"
 import type { ChatConfigPort } from "../../ports/ChatConfigPort.js"
 import type {
   AgentInstructions,
@@ -45,8 +47,8 @@ interface GeminiResponse {
 }
 
 const GEMINI_MODELS = [
-  "gemini-2.5-flash-lite",
   "gemma-3-27b-it",
+  // "gemini-2.5-flash-lite",
 ]
 
 let currentModelIndex = 0
@@ -152,15 +154,16 @@ function normalizeResults(raw: any, allowedMessageIds: Set<number>): BatchClassi
 
 export class GeminiAdapter implements AIProviderPort {
   private readonly chatConfigPort: ChatConfigPort
+  private readonly logger = new Logger("GeminiAdapter")
 
   constructor(chatConfigPort: ChatConfigPort) {
     this.chatConfigPort = chatConfigPort
   }
 
-  async classifyBatch(input: ClassificationInput): Promise<BatchClassificationResult | null> {
+  async classifyBatch(input: ClassificationInput): Promise<BatchClassificationResult> {
     const config = await this.chatConfigPort.getChatConfig(input.chatId)
     if (!config?.geminiApiKey || input.messages.length === 0) {
-      return null
+      return { results: [] }
     }
 
     const prompt = buildClassificationPrompt({
@@ -169,7 +172,10 @@ export class GeminiAdapter implements AIProviderPort {
       messages: input.messages,
     })
 
-    console.log("[GroupAgentService][GeminiAdapter] sending batch to Gemini", prompt)
+    this.logger.d("Prompt:", prompt)
+    this.logger.d("Messages:", input.messages.length)
+    this.logger.d("History:", input.history.length)
+    this.logger.d("Instructions:", input.instructions)
 
     const requestBody = {
       contents: [
@@ -178,66 +184,89 @@ export class GeminiAdapter implements AIProviderPort {
         },
       ],
       generationConfig: {
-        temperature: 1.9,
+        temperature: 1.3,
         // topP: 0.7,
         // topK: 32,
         maxOutputTokens: 200,
       },
     }
 
-    const model = getNextModel()
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`
     const allowedMessageIds = new Set(input.messages.map(message => message.messageId))
 
-    for (let attempt = 0; attempt <= GROUP_AGENT_CONFIG.AI_MAX_RETRIES; attempt++) {
-      try {
-        const response = await axiosWithProxy({
-          url,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          data: JSON.stringify(requestBody),
-          timeout: GROUP_AGENT_CONFIG.AI_REQUEST_TIMEOUT_MS,
-          responseType: "json",
-        })
+    try {
+      const model = getNextModel()
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
-        const data = response.data as GeminiResponse
+      return await this.runClassificationAttempt({
+        url,
+        apiKey: config.geminiApiKey,
+        requestBody,
+        allowedMessageIds,
+      })
+    } catch (error) {
+      if (error instanceof AIProviderError) {
+        throw error
+      }
+      const err = error as any
+      this.logger.e("Request failed", {
+        chatId: input.chatId,
+        error: {
+          code: err?.code,
+          status: err?.response?.status,
+          response: err?.response?.data?.error,
+        },
+      })
+      throw new AIProviderError("Gemini request failed", {
+        statusCode: err?.response?.status,
+        providerStatus: err?.response?.data?.error?.status,
+      })
+    }
+  }
 
-        console.log("[GroupAgentService][GeminiAdapter] usage stats", {
-          promptTokenCount: data.usageMetadata?.promptTokenCount,
-          modelVersion: data.modelVersion,
-        })
+  private async runClassificationAttempt(params: {
+    url: string
+    apiKey: string
+    requestBody: Record<string, unknown>
+    allowedMessageIds: Set<number>
+  }): Promise<BatchClassificationResult> {
+    const response = await axiosWithProxy({
+      url: params.url,
+      method: "POST",
+      headers: {
+        "x-goog-api-key": params.apiKey,
+        "Content-Type": "application/json",
+      },
+      data: JSON.stringify(params.requestBody),
+      timeout: GROUP_AGENT_CONFIG.AI_REQUEST_TIMEOUT_MS,
+      responseType: "json",
+    })
 
-        const text = extractTextFromResponse(data)
-        if (!text) {
-          return { results: [] }
-        }
+    const data = response.data as GeminiResponse
 
-        const parsed = safeParseJson(text)
-        if (!parsed) {
-          return null
-        }
+    const text = extractTextFromResponse(data)
+    if (!text) {
+      return { results: [] }
+    }
 
-        const normalized = normalizeResults(parsed, allowedMessageIds)
-        normalized.usage = {
+    const parsed = safeParseJson(text)
+
+    if (!parsed) {
+      return {
+        results: [],
+        usage: {
           promptTokens: data.usageMetadata?.promptTokenCount,
           totalTokens: data.usageMetadata?.totalTokenCount,
           modelVersion: data.modelVersion,
-        }
-        return normalized
-      } catch (error) {
-        console.error("[GroupAgentService][GeminiAdapter] request failed", {
-          attempt,
-          chatId: input.chatId,
-          error,
-        })
-        if (attempt === GROUP_AGENT_CONFIG.AI_MAX_RETRIES) {
-          return null
-        }
+        },
       }
     }
 
-    return null
+    const normalized = normalizeResults(parsed, params.allowedMessageIds)
+    normalized.usage = {
+      promptTokens: data.usageMetadata?.promptTokenCount,
+      totalTokens: data.usageMetadata?.totalTokenCount,
+      modelVersion: data.modelVersion,
+    }
+    return normalized
   }
 }

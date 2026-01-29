@@ -4,11 +4,10 @@ import { HttpsProxyAgent } from "https-proxy-agent"
 import { Logger } from "../helpers/Logger.js"
 import { config } from "../config.js"
 
-const l = new Logger("AxiosProxy")
+const l = new Logger("Axios")
 
 function createProxyAgent(): HttpsProxyAgent<string> | null {
   if (!config.PROXY_ENABLED) {
-    l.i("Proxy disabled")
     return null
   }
 
@@ -24,9 +23,9 @@ function createProxyAgent(): HttpsProxyAgent<string> | null {
     // Извлекаем протокол и хост из URL
     const url = new URL(proxyUrl)
     proxyUrl = `${url.protocol}//${config.PROXY_USERNAME}:${config.PROXY_PASSWORD}@${url.host}`
-    l.i("Using proxy with authentication:", url.host)
+    l.d("Using proxy with authentication:", url.host)
   } else {
-    l.i("Using proxy without authentication:", proxyUrl)
+    l.d("Using proxy without authentication:", proxyUrl)
   }
 
   return new HttpsProxyAgent(proxyUrl)
@@ -37,15 +36,15 @@ export async function axiosWithProxy<T = any>(config: AxiosRequestConfig): Promi
     const proxyAgent = createProxyAgent()
 
     if (proxyAgent) {
-      return axios({
+      return await axios({
         ...config,
         httpAgent: proxyAgent,
         httpsAgent: proxyAgent,
         proxy: false, // Отключаем стандартную обработку proxy в axios
       })
     } else {
-      l.i("Making request without proxy")
-      return axios({
+      l.d("Making request without proxy")
+      return await axios({
         ...config,
       })
     }

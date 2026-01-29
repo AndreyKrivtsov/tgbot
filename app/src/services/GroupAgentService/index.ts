@@ -27,6 +27,7 @@ import type { ReviewStatePort } from "./ports/ReviewStatePort.js"
 import { RedisReviewStateAdapter } from "./infrastructure/adapters/RedisReviewStateAdapter.js"
 import { ReviewRequestBuilder } from "./application/ReviewRequestBuilder.js"
 import { ModerationReviewManager } from "./application/ModerationReviewManager.js"
+import { DefaultRetryPolicy } from "./application/RetryPolicy.js"
 
 interface Dependencies {
   eventBus?: EventBus
@@ -155,6 +156,7 @@ export class GroupAgentService implements IService {
     const chatConfigPort = this.chatConfigPort!
     const reviewRequestBuilder = this.reviewRequestBuilder!
     const reviewManager = this.reviewManager!
+    const retryPolicy = new DefaultRetryPolicy({ maxAttempts: 2, delayMs: 1000 })
 
     const buffers = await stateStore.loadBuffers()
     this.messageBuffer = new MessageBuffer(buffers)
@@ -176,6 +178,7 @@ export class GroupAgentService implements IService {
         instructionsProvider: this.instructionsProvider,
         reviewRequestBuilder,
         reviewManager,
+        retryPolicy,
       },
     )
 

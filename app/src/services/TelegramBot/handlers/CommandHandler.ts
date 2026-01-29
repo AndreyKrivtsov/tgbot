@@ -2,7 +2,6 @@ import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
 import type { TelegramBotService } from "../index.js"
-import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import { getMessage } from "../../../shared/messages/index.js"
 import type { BotContext, TelegramMessageContext } from "../types/index.js"
 import type { EventBus } from "../../../core/EventBus.js"
@@ -16,7 +15,6 @@ export class CommandHandler {
   private config: AppConfig
   private chatRepository: ChatRepository
   private botService: TelegramBotService
-  private aiChatService?: AIChatService
   private bot: any
   private eventBus?: EventBus
 
@@ -26,14 +24,12 @@ export class CommandHandler {
     userRestrictions: any,
     chatRepository: ChatRepository,
     botService: TelegramBotService,
-    aiChatService?: AIChatService,
     eventBus?: EventBus,
   ) {
     this.logger = logger
     this.config = config
     this.chatRepository = chatRepository
     this.botService = botService
-    this.aiChatService = aiChatService
     this.bot = botService.getBotApi()
     this.eventBus = eventBus
   }

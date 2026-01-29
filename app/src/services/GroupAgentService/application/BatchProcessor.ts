@@ -16,6 +16,8 @@ import type {
 import { formatMessageForAI } from "../domain/MessageFormatter.js"
 import type { ReviewRequestBuilder } from "./ReviewRequestBuilder.js"
 import type { ModerationReviewManager } from "./ModerationReviewManager.js"
+import type { RetryPolicy } from "./RetryPolicy.js"
+import { Logger } from "../../../helpers/Logger.js"
 
 export interface BatchProcessorConfig {
   batchIntervalMs: number
@@ -38,11 +40,13 @@ interface Dependencies {
   instructionsProvider: InstructionsProvider
   reviewRequestBuilder: ReviewRequestBuilder
   reviewManager: ModerationReviewManager
+  retryPolicy: RetryPolicy
 }
 
 export class BatchProcessor {
   private readonly config: BatchProcessorConfig
   private readonly deps: Dependencies
+  private readonly logger = new Logger("BatchProcessor")
   private timer?: NodeJS.Timeout
   private processingChats: Set<number> = new Set()
 
@@ -68,12 +72,12 @@ export class BatchProcessor {
   }
 
   private async runCycle(): Promise<void> {
-    console.log("[GroupAgentService] runCycle started")
+    this.logger.d("Check messages")
     const chatIds = this.deps.buffer.listChatIds()
     for (const chatId of chatIds) {
-      console.log("[GroupAgentService] processing chatId:", chatId)
+      this.logger.d("Messages found for chatId", chatId)
       if (this.processingChats.has(chatId)) {
-        console.log("[GroupAgentService] chat is already processing, skip:", chatId)
+        this.logger.d("Skip chatId", chatId)
         continue
       }
       try {
@@ -85,13 +89,12 @@ export class BatchProcessor {
         this.processingChats.delete(chatId)
       }
     }
-    console.log("[GroupAgentService] runCycle finished")
   }
 
   private async processChat(chatId: number): Promise<void> {
-    console.log("[GroupAgentService] processing chatId:", chatId)
+    this.logger.d("Processing chatId", chatId)
     const pending = this.deps.buffer.getPendingMessages(chatId)
-    console.log("[GroupAgentService] pending messages:", pending.length)
+
     if (pending.length === 0) {
       return
     }
@@ -102,7 +105,7 @@ export class BatchProcessor {
     }
 
     const toProcess = pending.slice(0, this.config.maxBatchSize)
-    console.log("[GroupAgentService] toProcess messages:", toProcess.length)
+    this.logger.d("Messages to process", toProcess.length)
 
     const messageIds = toProcess.map(message => message.messageId)
 
@@ -113,18 +116,17 @@ export class BatchProcessor {
     const historyEntries = history?.entries ?? []
     const instructions = await this.deps.instructionsProvider.getInstructions(chatId)
 
-    const classification = await this.deps.aiProvider.classifyBatch({
+    this.logger.d("History entries", historyEntries.length)
+    this.logger.d("History entry:", historyEntries[0])
+
+    const classification = await this.classifyWithRetry({
       chatId,
-      history: historyEntries,
+      historyEntries,
       messages: toProcess,
       instructions,
     })
 
-    if (!classification) {
-      return
-    }
-
-    console.log("[GroupAgentService] classification:", classification)
+    this.logger.d("Classification result", classification)
 
     const resolutions = this.deps.decisionOrchestrator.buildResolutions(toProcess, classification)
     const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
@@ -158,6 +160,39 @@ export class BatchProcessor {
     await this.persistHistory(chatId, history, resolutions, classification.usage)
   }
 
+  private async classifyWithRetry(input: {
+    chatId: number
+    historyEntries: HistoryEntry[]
+    messages: Parameters<AIProviderPort["classifyBatch"]>[0]["messages"]
+    instructions: AgentInstructions
+  }): Promise<Awaited<ReturnType<AIProviderPort["classifyBatch"]>>> {
+    let attempt = 0
+    while (true) {
+      try {
+        return await this.deps.aiProvider.classifyBatch({
+          chatId: input.chatId,
+          history: input.historyEntries,
+          messages: input.messages,
+          instructions: input.instructions,
+        })
+      } catch (error) {
+        const decision = this.deps.retryPolicy.decide({ attempt, error })
+        if (!decision.shouldRetry) {
+          return { results: [] }
+        }
+
+        if (decision.delayMs > 0) {
+          await this.delay(decision.delayMs)
+        }
+        attempt += 1
+      }
+    }
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms))
+  }
+
   private decisionKey(decision: ModerationDecision): string {
     const parts = [
       decision.messageId,
@@ -176,7 +211,7 @@ export class BatchProcessor {
     usage?: BatchUsageMetadata,
   ): Promise<void> {
     const existingEntries = history?.entries ?? []
-    const baseEntries = this.applyHistoryTrim(existingEntries, usage)
+    const baseEntries = this.applyHistoryTrim(chatId, existingEntries, usage)
 
     const newEntries: HistoryEntry[] = []
     for (const resolution of resolutions) {
@@ -216,11 +251,12 @@ export class BatchProcessor {
   }
 
   private applyHistoryTrim(
+    chatId: number,
     entries: HistoryEntry[],
     usage?: BatchUsageMetadata,
   ): HistoryEntry[] {
-    const promptTokens = usage?.promptTokens
-    if (!promptTokens || promptTokens < this.config.historyTrimTokenThreshold) {
+    const totalTokens = usage?.totalTokens
+    if (!totalTokens || totalTokens < this.config.historyTrimTokenThreshold) {
       return entries
     }
 
@@ -230,6 +266,9 @@ export class BatchProcessor {
 
     const keepCount = Math.max(1, Math.ceil(entries.length / 2))
     const trimmed = entries.slice(-keepCount)
+
+    this.logger.d("Trimmed history:", { chatId, trimmed })
+
     return trimmed
   }
 }

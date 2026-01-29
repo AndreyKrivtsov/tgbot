@@ -166,7 +166,6 @@ export class TelegramBotService implements IService {
       null as any,
       this.dependencies.chatRepository,
       this,
-      this.dependencies.chatService,
       eventBus,
     )
 
@@ -182,7 +181,6 @@ export class TelegramBotService implements IService {
       eventBus,
       this.dependencies.antiSpamService,
       this.commandHandler,
-      this.dependencies.chatService,
     )
 
     this.memberHandler = new MemberHandler(
@@ -202,11 +200,6 @@ export class TelegramBotService implements IService {
       eventBus,
       this.dependencies.captchaService,
     )
-
-    // Подключаем AIChatService к EventBus (он может слушать события напрямую)
-    try {
-      (this.dependencies.chatService as any)?.setupEventBusListeners?.(eventBus)
-    } catch {}
   }
 
   /**
@@ -382,7 +375,6 @@ export class TelegramBotService implements IService {
       dependencies: {
         captcha: !!this.dependencies.captchaService,
         antiSpam: !!this.dependencies.antiSpamService,
-        chat: !!this.dependencies.chatService,
         redis: !!this.dependencies.redisService,
       },
       modules: {
@@ -421,7 +413,7 @@ export class TelegramBotService implements IService {
     return {
       captcha: !!this.dependencies.captchaService,
       spam: !!this.dependencies.antiSpamService,
-      ai: this.messageHandler?.hasAIService() || false,
+      ai: false,
     }
   }
 
@@ -475,6 +467,15 @@ export class TelegramBotService implements IService {
     if (!this.bot)
       return []
     return await this.bot.getChatAdministrators(chatId)
+  }
+
+  /**
+   * Получить информацию о чате через адаптер GramioBot
+   */
+  public async getChat(params: { chat_id: string }): Promise<any> {
+    if (!this.bot)
+      return null
+    return await this.bot.getChat(params as any)
   }
 
   /**

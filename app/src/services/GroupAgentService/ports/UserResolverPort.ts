@@ -6,14 +6,12 @@ export interface ResolvedTarget {
 }
 
 export interface UserResolverPort {
-  resolveTarget(params: {
+  resolveTarget: (params: {
     chatId: number
     sourceMessage: IncomingGroupMessage
     aiUserId?: number
     usernameHint?: string
     nameHint?: string
     replyToMessageId?: number
-  }): Promise<ResolvedTarget | null>
+  }) => Promise<ResolvedTarget | null>
 }
-
-

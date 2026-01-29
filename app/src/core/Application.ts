@@ -154,72 +154,6 @@ export class Application {
     //   })
     // }
 
-    // Chat Service
-    // if (!this.isSkipped("ai")) {
-    //   this.container.register("chat", async () => {
-    //     const { AIChatService } = await import("../services/AIChatService/AIChatService.js")
-    //     const { GeminiLLMAdapter } = await import("../services/ai/GeminiLLMAdapter.js")
-    //     const { AdaptiveChatThrottleManager } = await import("../helpers/ai/AdaptiveThrottleManager.js")
-    //     const { ChatSettingsRepositoryAdapter } = await import("../services/AIChatService/adapters/ChatSettingsRepositoryAdapter.js")
-    //     const database = this.container.has("database") ? await this.container.getAsync("database") as any : undefined
-    //     const redis = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
-    //     const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
-    //     const logger = await this.container.getAsync("logger") as any
-    //     const aiProvider = new GeminiLLMAdapter(logger)
-    //     const throttleManager = new AdaptiveChatThrottleManager(logger)
-    //     // Преобразуем ChatSettingsService в репозиторийный порт AI
-    //     const chatRepository = await this.container.getAsync("chatRepository") as any
-    //     const repository = new ChatSettingsRepositoryAdapter(chatRepository)
-    //     const aiChatService = new AIChatService(
-    //       this.config,
-    //       logger,
-    //       {
-    //         database,
-    //         redis,
-    //         eventBus,
-    //         repository,
-    //         actions: {
-    //           sendTyping: async (chatId: number) => {
-    //             const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
-    //             if (telegramBot?.sendTyping) {
-    //               await telegramBot.sendTyping(chatId)
-    //             }
-    //           },
-    //           getBotInfo: async (): Promise<{ id: number, username?: string } | null> => {
-    //             const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
-    //             if (telegramBot?.getBotInfo) {
-    //               return await telegramBot.getBotInfo()
-    //             }
-    //             return null
-    //           },
-    //         } as any,
-    //       },
-    //       aiProvider,
-    //       throttleManager,
-    //     )
-
-    //     return aiChatService
-    //   })
-    // }
-
-    // AI Moderation Service
-    // if (!this.isSkipped("ai_moderation")) {
-    //   this.container.register("aiModeration", async () => {
-    //     const { AIModerationService } = await import("../services/AIModerationService/index.js")
-    //     const { GeminiLLMAdapter } = await import("../services/ai/GeminiLLMAdapter.js")
-    //     const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
-    //     const logger = await this.container.getAsync("logger") as any
-    //     const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
-    //     const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
-    //     const llm = new GeminiLLMAdapter(logger)
-    //     return new AIModerationService(this.config, logger, {
-    //       eventBus,
-    //       llm,
-    //       chatRepository,
-    //       redisService,
-    //     })
-    //   })
-    // }
     if (!this.isSkipped("group_agent")) {
       this.container.register("groupAgent", async () => {
         const { GroupAgentService } = await import("../services/GroupAgentService/index.js")
@@ -321,7 +255,6 @@ export class Application {
         const redisService = this.container.has("redis") ? await this.container.getAsync("redis") : undefined
         const captchaService = this.container.has("captcha") ? await this.container.getAsync("captcha") : undefined
         const antiSpamService = this.container.has("antiSpam") ? await this.container.getAsync("antiSpam") : undefined
-        const chatService = this.container.has("chat") ? await this.container.getAsync("chat") : undefined
         const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") : undefined
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
 
@@ -340,7 +273,6 @@ export class Application {
           redisService: redisService as any,
           captchaService: captchaService as any,
           antiSpamService: antiSpamService as any,
-          chatService: chatService as any,
           chatRepository: chatRepository as any,
         }, botSettings)
 
@@ -358,10 +290,10 @@ export class Application {
         const { WebApiService } = await import("../services/WebApiService/index.js")
         const database = this.container.has("database") ? await this.container.getAsync("database") : undefined
         const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") : undefined
-        const groupManagement = this.container.has("groupManagement") ? await this.container.getAsync("groupManagement") : undefined
-        const chatConfiguration = this.container.has("chatConfiguration") ? await this.container.getAsync("chatConfiguration") : undefined
-        const authorization = this.container.has("authorization") ? await this.container.getAsync("authorization") : undefined
-        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") : undefined
+        const groupManagement = this.container.has("groupManagement") ? await this.container.getAsync("groupManagement") as any : undefined
+        const chatConfiguration = this.container.has("chatConfiguration") ? await this.container.getAsync("chatConfiguration") as any : undefined
+        const authorization = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
 
         return new WebApiService(this.config, this.logger, {
           database,

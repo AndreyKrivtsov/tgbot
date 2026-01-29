@@ -6,12 +6,10 @@ import type {
 } from "../domain/types.js"
 
 export interface AIProviderPort {
-  classifyBatch(input: {
+  classifyBatch: (input: {
     chatId: number
     history: HistoryEntry[]
     messages: BufferedMessage[]
     instructions: AgentInstructions
-  }): Promise<BatchClassificationResult | null>
+  }) => Promise<BatchClassificationResult>
 }
-
-

@@ -1,7 +1,6 @@
 import type { Bot, ChatMemberContext, LeftChatMemberContext, MessageContext, NewChatMembersContext } from "gramio"
 import type { TelegramBotService } from "../index.js"
 import type { RedisService } from "../../RedisService/index.js"
-import type { AIChatService } from "../../AIChatService/AIChatService.js"
 import type { CaptchaService } from "../../CaptchaService/index.js"
 import type { AntiSpamService } from "../../AntiSpamService/index.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
@@ -22,7 +21,6 @@ export interface TelegramBotDependencies {
   redisService?: RedisService
   captchaService?: CaptchaService
   antiSpamService?: AntiSpamService
-  chatService?: AIChatService
   chatRepository?: ChatRepository
   messageDeletionManager?: MessageDeletionManager
 }

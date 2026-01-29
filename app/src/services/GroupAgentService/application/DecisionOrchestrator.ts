@@ -15,11 +15,7 @@ export class DecisionOrchestrator {
     this.responsePolicy = responsePolicy
   }
 
-  buildResolutions(messages: BufferedMessage[], classification: BatchClassificationResult | null): AgentResolution[] {
-    if (!classification) {
-      return []
-    }
-
+  buildResolutions(messages: BufferedMessage[], classification: BatchClassificationResult): AgentResolution[] {
     const messageMap = new Map(messages.map(message => [message.messageId, message]))
     const responses = this.responsePolicy.buildResponses(messages, classification.results)
     const responseMap = new Map(responses.map(response => [response.messageId, response]))

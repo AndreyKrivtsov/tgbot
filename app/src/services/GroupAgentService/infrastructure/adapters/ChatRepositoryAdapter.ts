@@ -1,5 +1,5 @@
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
-import type { ChatConfigPort, ChatConfig } from "../../ports/ChatConfigPort.js"
+import type { ChatConfig, ChatConfigPort } from "../../ports/ChatConfigPort.js"
 
 export class ChatRepositoryAdapter implements ChatConfigPort {
   private readonly chatRepository: ChatRepository
@@ -42,5 +42,3 @@ export class ChatRepositoryAdapter implements ChatConfigPort {
     return admins.map(admin => admin.userId)
   }
 }
-
-
