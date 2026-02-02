@@ -430,16 +430,6 @@ export class TelegramBotService implements IService {
   /**
    * Отправка индикатора печати в чат
    */
-  async sendTyping(chatId: number): Promise<void> {
-    if (!this.bot)
-      return
-    try {
-      await this.bot.sendChatAction(chatId, "typing" as any)
-    } catch {
-      // не прерываем выполнение цепочки
-    }
-  }
-
   /**
    * Получение ID бота из кеша Redis
    */

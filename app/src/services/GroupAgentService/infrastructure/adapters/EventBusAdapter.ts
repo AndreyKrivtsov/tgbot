@@ -5,6 +5,7 @@ import type {
   GroupAgentResponseEvent,
   GroupAgentReviewPromptEvent,
   GroupAgentReviewResolvedEvent,
+  GroupAgentTypingEvent,
 } from "../../ports/EventBusPort.js"
 
 export class EventBusAdapter implements EventBusPort {
@@ -20,6 +21,14 @@ export class EventBusAdapter implements EventBusPort {
 
   emitAgentResponse(event: GroupAgentResponseEvent): Promise<void> {
     return this.eventBus.emitGroupAgentResponse(event)
+  }
+
+  emitTypingStarted(event: GroupAgentTypingEvent): Promise<void> {
+    return this.eventBus.emitGroupAgentTypingStarted(event)
+  }
+
+  emitTypingStopped(event: GroupAgentTypingEvent): Promise<void> {
+    return this.eventBus.emitGroupAgentTypingStopped(event)
   }
 
   emitReviewPrompt(event: GroupAgentReviewPromptEvent): Promise<void> {

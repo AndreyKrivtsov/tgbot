@@ -1,4 +1,4 @@
-import type { ModerationReviewRecord } from "../domain/types.js"
+import type { ModerationReviewRecord } from "../domain/Decision.js"
 
 export interface ReviewStatePort {
   create: (record: ModerationReviewRecord) => Promise<void>

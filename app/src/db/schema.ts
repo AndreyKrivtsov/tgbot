@@ -105,6 +105,9 @@ export const groupAdmins = pgTable("group_admins", {
   
   /** ID пользователя-администратора (Telegram user ID) */
   userId: bigint("user_id", { mode: "number" }).notNull(),
+
+  /** Username администратора (может отсутствовать) */
+  username: varchar("username", { length: 64 }),
   
   /** Дата и время добавления администратора в базу */
   createdAt: timestamp("created_at").defaultNow(),

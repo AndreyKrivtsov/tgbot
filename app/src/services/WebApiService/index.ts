@@ -84,7 +84,7 @@ export class WebApiService implements IService {
         host: "0.0.0.0",
       })
       this.isRunning = true
-      this.logger.i("✅ API server started")
+      this.logger.i(`✅ API server started on http://0.0.0.0:${this.config.PORT}`)
     }
     catch (error) {
       this.logger.e("❌ Failed to start API server:", error)
@@ -142,5 +142,4 @@ export class WebApiService implements IService {
       note: this.hasFastify ? "Web interface ready" : "Install Fastify to enable web interface",
     }
   }
-
 }

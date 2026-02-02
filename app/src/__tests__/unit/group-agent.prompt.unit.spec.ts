@@ -1,39 +1,44 @@
 import { describe, expect, it } from "@jest/globals"
-import { buildClassificationPrompt, buildPromptSections } from "../../services/GroupAgentService/infrastructure/prompt/PromptBuilder.js"
-import type { AgentInstructions, BufferedMessage, HistoryEntry } from "../../services/GroupAgentService/domain/types.js"
-import { DEFAULT_AGENT_INSTRUCTIONS } from "../../services/GroupAgentService/infrastructure/config/defaultInstructions.js"
+import { PromptAssembler } from "../../services/GroupAgentService/application/PromptAssembler.js"
+import { HistoryToPromptMapper } from "../../services/GroupAgentService/application/HistoryToPromptMapper.js"
+import { CompactPromptBuilder } from "../../services/GroupAgentService/infrastructure/prompt/CompactPromptBuilder.js"
+import { DEFAULT_PROMPT_SPEC } from "../../services/GroupAgentService/infrastructure/config/promptSpec.js"
+import type { BufferedMessage } from "../../services/GroupAgentService/domain/Message.js"
+import type { StoredHistoryEntry } from "../../services/GroupAgentService/domain/Batch.js"
 
-const baseInstructions: AgentInstructions = {
-  ...DEFAULT_AGENT_INSTRUCTIONS,
-  responses: {
-    ...DEFAULT_AGENT_INSTRUCTIONS.responses,
-    triggers: ["bot_mention"],
-  },
-}
-
-function makeHistory(): HistoryEntry[] {
+function makeHistory(): StoredHistoryEntry[] {
   return [
     {
       message: {
-        id: 101,
+        messageId: 101,
         chatId: -123,
-        text: "[ID:101][2025-01-01 10:00][@user1][User One]: привет",
+        userId: 11,
+        text: "привет",
+        timestamp: Date.now() - 1_000,
+        isAdmin: false,
       },
-      result: {
+      sender: "user",
+      decision: {
         classification: "normal",
-        moderationAction: "none",
+        requiresResponse: false,
+        actions: [],
       },
       timestamp: Date.now() - 1_000,
     },
     {
       message: {
-        id: 102,
+        messageId: 102,
         chatId: -123,
-        text: "[ID:102][2025-01-01 10:01][@user2][User Two]: реклама!!!",
+        userId: 12,
+        text: "реклама!!!",
+        timestamp: Date.now(),
+        isAdmin: false,
       },
-      result: {
+      sender: "user",
+      decision: {
         classification: "violation",
-        moderationAction: "delete",
+        requiresResponse: false,
+        actions: ["delete"],
       },
       timestamp: Date.now(),
     },
@@ -65,41 +70,42 @@ function makeMessages(): BufferedMessage[] {
   ]
 }
 
-describe("PromptBuilder", () => {
-  it("формирует секции с историей и новыми сообщениями", () => {
-    const sections = buildPromptSections({
-      instructions: baseInstructions,
+describe("PromptAssembler", () => {
+  it("формирует компактный JSON промпта с контекстом и историей", () => {
+    const assembler = new PromptAssembler(new CompactPromptBuilder(), new HistoryToPromptMapper())
+    const prompt = assembler.buildPrompt({
+      spec: DEFAULT_PROMPT_SPEC,
+      context: {
+        admins: [1, 2],
+        flags: {},
+        userStats: {},
+      },
       history: makeHistory(),
       messages: makeMessages(),
     })
 
-    expect(sections.system).toContain("Альтрон")
-    expect(sections.history).toContain("<entry id=\"1\">")
-    expect(sections.history).toContain("<response classification=\"")
-    expect(sections.newMessages).toContain("<entry id=\"1\">")
-    expect(sections.newMessages).not.toContain("<response")
-    expect(sections.newMessages).toMatch(/timestamp="/)
-    expect(sections.moderationRules.length).toBeGreaterThan(0)
-    expect(sections.rules).toContain("bot_mention")
-    expect(sections.messageFormat).toContain("<entry")
-    expect(sections.formatBlock).toContain(`"results": [`)
+    const parsed = JSON.parse(prompt)
+    expect(parsed.task).toBe("return_json_only")
+    expect(parsed.sys).toBeDefined()
+    expect(parsed.ctx.admins).toEqual([1, 2])
+    expect(parsed.msgs).toHaveLength(2)
+    expect(parsed.h).toHaveLength(2)
   })
 
-  it("buildClassificationPrompt включает ключевые секции", () => {
-    const prompt = buildClassificationPrompt({
-      instructions: baseInstructions,
-      history: makeHistory(),
+  it("не добавляет пустую историю", () => {
+    const assembler = new PromptAssembler(new CompactPromptBuilder(), new HistoryToPromptMapper())
+    const prompt = assembler.buildPrompt({
+      spec: DEFAULT_PROMPT_SPEC,
+      context: {
+        admins: [],
+        flags: {},
+        userStats: {},
+      },
+      history: [],
       messages: makeMessages(),
     })
 
-    expect(prompt).toContain("<system>")
-    expect(prompt).toContain("<history>")
-    expect(prompt).toContain("<chat>")
-    expect(prompt).toContain("<message chatId=\"-123\" userId=\"11\"")
-    expect(prompt).toMatch(/timestamp="\d+"/)
-    expect(prompt).toContain("<response classification=\"")
-    expect(prompt).toContain("ФОРМАТ СООБЩЕНИЙ")
-    expect(prompt).toContain("ПРАВИЛА МОДЕРАЦИИ")
-    expect(prompt).toContain("Верни только JSON")
+    const parsed = JSON.parse(prompt)
+    expect(parsed.h).toBeUndefined()
   })
 })

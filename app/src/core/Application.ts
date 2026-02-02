@@ -115,7 +115,8 @@ export class Application {
         const { ChatRepository } = await import("../repository/ChatRepository.js")
         const database = this.container.has("database") ? await this.container.getAsync("database") as any : undefined
         const cache = this.container.has("cache") ? await this.container.getAsync("cache") as any : undefined
-        return new ChatRepository(database, cache)
+        const redis = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
+        return new ChatRepository(database, cache, redis)
       })
     }
 

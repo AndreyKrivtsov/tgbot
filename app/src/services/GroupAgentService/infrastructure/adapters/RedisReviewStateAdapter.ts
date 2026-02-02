@@ -1,5 +1,5 @@
 import type { RedisService } from "../../../RedisService/index.js"
-import type { ModerationReviewRecord } from "../../domain/types.js"
+import type { ModerationReviewRecord } from "../../domain/Decision.js"
 import type { ReviewStatePort } from "../../ports/ReviewStatePort.js"
 
 const REVIEW_KEY_PREFIX = "group_agent:review"

@@ -27,6 +27,8 @@ export const EVENTS = {
   AI_RESPONSE: "ai.response",
   GROUP_AGENT_MODERATION_ACTION: "group_agent.moderationAction",
   GROUP_AGENT_RESPONSE: "group_agent.response",
+  GROUP_AGENT_TYPING_STARTED: "group_agent.typing.started",
+  GROUP_AGENT_TYPING_STOPPED: "group_agent.typing.stopped",
   GROUP_AGENT_REVIEW_PROMPT: "group_agent.review.prompt",
   GROUP_AGENT_REVIEW_PROMPT_SENT: "group_agent.review.promptSent",
   GROUP_AGENT_REVIEW_DECISION: "group_agent.review.decision",
@@ -165,6 +167,10 @@ export interface GroupAgentResponseEvent {
     text: string
     replyToMessageId?: number
   }>
+}
+
+export interface GroupAgentTypingEvent {
+  chatId: number
 }
 
 export interface GroupAgentReviewPromptEvent {
@@ -441,6 +447,22 @@ export class EventBus {
 
   emitGroupAgentResponse(data: GroupAgentResponseEvent): Promise<void> {
     return this.emit(EVENTS.GROUP_AGENT_RESPONSE, data)
+  }
+
+  onGroupAgentTypingStarted(handler: (data: GroupAgentTypingEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_TYPING_STARTED, handler)
+  }
+
+  emitGroupAgentTypingStarted(data: GroupAgentTypingEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_TYPING_STARTED, data)
+  }
+
+  onGroupAgentTypingStopped(handler: (data: GroupAgentTypingEvent) => Promise<void>): void {
+    this.on(EVENTS.GROUP_AGENT_TYPING_STOPPED, handler)
+  }
+
+  emitGroupAgentTypingStopped(data: GroupAgentTypingEvent): Promise<void> {
+    return this.emit(EVENTS.GROUP_AGENT_TYPING_STOPPED, data)
   }
 
   onGroupAgentReviewPrompt(handler: (data: GroupAgentReviewPromptEvent) => Promise<void>): void {

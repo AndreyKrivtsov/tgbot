@@ -1,8 +1,5 @@
-import type {
-  BufferedMessage,
-  ClassificationResult,
-  ModerationDecision,
-} from "./types.js"
+import type { ClassificationResult, ModerationDecision } from "./Decision.js"
+import type { BufferedMessage } from "./Message.js"
 
 export class ModerationPolicy {
   constructor() {}
@@ -46,19 +43,17 @@ export class ModerationPolicy {
           },
         ]
       case "mute":
-        if (!text || typeof result.durationMinutes !== "number" || result.durationMinutes <= 0) {
-          return []
-        }
+      { const durationMinutes = result.durationMinutes ?? 10
         return [
           {
             messageId: message.messageId,
             userId: targetUserId,
             action: "mute",
             targetMessageId,
-            durationMinutes: result.durationMinutes,
+            durationMinutes,
             text,
           },
-        ]
+        ] }
       case "kick":
       case "ban":
         if (!text) {

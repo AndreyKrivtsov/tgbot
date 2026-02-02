@@ -2,7 +2,6 @@ import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
 import type { EventBus, RegisterGroupCommand, TelegramAction, UnregisterGroupCommand } from "../../core/EventBus.js"
-import { EVENTS } from "../../core/EventBus.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
 import type { AuthorizationService } from "../AuthorizationService/index.js"
 import { getMessage } from "../../shared/messages/index.js"
@@ -64,14 +63,17 @@ export class GroupManagementService implements IService {
     }
 
     const existingChat = await this.deps.chatRepository.getChat(chatId)
-    if (!existingChat) {
+    if (existingChat?.active) {
       await this.updateGroupAdmins(chatId)
+      await this.sendMessage(chatId, getMessage("register_already_updated_admins"), messageId)
+      return
     }
 
     try {
       const result = await this.deps.chatRepository.registerChat(chatId, chatTitle || "Unknown Group")
 
       if (result.success) {
+        await this.updateGroupAdmins(chatId)
         await this.sendMessage(chatId, getMessage("register_success"), messageId)
         this.logger.i(`Chat ${chatId} registered successfully`)
       } else {
@@ -129,15 +131,19 @@ export class GroupManagementService implements IService {
         return
       }
 
-      const adminIds = Array.from(
-        new Set(
-          admins
-            .map(admin => admin?.user?.id)
-            .filter((id): id is number => typeof id === "number" && id > 0),
-        ),
-      )
+      const adminMap = new Map<number, { userId: number, username: string | null }>()
+      for (const admin of admins) {
+        const userId = admin?.user?.id
+        if (typeof userId !== "number" || userId <= 0) {
+          continue
+        }
+        const username = typeof admin?.user?.username === "string" ? admin.user.username : null
+        if (!adminMap.has(userId)) {
+          adminMap.set(userId, { userId, username })
+        }
+      }
 
-      await this.deps.chatRepository.replaceAdmins(chatId, adminIds)
+      await this.deps.chatRepository.replaceAdmins(chatId, Array.from(adminMap.values()))
     } catch (error) {
       this.logger.e(`Не удалось обновить список админов для чата ${chatId}:`, error)
     }

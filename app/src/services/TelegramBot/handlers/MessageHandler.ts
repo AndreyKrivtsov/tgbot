@@ -58,7 +58,7 @@ export class MessageHandler {
 
       // Общая валидация
       if (!from || !chat || !messageText) {
-        this.logger.w("Incomplete message data, skipping")
+        this.logger.d("Empty message text, skipping")
         return
       }
 
@@ -115,5 +115,4 @@ export class MessageHandler {
     // Сразу валидируем и маршрутизируем
     await this.handleMessageEvent(context)
   }
-
 }

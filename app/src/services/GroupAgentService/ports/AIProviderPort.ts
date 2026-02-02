@@ -1,15 +1,13 @@
-import type {
-  AgentInstructions,
-  BatchClassificationResult,
-  BufferedMessage,
-  HistoryEntry,
-} from "../domain/types.js"
+import type { BatchUsageMetadata } from "../domain/Batch.js"
+
+export interface AIProviderResult {
+  text: string | null
+  usage?: BatchUsageMetadata
+}
 
 export interface AIProviderPort {
   classifyBatch: (input: {
     chatId: number
-    history: HistoryEntry[]
-    messages: BufferedMessage[]
-    instructions: AgentInstructions
-  }) => Promise<BatchClassificationResult>
+    prompt: string
+  }) => Promise<AIProviderResult>
 }

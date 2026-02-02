@@ -28,7 +28,7 @@ describe("command-to-action flow (integration)", () => {
       },
     }
     mockChatRepository = {
-      getChat: jest.fn().mockResolvedValue({ id: -123, active: true }),
+      getChat: jest.fn().mockResolvedValue(null),
       registerChat: jest.fn().mockResolvedValue({ success: true }),
       unregisterChat: jest.fn().mockResolvedValue({ success: true }),
       toggleAi: jest.fn().mockResolvedValue(true),

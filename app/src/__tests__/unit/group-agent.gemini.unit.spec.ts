@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, jest } from "@jest/globals"
 import type { ChatConfigPort } from "../../services/GroupAgentService/ports/ChatConfigPort.js"
-import type { AgentInstructions, BufferedMessage, HistoryEntry } from "../../services/GroupAgentService/domain/types.js"
-import { DEFAULT_AGENT_INSTRUCTIONS } from "../../services/GroupAgentService/infrastructure/config/defaultInstructions.js"
+import { AIProviderError } from "../../services/GroupAgentService/ports/AIProviderError.js"
 
 const axiosWithProxyMock = jest.fn()
 
@@ -10,27 +9,6 @@ jest.unstable_mockModule("../../helpers/axiosWithProxy.js", () => ({
 }))
 
 const { GeminiAdapter } = await import("../../services/GroupAgentService/infrastructure/adapters/GeminiAdapter.js")
-
-const instructions: AgentInstructions = DEFAULT_AGENT_INSTRUCTIONS
-
-const history: HistoryEntry[] = []
-
-const messages: BufferedMessage[] = [
-  {
-    messageId: 301,
-    chatId: -500,
-    userId: 55,
-    text: "Привет, бот!",
-    timestamp: Date.now(),
-  },
-  {
-    messageId: 302,
-    chatId: -500,
-    userId: 56,
-    text: "Спам реклама",
-    timestamp: Date.now(),
-  },
-]
 
 describe("GeminiAdapter", () => {
   const chatConfig: ChatConfigPort = {
@@ -44,6 +22,9 @@ describe("GeminiAdapter", () => {
     async isAdmin() {
       return false
     },
+    async getChatAdmins() {
+      return []
+    },
   }
 
   beforeEach(() => {
@@ -54,76 +35,46 @@ describe("GeminiAdapter", () => {
     jest.clearAllMocks()
   })
 
-  it("возвращает нормализованные результаты по допустимым messageId", async () => {
+  it("возвращает текст и usage при успешном ответе", async () => {
     axiosWithProxyMock.mockResolvedValue({
       data: {
         candidates: [
           {
             content: {
               parts: [{
-                text: JSON.stringify({
-                  results: [
-                    {
-                      messageId: 301,
-                      classification: {
-                        type: "bot_mention",
-                        requiresResponse: true,
-                      },
-                      moderationAction: "none",
-                      responseText: "Привет! Я здесь.",
-                    },
-                    {
-                      messageId: 999,
-                      classification: {
-                        type: "violation",
-                      },
-                      moderationAction: "ban",
-                      responseText: "Лишнее сообщение",
-                    },
-                  ],
-                }),
+                text: "{\"r\":[{\"mid\":301,\"c\":2,\"rr\":1,\"a\":0,\"t\":\"Привет! Я здесь.\"}]}",
               }],
             },
           },
         ],
+        usageMetadata: {
+          promptTokenCount: 10,
+          totalTokenCount: 20,
+        },
       },
     })
 
     const adapter = new GeminiAdapter(chatConfig)
     const result = await adapter.classifyBatch({
       chatId: -500,
-      instructions,
-      history,
-      messages,
+      prompt: "{\"test\":true}",
     })
 
-    expect(result).not.toBeNull()
-    expect(result?.results).toHaveLength(1)
-    expect(result?.results[0]).toMatchObject({
-      messageId: 301,
-      classification: {
-        type: "bot_mention",
-        requiresResponse: true,
-      },
-      responseText: "Привет! Я здесь.",
-    })
+    expect(result.text).toContain("\"r\"")
+    expect(result.usage?.promptTokens).toBe(10)
   })
 
-  it("возвращает null при ошибке Gemini API", async () => {
+  it("выбрасывает AIProviderError при ошибке запроса", async () => {
     axiosWithProxyMock.mockRejectedValue(new Error("network error"))
 
     const adapter = new GeminiAdapter(chatConfig)
-    const result = await adapter.classifyBatch({
+    await expect(adapter.classifyBatch({
       chatId: -500,
-      instructions,
-      history,
-      messages,
-    })
-
-    expect(result).toBeNull()
+      prompt: "{\"test\":true}",
+    })).rejects.toBeInstanceOf(AIProviderError)
   })
 
-  it("возвращает пустой результат при отсутствии текста", async () => {
+  it("возвращает null текст при отсутствии ответа", async () => {
     axiosWithProxyMock.mockResolvedValue({
       data: {
         candidates: [
@@ -139,12 +90,10 @@ describe("GeminiAdapter", () => {
     const adapter = new GeminiAdapter(chatConfig)
     const result = await adapter.classifyBatch({
       chatId: -500,
-      instructions,
-      history,
-      messages,
+      prompt: "{\"test\":true}",
     })
 
-    expect(result).toEqual({ results: [] })
+    expect(result.text).toBeNull()
   })
 })
 

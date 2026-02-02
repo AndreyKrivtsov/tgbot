@@ -1,25 +1,9 @@
 import { axiosWithProxy } from "../../../../helpers/axiosWithProxy.js"
 import { GROUP_AGENT_CONFIG } from "../../../../constants.js"
 import { Logger } from "../../../../helpers/Logger.js"
-import type { AIProviderPort } from "../../ports/AIProviderPort.js"
+import type { AIProviderPort, AIProviderResult } from "../../ports/AIProviderPort.js"
 import { AIProviderError } from "../../ports/AIProviderError.js"
 import type { ChatConfigPort } from "../../ports/ChatConfigPort.js"
-import type {
-  AgentInstructions,
-  BatchClassificationResult,
-  BufferedMessage,
-  ClassificationResult,
-  HistoryEntry,
-} from "../../domain/types.js"
-
-import { buildClassificationPrompt } from "../prompt/PromptBuilder.js"
-
-interface ClassificationInput {
-  chatId: number
-  history: HistoryEntry[]
-  messages: BufferedMessage[]
-  instructions: AgentInstructions
-}
 
 interface GeminiContentPart {
   text?: string
@@ -48,7 +32,6 @@ interface GeminiResponse {
 
 const GEMINI_MODELS = [
   "gemma-3-27b-it",
-  // "gemini-2.5-flash-lite",
 ]
 
 let currentModelIndex = 0
@@ -85,73 +68,6 @@ function extractTextFromResponse(data: GeminiResponse): string | null {
   return part.text
 }
 
-function safeParseJson(text: string): any | null {
-  if (!text) {
-    return null
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch {
-    const trimmed = text.trim()
-    const start = trimmed.indexOf("{")
-    const end = trimmed.lastIndexOf("}")
-    if (start >= 0 && end > start) {
-      const candidate = trimmed.slice(start, end + 1)
-      try {
-        return JSON.parse(candidate)
-      } catch {
-        return null
-      }
-    }
-    return null
-  }
-}
-
-function normalizeResults(raw: any, allowedMessageIds: Set<number>): BatchClassificationResult {
-  if (!raw || !Array.isArray(raw.results)) {
-    return { results: [] }
-  }
-
-  const normalized: ClassificationResult[] = []
-  const validModerationActions = new Set(["none", "warn", "delete", "mute", "unmute", "kick", "ban", "unban"])
-
-  for (const item of raw.results) {
-    if (!item || typeof item.messageId !== "number" || !allowedMessageIds.has(item.messageId)) {
-      continue
-    }
-
-    const classification = item.classification ?? {}
-    const type = classification.type === "violation" || classification.type === "bot_mention"
-      ? classification.type
-      : "normal"
-    const requiresResponse = Boolean(classification.requiresResponse)
-
-    const moderationAction = typeof item.moderationAction === "string" && validModerationActions.has(item.moderationAction)
-      ? item.moderationAction
-      : "none"
-
-    const durationMinutes = typeof item.durationMinutes === "number" && item.durationMinutes > 0 ? item.durationMinutes : undefined
-
-    const normalizedItem: ClassificationResult = {
-      messageId: item.messageId,
-      classification: {
-        type,
-        requiresResponse,
-      },
-      moderationAction,
-      responseText: item.responseText,
-      targetUserId: typeof item.targetUserId === "number" && item.targetUserId > 0 ? item.targetUserId : undefined,
-      targetMessageId: typeof item.targetMessageId === "number" ? item.targetMessageId : undefined,
-      durationMinutes,
-    }
-
-    normalized.push(normalizedItem)
-  }
-
-  return { results: normalized }
-}
-
 export class GeminiAdapter implements AIProviderPort {
   private readonly chatConfigPort: ChatConfigPort
   private readonly logger = new Logger("GeminiAdapter")
@@ -160,38 +76,23 @@ export class GeminiAdapter implements AIProviderPort {
     this.chatConfigPort = chatConfigPort
   }
 
-  async classifyBatch(input: ClassificationInput): Promise<BatchClassificationResult> {
+  async classifyBatch(input: { chatId: number, prompt: string }): Promise<AIProviderResult> {
     const config = await this.chatConfigPort.getChatConfig(input.chatId)
-    if (!config?.geminiApiKey || input.messages.length === 0) {
-      return { results: [] }
+    if (!config?.geminiApiKey || !input.prompt) {
+      return { text: null }
     }
-
-    const prompt = buildClassificationPrompt({
-      instructions: input.instructions,
-      history: input.history,
-      messages: input.messages,
-    })
-
-    this.logger.d("Prompt:", prompt)
-    this.logger.d("Messages:", input.messages.length)
-    this.logger.d("History:", input.history.length)
-    this.logger.d("Instructions:", input.instructions)
 
     const requestBody = {
       contents: [
         {
-          parts: [{ text: prompt }],
+          parts: [{ text: input.prompt }],
         },
       ],
       generationConfig: {
-        temperature: 1.3,
-        // topP: 0.7,
-        // topK: 32,
+        temperature: 1.2,
         maxOutputTokens: 200,
       },
     }
-
-    const allowedMessageIds = new Set(input.messages.map(message => message.messageId))
 
     try {
       const model = getNextModel()
@@ -201,7 +102,6 @@ export class GeminiAdapter implements AIProviderPort {
         url,
         apiKey: config.geminiApiKey,
         requestBody,
-        allowedMessageIds,
       })
     } catch (error) {
       if (error instanceof AIProviderError) {
@@ -227,8 +127,7 @@ export class GeminiAdapter implements AIProviderPort {
     url: string
     apiKey: string
     requestBody: Record<string, unknown>
-    allowedMessageIds: Set<number>
-  }): Promise<BatchClassificationResult> {
+  }): Promise<AIProviderResult> {
     const response = await axiosWithProxy({
       url: params.url,
       method: "POST",
@@ -242,31 +141,15 @@ export class GeminiAdapter implements AIProviderPort {
     })
 
     const data = response.data as GeminiResponse
-
     const text = extractTextFromResponse(data)
-    if (!text) {
-      return { results: [] }
-    }
 
-    const parsed = safeParseJson(text)
-
-    if (!parsed) {
-      return {
-        results: [],
-        usage: {
-          promptTokens: data.usageMetadata?.promptTokenCount,
-          totalTokens: data.usageMetadata?.totalTokenCount,
-          modelVersion: data.modelVersion,
-        },
-      }
+    return {
+      text,
+      usage: {
+        promptTokens: data.usageMetadata?.promptTokenCount,
+        totalTokens: data.usageMetadata?.totalTokenCount,
+        modelVersion: data.modelVersion,
+      },
     }
-
-    const normalized = normalizeResults(parsed, params.allowedMessageIds)
-    normalized.usage = {
-      promptTokens: data.usageMetadata?.promptTokenCount,
-      totalTokens: data.usageMetadata?.totalTokenCount,
-      modelVersion: data.modelVersion,
-    }
-    return normalized
   }
 }

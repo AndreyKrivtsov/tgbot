@@ -1,8 +1,9 @@
-import type { BufferState, ChatHistory } from "../domain/types.js"
+import type { BufferState, StoredChatHistory } from "../domain/Batch.js"
 
 export interface StateStorePort {
-  loadHistory: (chatId: number) => Promise<ChatHistory | null>
-  saveHistory: (history: ChatHistory) => Promise<void>
+  loadHistory: (chatId: number) => Promise<StoredChatHistory | null>
+  saveHistory: (history: StoredChatHistory) => Promise<void>
+  clearAllHistory: () => Promise<void>
   loadBuffers: () => Promise<BufferState[]>
   saveBuffers: (buffers: BufferState[]) => Promise<void>
 }

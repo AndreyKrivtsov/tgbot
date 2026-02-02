@@ -17,6 +17,18 @@ export function registerRoutes(
   deps: RouteDependencies,
   logger: Logger,
 ): void {
+  server.addHook("onSend", async (request, reply) => {
+    logger.d("API request:", request.url)
+
+    reply.header("Access-Control-Allow-Origin", "*")
+    reply.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+    reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  })
+
+  server.options("*", async (request, reply) => {
+    reply.send({ success: true })
+  })
+
   server.get("/api/users/:userId/chats", async (request, reply) => {
     if (!deps.chatRepository) {
       reply.code(503).send({ success: false, error: "service_unavailable" })
@@ -166,4 +178,3 @@ function parseChatId(rawChatId?: string): number | null {
   const chatId = Number.parseInt(rawChatId, 10)
   return Number.isNaN(chatId) ? null : chatId
 }
-

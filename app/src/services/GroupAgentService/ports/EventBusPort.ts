@@ -21,6 +21,10 @@ export interface GroupAgentResponseEvent {
   }>
 }
 
+export interface GroupAgentTypingEvent {
+  chatId: number
+}
+
 export interface GroupAgentReviewPromptEvent {
   reviewId: string
   chatId: number
@@ -55,6 +59,8 @@ export interface GroupAgentReviewResolvedEvent {
 export interface EventBusPort {
   emitModerationAction: (event: GroupAgentModerationEvent) => Promise<void>
   emitAgentResponse: (event: GroupAgentResponseEvent) => Promise<void>
+  emitTypingStarted: (event: GroupAgentTypingEvent) => Promise<void>
+  emitTypingStopped: (event: GroupAgentTypingEvent) => Promise<void>
   emitReviewPrompt: (event: GroupAgentReviewPromptEvent) => Promise<void>
   emitReviewResolved: (event: GroupAgentReviewResolvedEvent) => Promise<void>
   emitReviewDeletePrompt: (event: { chatId: number, messageId: number }) => Promise<void>

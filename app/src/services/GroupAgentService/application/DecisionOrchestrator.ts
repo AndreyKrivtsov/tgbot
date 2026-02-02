@@ -1,8 +1,6 @@
-import type {
-  AgentResolution,
-  BatchClassificationResult,
-  BufferedMessage,
-} from "../domain/types.js"
+import type { BatchClassificationResult } from "../domain/Batch.js"
+import type { AgentResolution } from "../domain/Decision.js"
+import type { BufferedMessage } from "../domain/Message.js"
 import type { ModerationPolicy } from "../domain/ModerationPolicy.js"
 import type { ResponsePolicy } from "../domain/ResponsePolicy.js"
 

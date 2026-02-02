@@ -23,7 +23,7 @@ describe("groupManagementService (unit)", () => {
     }
     mockTelegramPort = {
       getChatAdministrators: jest.fn().mockResolvedValue([
-        { user: { id: 1 } },
+        { user: { id: 1, username: "admin_one" } },
         { user: { id: 2 } },
       ]),
     }
@@ -71,7 +71,10 @@ describe("groupManagementService (unit)", () => {
     }
 
     expect(mockTelegramPort.getChatAdministrators).toHaveBeenCalledWith(-456)
-    expect(mockChatRepository.replaceAdmins).toHaveBeenCalledWith(-456, [1, 2])
+    expect(mockChatRepository.replaceAdmins).toHaveBeenCalledWith(-456, [
+      { userId: 1, username: "admin_one" },
+      { userId: 2, username: null },
+    ])
   })
 
   it("handleRegister: регистрирует чат при успешной проверке прав", async () => {

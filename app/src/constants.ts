@@ -182,12 +182,12 @@ ${AI_MODERATION_RULES}
 // =============================================================================
 
 export const GROUP_AGENT_CONFIG = {
-  BATCH_INTERVAL_MS: 50_000,
+  BATCH_INTERVAL_MS: 65_000,
   MAX_BATCH_SIZE: 50,
-  AI_REQUEST_TIMEOUT_MS: 40_000,
-  AI_MAX_RETRIES: 1,
+  AI_REQUEST_TIMEOUT_MS: 60_000,
   AI_MAX_RESPONSE_LENGTH: 2_000,
-  HISTORY_PROMPT_TOKEN_THRESHOLD: 10_000,
+  PROMPT_MAX_TOKENS: 10_000,
+  PROMPT_TOKEN_CHAR_RATIO: 3,
   BUFFER_TTL_SECONDS: 3_600,
   REVIEW_TTL_SECONDS: 3 * 60 * 60,
   REVIEW_EXPIRATION_CHECK_INTERVAL_MS: 60_000,
@@ -300,7 +300,7 @@ export const CACHE_CONFIG = {
   CHAT_TTL_SECONDS: 300, // 5 минут - кеш для информации о чате
   CHAT_CONFIG_TTL_SECONDS: 600, // 10 минут - кеш для конфигурации чата
   USER_TTL_SECONDS: 300, // 5 минут - кеш для информации о пользователе
-  CHAT_ADMINS_TTL_SECONDS: 120, // 2 минуты - кеш списка админов чата
+  CHAT_ADMINS_TTL_SECONDS: 86400, // 24 часа - кеш списка админов чата
 
   // Префиксы ключей кеша
   KEYS: {

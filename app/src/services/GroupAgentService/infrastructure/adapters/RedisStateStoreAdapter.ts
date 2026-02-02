@@ -1,7 +1,7 @@
 import type { RedisService } from "../../../RedisService/index.js"
 import { GROUP_AGENT_CONFIG } from "../../../../constants.js"
 import type { StateStorePort } from "../../ports/StateStorePort.js"
-import type { BufferState, ChatHistory } from "../../domain/types.js"
+import type { BufferState, StoredChatHistory } from "../../domain/Batch.js"
 
 const HISTORY_PREFIX = "group_agent:history"
 const BUFFER_PREFIX = "group_agent:buffer"
@@ -16,15 +16,26 @@ export class RedisStateStoreAdapter implements StateStorePort {
     this.redis = redis
   }
 
-  async loadHistory(chatId: number): Promise<ChatHistory | null> {
-    return await this.redis.get<ChatHistory>(historyKey(chatId))
+  async loadHistory(chatId: number): Promise<StoredChatHistory | null> {
+    return await this.redis.get<StoredChatHistory>(historyKey(chatId))
   }
 
-  async saveHistory(history: ChatHistory): Promise<void> {
+  async saveHistory(history: StoredChatHistory): Promise<void> {
     await this.redis.set(
       historyKey(history.chatId),
       history,
     )
+  }
+
+  async clearAllHistory(): Promise<void> {
+    const keys = await this.redis.keys(`${HISTORY_PREFIX}:*`)
+    if (!keys || keys.length === 0) {
+      return
+    }
+
+    for (const key of keys) {
+      await this.redis.del(key)
+    }
   }
 
   async loadBuffers(): Promise<BufferState[]> {

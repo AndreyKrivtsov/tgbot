@@ -1,4 +1,5 @@
-import type { BufferedMessage, BufferState } from "../domain/types.js"
+import type { BufferState } from "../domain/Batch.js"
+import type { BufferedMessage } from "../domain/Message.js"
 
 type ChatBuffer = Map<number, BufferedMessage>
 

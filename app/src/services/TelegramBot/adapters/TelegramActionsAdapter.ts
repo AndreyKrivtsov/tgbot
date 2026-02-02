@@ -4,6 +4,7 @@ import type {
   EventBus,
   GroupAgentModerationEvent,
   GroupAgentResponseEvent,
+  GroupAgentTypingEvent,
   TelegramAction,
 } from "../../../core/EventBus.js"
 
@@ -13,6 +14,8 @@ import type {
  * Бизнес-логика (ЧТО делать) остается в сервисах
  */
 export class TelegramActionsAdapter {
+  private typingIntervals: Map<number, NodeJS.Timeout> = new Map()
+
   constructor(
     private bot: TelegramBot,
     private logger: Logger,
@@ -90,6 +93,14 @@ export class TelegramActionsAdapter {
       } catch (error) {
         this.logger.e("Error handling group agent response:", error)
       }
+    })
+
+    this.eventBus.onGroupAgentTypingStarted(async (event: GroupAgentTypingEvent) => {
+      this.startTyping(event.chatId)
+    })
+
+    this.eventBus.onGroupAgentTypingStopped(async (event: GroupAgentTypingEvent) => {
+      this.stopTyping(event.chatId)
     })
 
     this.eventBus.onGroupAgentReviewPrompt(async (event) => {
@@ -198,6 +209,29 @@ export class TelegramActionsAdapter {
         replyToMessageId: action.replyToMessageId,
       },
     }))
+  }
+
+  private startTyping(chatId: number): void {
+    if (this.typingIntervals.has(chatId)) {
+      return
+    }
+
+    const send = () => {
+      void this.bot.sendChatAction(chatId, "typing").catch(() => {})
+    }
+
+    send()
+    const intervalId = setInterval(send, 4000)
+    this.typingIntervals.set(chatId, intervalId)
+  }
+
+  private stopTyping(chatId: number): void {
+    const intervalId = this.typingIntervals.get(chatId)
+    if (!intervalId) {
+      return
+    }
+    clearInterval(intervalId)
+    this.typingIntervals.delete(chatId)
   }
 
   /**

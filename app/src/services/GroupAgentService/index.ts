@@ -7,20 +7,28 @@ import { GROUP_AGENT_CONFIG } from "../../constants.js"
 import type { GroupAgentConfigType } from "../../constants.js"
 import { MessageBuffer } from "./application/MessageBuffer.js"
 import { BatchProcessor } from "./application/BatchProcessor.js"
-import type { InstructionsProvider } from "./application/BatchProcessor.js"
+import type { PromptSpecProvider } from "./application/BatchProcessor.js"
 import { ActionsBuilder } from "./application/ActionsBuilder.js"
 import { ModerationPolicy } from "./domain/ModerationPolicy.js"
 import { ResponsePolicy } from "./domain/ResponsePolicy.js"
-import type { AgentInstructions, IncomingGroupMessage } from "./domain/types.js"
+import type { IncomingGroupMessage } from "./domain/Message.js"
 import { DecisionOrchestrator } from "./application/DecisionOrchestrator.js"
 import { ChatRepositoryAdapter } from "./infrastructure/adapters/ChatRepositoryAdapter.js"
 import { RedisStateStoreAdapter } from "./infrastructure/adapters/RedisStateStoreAdapter.js"
 import { EventBusAdapter } from "./infrastructure/adapters/EventBusAdapter.js"
 import { GeminiAdapter } from "./infrastructure/adapters/GeminiAdapter.js"
+import { AdminMentionsAdapter } from "./infrastructure/adapters/AdminMentionsAdapter.js"
 import type { ChatConfigPort } from "./ports/ChatConfigPort.js"
 import type { EventBusPort } from "./ports/EventBusPort.js"
 import type { StateStorePort } from "./ports/StateStorePort.js"
-import { DEFAULT_AGENT_INSTRUCTIONS } from "./infrastructure/config/defaultInstructions.js"
+import type { AdminMentionsPort } from "./ports/AdminMentionsPort.js"
+import { DEFAULT_PROMPT_SPEC } from "./infrastructure/config/promptSpec.js"
+import { ContextBuilder } from "./application/ContextBuilder.js"
+import { HistoryReducer } from "./application/HistoryReducer.js"
+import { PromptAssembler } from "./application/PromptAssembler.js"
+import { HistoryToPromptMapper } from "./application/HistoryToPromptMapper.js"
+import { CompactPromptBuilder } from "./infrastructure/prompt/CompactPromptBuilder.js"
+import { CompactResponseParser } from "./infrastructure/prompt/CompactResponseParser.js"
 
 import type { AIProviderPort } from "./ports/AIProviderPort.js"
 import type { ReviewStatePort } from "./ports/ReviewStatePort.js"
@@ -53,44 +61,23 @@ export class GroupAgentService implements IService {
   private reviewStateStore?: ReviewStatePort
   private reviewRequestBuilder?: ReviewRequestBuilder
   private reviewManager?: ModerationReviewManager
+  private adminMentionsPort?: AdminMentionsPort
 
-  private instructionsProvider: InstructionsProvider
+  private promptSpecProvider: PromptSpecProvider
+  private contextBuilder?: ContextBuilder
+  private historyReducer?: HistoryReducer
+  private promptBuilder?: CompactPromptBuilder
+  private promptAssembler?: PromptAssembler
+  private historyToPromptMapper?: HistoryToPromptMapper
+  private responseParser?: CompactResponseParser
 
   constructor(config: AppConfig, deps: Dependencies = {}) {
     this.config = config
     this.deps = deps
     this.serviceConfig = GROUP_AGENT_CONFIG
     this.messageBuffer = new MessageBuffer()
-    this.instructionsProvider = {
-      getInstructions: async (chatId: number): Promise<AgentInstructions> => {
-        const base = DEFAULT_AGENT_INSTRUCTIONS
-
-        if (!this.chatConfigPort || typeof chatId !== "number") {
-          return base
-        }
-
-        try {
-          const adminIds = await this.chatConfigPort.getChatAdmins(chatId)
-          if (adminIds.length === 0) {
-            return base
-          }
-
-          const adminList = adminIds
-            .map(id => `- tg://user?id=${id}`)
-            .join("\n")
-
-          return {
-            ...base,
-            format: {
-              ...base.format,
-              message: `${base.format.message}\n\nАДМИНИСТРАТОРЫ ЧАТА:\n${adminList}`,
-              response: base.format.response,
-            },
-          }
-        } catch {
-          return base
-        }
-      },
+    this.promptSpecProvider = {
+      getSpec: async (): Promise<typeof DEFAULT_PROMPT_SPEC> => DEFAULT_PROMPT_SPEC,
     }
   }
 
@@ -103,11 +90,13 @@ export class GroupAgentService implements IService {
     const stateStore = new RedisStateStoreAdapter(this.deps.redisService)
     const eventBusPort = new EventBusAdapter(this.deps.eventBus)
     const reviewStateStore = new RedisReviewStateAdapter(this.deps.redisService)
+    const adminMentionsPort = new AdminMentionsAdapter(this.deps.chatRepository, this.deps.redisService)
 
     this.chatConfigPort = chatConfigPort
     this.stateStore = stateStore
     this.eventBusPort = eventBusPort
     this.reviewStateStore = reviewStateStore
+    this.adminMentionsPort = adminMentionsPort
 
     const moderationPolicy = new ModerationPolicy()
 
@@ -120,6 +109,17 @@ export class GroupAgentService implements IService {
     this.actionsBuilder = new ActionsBuilder()
     this.aiProvider = new GeminiAdapter(chatConfigPort)
     this.reviewRequestBuilder = new ReviewRequestBuilder(this.serviceConfig.REVIEW_TTL_SECONDS)
+    this.contextBuilder = new ContextBuilder(chatConfigPort)
+    this.historyToPromptMapper = new HistoryToPromptMapper()
+    this.historyReducer = new HistoryReducer(
+      {
+        dedupe: true,
+      },
+      this.historyToPromptMapper,
+    )
+    this.promptBuilder = new CompactPromptBuilder()
+    this.promptAssembler = new PromptAssembler(this.promptBuilder, this.historyToPromptMapper)
+    this.responseParser = new CompactResponseParser()
 
     if (this.actionsBuilder) {
       this.reviewManager = new ModerationReviewManager({
@@ -157,6 +157,11 @@ export class GroupAgentService implements IService {
     const reviewRequestBuilder = this.reviewRequestBuilder!
     const reviewManager = this.reviewManager!
     const retryPolicy = new DefaultRetryPolicy({ maxAttempts: 2, delayMs: 1000 })
+    const contextBuilder = this.contextBuilder!
+    const historyReducer = this.historyReducer!
+    const promptAssembler = this.promptAssembler!
+    const responseParser = this.responseParser!
+    const adminMentionsPort = this.adminMentionsPort!
 
     const buffers = await stateStore.loadBuffers()
     this.messageBuffer = new MessageBuffer(buffers)
@@ -165,7 +170,7 @@ export class GroupAgentService implements IService {
       {
         batchIntervalMs: this.serviceConfig.BATCH_INTERVAL_MS,
         maxBatchSize: this.serviceConfig.MAX_BATCH_SIZE,
-        historyTrimTokenThreshold: this.serviceConfig.HISTORY_PROMPT_TOKEN_THRESHOLD,
+        promptMaxChars: this.serviceConfig.PROMPT_MAX_TOKENS * this.serviceConfig.PROMPT_TOKEN_CHAR_RATIO,
       },
       {
         buffer: this.messageBuffer,
@@ -175,10 +180,15 @@ export class GroupAgentService implements IService {
         actionsBuilder,
         eventBus: eventBusPort,
         chatConfig: chatConfigPort,
-        instructionsProvider: this.instructionsProvider,
+        promptSpecProvider: this.promptSpecProvider,
         reviewRequestBuilder,
         reviewManager,
         retryPolicy,
+        contextBuilder,
+        historyReducer,
+        promptAssembler,
+        responseParser,
+        adminMentions: adminMentionsPort,
       },
     )
 
@@ -205,6 +215,15 @@ export class GroupAgentService implements IService {
 
   private async handleMessage(event: MessageReceivedEvent): Promise<void> {
     if (!event.chat?.id || !event.from?.id || !event.text) {
+      return
+    }
+
+    if (!this.chatConfigPort) {
+      return
+    }
+
+    const config = await this.chatConfigPort.getChatConfig(event.chat.id)
+    if (!config?.groupAgentEnabled) {
       return
     }
 
@@ -252,7 +271,14 @@ export class GroupAgentService implements IService {
       && this.actionsBuilder
       && this.aiProvider
       && this.reviewManager
-      && this.reviewRequestBuilder,
+      && this.reviewRequestBuilder
+      && this.contextBuilder
+      && this.historyReducer
+      && this.promptBuilder
+      && this.promptAssembler
+      && this.historyToPromptMapper
+      && this.responseParser
+      && this.adminMentionsPort,
     )
   }
 }

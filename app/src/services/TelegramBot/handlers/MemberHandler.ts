@@ -124,49 +124,38 @@ export class MemberHandler {
         return
       }
 
+      this.logger.d(`🔍 User ${user.id} status: ${newMember.status}`)
+      this.logger.d(`🔍 User ${user.id} old status: ${oldMember.status}`)
+      this.logger.d(`🔍 User ${user.id} is member: ${newMember.isMember()}`)
+      this.logger.d(`🔍 User ${user.id} is old member: ${oldMember.isMember()}`)
+
       // Пользователь вступил в чат
       if (
-        (oldMember.status === "left" || oldMember.status === "kicked" || !oldMember.isMember())
-        && (newMember.status === "member" || newMember.status === "restricted")
+        (!oldMember.isMember() || oldMember.status === "left" || oldMember.status === "kicked")
+        && (newMember.isMember() || newMember.status === "member" || newMember.status === "administrator" || newMember.status === "creator")
       ) {
-        this.logger.i(`👋 User ${user.id} (@${user.username || "no_username"}) joined chat ${chatId}`)
-
-        // Эмитим member.joined
-        if (this.eventBus) {
-          await this.eventBus.emit(EVENTS.MEMBER_JOINED, {
-            chatId,
-            userId: user.id,
-            username: user.username,
-            firstName: user.firstName,
-          })
-        }
+        await this.handleMemberJoined(chatId, user)
         return
       }
 
       // Пользователь покинул чат
-      if (newMember.status === "left" || newMember.status === "kicked" || !newMember.isMember()) {
-        this.logger.i(`👋 User ${user.id} left chat ${chatId}`)
-
-        // Эмитим member.left
-        if (this.eventBus) {
-          await this.eventBus.emit(EVENTS.MEMBER_LEFT, { chatId, userId: user.id })
-        }
+      if (
+        (!newMember.isMember() || newMember.status === "left" || newMember.status === "kicked")
+        && (oldMember.isMember())
+      ) {
+        await this.handleMemberLeft(chatId, user.id)
         return
       }
 
       // Изменение прав
       if (oldMember.status !== newMember.status) {
-        this.logger.d(`⚡ Status change: ${oldMember.status} -> ${newMember.status} for user ${user.id}`)
-        // Эмитим member.updated
-        if (this.eventBus) {
-          await this.eventBus.emit(EVENTS.CHAT_MEMBER_UPDATED, {
-            chatId,
-            oldStatus: oldMember.status,
-            newStatus: newMember.status,
-            userId: user.id,
-            username: user.username,
-          })
-        }
+        await this.handleChatMemberStatusChanged({
+          chatId,
+          userId: user.id,
+          username: user.username,
+          oldStatus: oldMember.status,
+          newStatus: newMember.status,
+        })
       }
     } catch (error) {
       this.logger.e("❌ Error handling chat member update:", error)
@@ -178,6 +167,49 @@ export class MemberHandler {
    */
   hasCaptchaService(): boolean {
     return !!this.captchaService
+  }
+
+  private async handleMemberJoined(chatId: number, user: { id: number, username?: string, firstName?: string }): Promise<void> {
+    this.logger.i(`👋 User ${user.id} (@${user.username || "no_username"}) joined chat ${chatId}`)
+
+    // Эмитим member.joined
+    if (this.eventBus) {
+      await this.eventBus.emit(EVENTS.MEMBER_JOINED, {
+        chatId,
+        userId: user.id,
+        username: user.username,
+        firstName: user.firstName,
+      })
+    }
+  }
+
+  private async handleMemberLeft(chatId: number, userId: number): Promise<void> {
+    this.logger.i(`👋 User ${userId} left chat ${chatId}`)
+
+    // Эмитим member.left
+    if (this.eventBus) {
+      await this.eventBus.emit(EVENTS.MEMBER_LEFT, { chatId, userId })
+    }
+  }
+
+  private async handleChatMemberStatusChanged(params: {
+    chatId: number
+    userId: number
+    username?: string
+    oldStatus: string
+    newStatus: string
+  }): Promise<void> {
+    this.logger.d(`⚡ Status change: ${params.oldStatus} -> ${params.newStatus} for user ${params.userId}`)
+    // Эмитим member.updated
+    if (this.eventBus) {
+      await this.eventBus.emit(EVENTS.CHAT_MEMBER_UPDATED, {
+        chatId: params.chatId,
+        oldStatus: params.oldStatus,
+        newStatus: params.newStatus,
+        userId: params.userId,
+        username: params.username,
+      })
+    }
   }
 
   /**

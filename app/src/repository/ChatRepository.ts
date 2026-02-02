@@ -3,37 +3,50 @@ import { chatConfigs, chats, groupAdmins } from "../db/schema.js"
 import type { Chat, ChatConfig, GroupAdmin, NewChat, NewChatConfig, SystemPromptData } from "../db/schema.js"
 import type { DatabaseService } from "../services/DatabaseService/index.js"
 import type { CacheService } from "../services/CacheService/index.js"
+import type { RedisService } from "../services/RedisService/index.js"
 import { CACHE_CONFIG } from "../constants.js"
 
 export class ChatRepository {
   private databaseService: DatabaseService
   private cacheService?: CacheService
+  private redisService?: RedisService
 
-  constructor(databaseService: DatabaseService, cacheService?: CacheService) {
+  constructor(databaseService: DatabaseService, cacheService?: CacheService, redisService?: RedisService) {
     this.databaseService = databaseService
     this.cacheService = cacheService
+    this.redisService = redisService
   }
 
   private getAdminsCacheKey(chatId: number): string {
     return `${CACHE_CONFIG.KEYS.CHAT_ADMINS}:${chatId}`
   }
 
-  private setAdminsCache(chatId: number, admins: GroupAdmin[]): void {
-    if (!this.cacheService) {
+  private async setAdminsCache(chatId: number, admins: GroupAdmin[]): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.set(
+        this.getAdminsCacheKey(chatId),
+        admins,
+        CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
+      )
       return
     }
-    this.cacheService.set(
-      this.getAdminsCacheKey(chatId),
-      admins,
-      CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
-    )
+
+    if (this.cacheService) {
+      this.cacheService.set(
+        this.getAdminsCacheKey(chatId),
+        admins,
+        CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
+      )
+    }
   }
 
-  private invalidateAdminsCache(chatId: number): void {
-    if (!this.cacheService) {
-      return
+  private async invalidateAdminsCache(chatId: number): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.del(this.getAdminsCacheKey(chatId))
     }
-    this.cacheService.delete(this.getAdminsCacheKey(chatId))
+    if (this.cacheService) {
+      this.cacheService.delete(this.getAdminsCacheKey(chatId))
+    }
   }
 
   /**
@@ -330,21 +343,26 @@ export class ChatRepository {
    * Получить администраторов чата
    */
   async getChatAdmins(chatId: number): Promise<GroupAdmin[]> {
-    if (this.cacheService) {
+    if (this.redisService) {
+      const cached = await this.redisService.get<GroupAdmin[]>(this.getAdminsCacheKey(chatId))
+      if (cached !== null) {
+        return cached
+      }
+    } else if (this.cacheService) {
       const cached = this.cacheService.get(this.getAdminsCacheKey(chatId)) as GroupAdmin[] | null
-      if (cached) {
+      if (cached !== null) {
         return cached
       }
     }
 
     try {
-      const admins = await this.getDb()
+      const adminsFromDb = await this.getDb()
         .select()
         .from(groupAdmins)
         .where(eq(groupAdmins.groupId, chatId))
 
-      this.setAdminsCache(chatId, admins)
-      return admins
+      await this.setAdminsCache(chatId, adminsFromDb)
+      return adminsFromDb
     } catch (error) {
       console.error("Error getting chat admins:", error)
       return []
@@ -364,7 +382,7 @@ export class ChatRepository {
         })
         .onConflictDoNothing()
 
-      this.invalidateAdminsCache(chatId)
+      await this.invalidateAdminsCache(chatId)
       return true
     } catch (error) {
       console.error("Error adding admin:", error)
@@ -385,7 +403,7 @@ export class ChatRepository {
 
       const success = (result.count || 0) > 0
       if (success) {
-        this.invalidateAdminsCache(chatId)
+        await this.invalidateAdminsCache(chatId)
       }
       return success
     } catch (error) {
@@ -397,7 +415,10 @@ export class ChatRepository {
   /**
    * Полностью заменить список администраторов чата
    */
-  async replaceAdmins(chatId: number, adminIds: number[]): Promise<void> {
+  async replaceAdmins(
+    chatId: number,
+    admins: Array<{ userId: number, username: string | null }>,
+  ): Promise<void> {
     try {
       const db = this.getDb()
       await db.transaction(async (tx) => {
@@ -405,10 +426,11 @@ export class ChatRepository {
           .delete(groupAdmins)
           .where(eq(groupAdmins.groupId, chatId))
 
-        if (adminIds.length > 0) {
-          const values = adminIds.map(userId => ({
+        if (admins.length > 0) {
+          const values = admins.map(admin => ({
             groupId: chatId,
-            userId,
+            userId: admin.userId,
+            username: admin.username,
           }))
           await tx
             .insert(groupAdmins)
@@ -417,15 +439,15 @@ export class ChatRepository {
         }
       })
 
-      const admins = await this.getDb()
+      const adminsFromDb = await this.getDb()
         .select()
         .from(groupAdmins)
         .where(eq(groupAdmins.groupId, chatId))
 
-      this.setAdminsCache(chatId, admins)
+      await this.setAdminsCache(chatId, adminsFromDb)
     } catch (error) {
       console.error("Error replacing chat admins:", error)
-      this.invalidateAdminsCache(chatId)
+      await this.invalidateAdminsCache(chatId)
     }
   }
 
@@ -573,12 +595,12 @@ export class ChatRepository {
     try {
       // Проверяем, существует ли чат
       const existingChat = await this.getChat(chatId)
-      
+
       if (existingChat) {
         if (existingChat.active) {
           return { success: false, message: "Группа уже зарегистрирована" }
         }
-        
+
         // Активируем существующий чат
         const success = await this.activateChat(chatId)
         if (success) {
@@ -608,15 +630,15 @@ export class ChatRepository {
     try {
       // Проверяем, существует ли чат
       const existingChat = await this.getChat(chatId)
-      
+
       if (!existingChat) {
         return { success: false, message: "Группа не найдена" }
       }
-      
+
       if (!existingChat.active) {
         return { success: false, message: "Группа уже неактивна" }
       }
-      
+
       // Деактивируем чат
       const success = await this.deactivateChat(chatId)
       if (success) {

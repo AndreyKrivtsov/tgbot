@@ -1,9 +1,5 @@
-import type {
-  AgentResponseDecision,
-  BufferedMessage,
-  ClassificationResult,
-  ClassificationType,
-} from "./types.js"
+import type { AgentResponseDecision, ClassificationResult, ClassificationType } from "./Decision.js"
+import type { BufferedMessage } from "./Message.js"
 
 export interface ResponsePolicyOptions {
   maxResponseLength: number

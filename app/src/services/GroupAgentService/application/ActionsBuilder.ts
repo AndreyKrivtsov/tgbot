@@ -1,4 +1,4 @@
-import type { AgentResponseDecision, ModerationDecision } from "../domain/types.js"
+import type { AgentResponseDecision, ModerationDecision } from "../domain/Decision.js"
 import type {
   GroupAgentModerationEvent,
   GroupAgentResponseEvent,

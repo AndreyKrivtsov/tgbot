@@ -2,7 +2,7 @@ import type {
   ModerationReviewRecord,
   ModerationReviewRequest,
   ModerationReviewStatus,
-} from "../domain/types.js"
+} from "../domain/Decision.js"
 import type {
   EventBusPort,
   GroupAgentReviewDecisionEvent,

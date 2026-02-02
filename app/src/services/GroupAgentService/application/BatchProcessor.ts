@@ -5,28 +5,27 @@ import type { AIProviderPort } from "../ports/AIProviderPort.js"
 import type { StateStorePort } from "../ports/StateStorePort.js"
 import type { EventBusPort } from "../ports/EventBusPort.js"
 import type { ChatConfigPort } from "../ports/ChatConfigPort.js"
-import type {
-  AgentInstructions,
-  AgentResponseDecision,
-  BatchUsageMetadata,
-  ChatHistory,
-  HistoryEntry,
-  ModerationDecision,
-} from "../domain/types.js"
-import { formatMessageForAI } from "../domain/MessageFormatter.js"
+import type { BatchClassificationResult, StoredChatHistory, StoredHistoryEntry } from "../domain/Batch.js"
+import type { AgentResponseDecision, ModerationDecision } from "../domain/Decision.js"
+import type { PromptSpec } from "../domain/PromptContract.js"
 import type { ReviewRequestBuilder } from "./ReviewRequestBuilder.js"
 import type { ModerationReviewManager } from "./ModerationReviewManager.js"
 import type { RetryPolicy } from "./RetryPolicy.js"
+import type { ContextBuilderPort } from "../ports/ContextBuilderPort.js"
+import type { HistoryReducerPort } from "../ports/HistoryReducerPort.js"
+import type { ResponseParserPort } from "../ports/ResponseParserPort.js"
+import type { PromptAssembler } from "./PromptAssembler.js"
+import type { AdminMentionsPort } from "../ports/AdminMentionsPort.js"
 import { Logger } from "../../../helpers/Logger.js"
 
 export interface BatchProcessorConfig {
   batchIntervalMs: number
   maxBatchSize: number
-  historyTrimTokenThreshold: number
+  promptMaxChars: number
 }
 
-export interface InstructionsProvider {
-  getInstructions: (chatId: number) => Promise<AgentInstructions>
+export interface PromptSpecProvider {
+  getSpec: (chatId: number) => Promise<PromptSpec>
 }
 
 interface Dependencies {
@@ -37,10 +36,15 @@ interface Dependencies {
   actionsBuilder: ActionsBuilder
   eventBus: EventBusPort
   chatConfig: ChatConfigPort
-  instructionsProvider: InstructionsProvider
+  promptSpecProvider: PromptSpecProvider
   reviewRequestBuilder: ReviewRequestBuilder
   reviewManager: ModerationReviewManager
   retryPolicy: RetryPolicy
+  contextBuilder: ContextBuilderPort
+  historyReducer: HistoryReducerPort
+  promptAssembler: PromptAssembler
+  responseParser: ResponseParserPort
+  adminMentions: AdminMentionsPort
 }
 
 export class BatchProcessor {
@@ -101,80 +105,135 @@ export class BatchProcessor {
 
     const config = await this.deps.chatConfig.getChatConfig(chatId)
     if (!config?.groupAgentEnabled) {
+      if (pending.length > 0) {
+        const messageIds = pending.map(message => message.messageId)
+        this.deps.buffer.remove(chatId, messageIds)
+      }
       return
     }
 
     const toProcess = pending.slice(0, this.config.maxBatchSize)
     this.logger.d("Messages to process", toProcess.length)
 
+    if (toProcess.length === 0) {
+      return
+    }
+
     const messageIds = toProcess.map(message => message.messageId)
 
     // Очищаем буфер сразу после проверки конфигурации, чтобы не терять сообщения при выключенном агенте
     this.deps.buffer.remove(chatId, messageIds)
 
-    const history = await this.deps.stateStore.loadHistory(chatId)
-    const historyEntries = history?.entries ?? []
-    const instructions = await this.deps.instructionsProvider.getInstructions(chatId)
+    await this.deps.eventBus.emitTypingStarted({ chatId })
+    try {
+      const history = await this.deps.stateStore.loadHistory(chatId)
+      const historyEntries = history?.entries ?? []
+      const promptSpec = await this.deps.promptSpecProvider.getSpec(chatId)
 
-    this.logger.d("History entries", historyEntries.length)
-    this.logger.d("History entry:", historyEntries[0])
+      this.logger.d("History entries", historyEntries.length)
+      this.logger.d("Last history entry:", historyEntries[historyEntries.length - 1])
 
-    const classification = await this.classifyWithRetry({
-      chatId,
-      historyEntries,
-      messages: toProcess,
-      instructions,
-    })
+      const context = await this.deps.contextBuilder.buildContext({
+        chatId,
+        messages: toProcess,
+        history: historyEntries,
+      })
 
-    this.logger.d("Classification result", classification)
+      const basePrompt = this.deps.promptAssembler.buildPrompt({
+        spec: promptSpec,
+        context,
+        history: [],
+        messages: toProcess,
+      })
 
-    const resolutions = this.deps.decisionOrchestrator.buildResolutions(toProcess, classification)
-    const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
-    const responseDecisions = resolutions
-      .map(resolution => resolution.response ?? null)
-      .filter((decision): decision is AgentResponseDecision => decision !== null)
+      const budget = this.config.promptMaxChars - basePrompt.length
+      const reducedHistory = this.deps.historyReducer.reduce(historyEntries, budget)
 
-    const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions)
-    const reviewDecisionKeys = new Set(
-      reviewRequests.map(request => this.decisionKey(request.decision)),
-    )
-    const immediateDecisions = moderationDecisions.filter(
-      decision => !reviewDecisionKeys.has(this.decisionKey(decision)),
-    )
+      const prompt = this.deps.promptAssembler.buildPrompt({
+        spec: promptSpec,
+        context,
+        history: reducedHistory,
+        messages: toProcess,
+      })
 
-    const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
-    const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecisions)
+      const allowedMessageIds = new Set(toProcess.map(message => message.messageId))
 
-    if (responseEvent) {
-      await this.deps.eventBus.emitAgentResponse(responseEvent)
+      const classification = await this.classifyWithRetry({
+        chatId,
+        prompt,
+        allowedMessageIds,
+      })
+
+      this.logger.d("Classification result", classification)
+
+      const resolutions = this.deps.decisionOrchestrator.buildResolutions(toProcess, classification)
+      const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
+      const responseDecisions = resolutions
+        .map(resolution => resolution.response ?? null)
+        .filter((decision): decision is AgentResponseDecision => decision !== null)
+
+      const adminMentions = await this.deps.adminMentions.getAdminMentions(chatId)
+      const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions, adminMentions)
+      const reviewDecisionKeys = new Set(
+        reviewRequests.map(request => this.decisionKey(request.decision)),
+      )
+      const immediateDecisions = moderationDecisions.filter(
+        decision => !reviewDecisionKeys.has(this.decisionKey(decision)),
+      )
+
+      const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
+      const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecisions)
+
+      if (responseEvent) {
+        await this.deps.eventBus.emitAgentResponse(responseEvent)
+      }
+
+      if (moderationEvent) {
+        await this.deps.eventBus.emitModerationAction(moderationEvent)
+      }
+
+      if (reviewRequests.length > 0) {
+        await this.deps.reviewManager.enqueueRequests(reviewRequests)
+      }
+
+      await this.persistHistory(chatId, history, resolutions)
+    } finally {
+      await this.deps.eventBus.emitTypingStopped({ chatId })
     }
-
-    if (moderationEvent) {
-      await this.deps.eventBus.emitModerationAction(moderationEvent)
-    }
-
-    if (reviewRequests.length > 0) {
-      await this.deps.reviewManager.enqueueRequests(reviewRequests)
-    }
-
-    await this.persistHistory(chatId, history, resolutions, classification.usage)
   }
 
   private async classifyWithRetry(input: {
     chatId: number
-    historyEntries: HistoryEntry[]
-    messages: Parameters<AIProviderPort["classifyBatch"]>[0]["messages"]
-    instructions: AgentInstructions
-  }): Promise<Awaited<ReturnType<AIProviderPort["classifyBatch"]>>> {
+    prompt: string
+    allowedMessageIds: Set<number>
+  }): Promise<BatchClassificationResult> {
     let attempt = 0
     while (true) {
       try {
-        return await this.deps.aiProvider.classifyBatch({
+        this.logger.d("Classifying batch:", { chatId: input.chatId })
+        // this.logger.d("Prompt:", input.prompt)
+
+        const aiResult = await this.deps.aiProvider.classifyBatch({
           chatId: input.chatId,
-          history: input.historyEntries,
-          messages: input.messages,
-          instructions: input.instructions,
+          prompt: input.prompt,
         })
+
+        this.logger.d("AI result:", aiResult.text)
+
+        if (!aiResult.text) {
+          return { results: [], usage: aiResult.usage }
+        }
+
+        const parsed = this.deps.responseParser.parse({
+          text: aiResult.text,
+          allowedMessageIds: input.allowedMessageIds,
+        })
+
+        const merged: BatchClassificationResult = {
+          ...parsed,
+          usage: aiResult.usage,
+        }
+        return merged
       } catch (error) {
         const decision = this.deps.retryPolicy.decide({ attempt, error })
         if (!decision.shouldRetry) {
@@ -206,14 +265,12 @@ export class BatchProcessor {
 
   private async persistHistory(
     chatId: number,
-    history: ChatHistory | null,
+    history: StoredChatHistory | null,
     resolutions: NonNullable<ReturnType<DecisionOrchestrator["buildResolutions"]>>,
-    usage?: BatchUsageMetadata,
   ): Promise<void> {
-    const existingEntries = history?.entries ?? []
-    const baseEntries = this.applyHistoryTrim(chatId, existingEntries, usage)
+    const baseEntries = history?.entries ?? []
 
-    const newEntries: HistoryEntry[] = []
+    const newEntries: StoredHistoryEntry[] = []
     for (const resolution of resolutions) {
       const message = resolution.message
       if (!message) {
@@ -232,43 +289,43 @@ export class BatchProcessor {
       const responseText = resolution.response?.text ?? resolution.classification.responseText
 
       newEntries.push({
-        message: formatMessageForAI(message),
-        result: {
+        message,
+        sender: "user",
+        decision: {
           classification: resolution.classification.classification.type,
           requiresResponse: resolution.classification.classification.requiresResponse,
           actions,
-          ...(responseText ? { responseText } : {}),
+          responseText: responseText || undefined,
+          targetUserId: resolution.classification.targetUserId,
+          targetMessageId: resolution.classification.targetMessageId,
+          durationMinutes: resolution.classification.durationMinutes,
         },
         timestamp: message.timestamp,
       })
+
+      if (responseText) {
+        newEntries.push({
+          sender: "bot",
+          message: {
+            chatId: message.chatId,
+            userId: 0,
+            messageId: message.messageId,
+            text: responseText,
+            timestamp: Date.now(),
+            isAdmin: false,
+            replyToMessageId: message.messageId,
+            replyToUserId: message.userId,
+          },
+          timestamp: Date.now(),
+        })
+      }
     }
 
     const merged = [...baseEntries, ...newEntries]
+    const reduced = this.deps.historyReducer.reduce(merged, this.config.promptMaxChars)
     await this.deps.stateStore.saveHistory({
       chatId,
-      entries: merged,
+      entries: reduced,
     })
-  }
-
-  private applyHistoryTrim(
-    chatId: number,
-    entries: HistoryEntry[],
-    usage?: BatchUsageMetadata,
-  ): HistoryEntry[] {
-    const totalTokens = usage?.totalTokens
-    if (!totalTokens || totalTokens < this.config.historyTrimTokenThreshold) {
-      return entries
-    }
-
-    if (entries.length <= 1) {
-      return entries
-    }
-
-    const keepCount = Math.max(1, Math.ceil(entries.length / 2))
-    const trimmed = entries.slice(-keepCount)
-
-    this.logger.d("Trimmed history:", { chatId, trimmed })
-
-    return trimmed
   }
 }

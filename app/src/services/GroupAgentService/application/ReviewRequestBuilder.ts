@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto"
-import type { AgentResolution, ModerationDecision, ModerationReviewRequest } from "../domain/types.js"
-import { isReviewableAction } from "../domain/types.js"
+import type { AgentResolution, ModerationDecision, ModerationReviewRequest } from "../domain/Decision.js"
+import { isReviewableAction } from "../domain/Decision.js"
 
 export class ReviewRequestBuilder {
   constructor(private readonly reviewTtlSeconds: number) {}
 
-  build(resolutions: AgentResolution[]): ModerationReviewRequest[] {
+  build(resolutions: AgentResolution[], adminMentions: string[] = []): ModerationReviewRequest[] {
     const now = Date.now()
     const expiresAt = now + this.reviewTtlSeconds * 1000
 
@@ -21,15 +21,22 @@ export class ReviewRequestBuilder {
           continue
         }
 
+        const targetUsername = resolution.message?.userId === decision.userId
+          ? resolution.message?.username
+          : undefined
+
         requests.push({
           id: randomUUID(),
           chatId: resolution.message.chatId,
           decision,
-          targetUser: { id: decision.userId },
+          targetUser: {
+            id: decision.userId,
+            ...(targetUsername ? { username: targetUsername } : {}),
+          },
           reason: decision.text,
           createdAt: now,
           expiresAt,
-          promptText: this.buildPromptText(decision),
+          promptText: this.buildPromptText(decision, adminMentions, targetUsername),
         })
       }
     }
@@ -37,7 +44,16 @@ export class ReviewRequestBuilder {
     return requests
   }
 
-  private buildPromptText(decision: ModerationDecision): string {
-    return `Альтрон предлагает ${decision.action} пользователя tg://user?id=${decision.userId}.`
+  private buildPromptText(
+    decision: ModerationDecision,
+    adminMentions: string[],
+    targetUsername?: string,
+  ): string {
+    const target = targetUsername ? `@${targetUsername}` : `tg://openmessage?user_id=${decision.userId}`
+    const base = `Альтрон предлагает ${decision.action} пользователя ${target}.`
+    if (adminMentions.length === 0) {
+      return base
+    }
+    return `${base}\n\nАдмины: ${adminMentions.join(" ")}`
   }
 }
