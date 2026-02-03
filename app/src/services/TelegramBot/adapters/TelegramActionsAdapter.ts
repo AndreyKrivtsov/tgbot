@@ -397,7 +397,7 @@ export class TelegramActionsAdapter {
 
   private async removeInlineKeyboard(chatId: number, messageId: number): Promise<void> {
     try {
-      await this.bot.api.editMessageReplyMarkup({
+      await this.bot.editMessageReplyMarkup({
         chat_id: chatId,
         message_id: messageId,
         reply_markup: { inline_keyboard: [] },

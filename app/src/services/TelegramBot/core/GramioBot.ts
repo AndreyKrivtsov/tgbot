@@ -378,6 +378,13 @@ export class GramioBot {
   }
 
   /**
+   * Обновление inline клавиатуры сообщения
+   */
+  async editMessageReplyMarkup(params: { chat_id: number, message_id: number, reply_markup: { inline_keyboard: any[][] } }): Promise<any> {
+    return await this.bot.api.editMessageReplyMarkup(params as any)
+  }
+
+  /**
    * Получение прямого доступа к API (для случаев, не покрытых оберткой)
    */
   get api() {

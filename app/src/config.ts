@@ -15,8 +15,9 @@ export interface AppConfig {
   // Веб-сервер
   PORT: number
 
-  // Админ
-  ADMIN_USERNAME?: string
+  // Суперадмин
+  SUPER_ADMIN_USERNAME?: string
+  SUPER_ADMIN_ID?: number
 
   // Прокси
   PROXY_ENABLED: boolean
@@ -49,7 +50,8 @@ export const config: AppConfig = {
   // Веб-сервер
   PORT: env.get("PORT").default(3000).asPortNumber(),
 
-  ADMIN_USERNAME: env.get("ADMIN_USERNAME").asString(),
+  SUPER_ADMIN_USERNAME: env.get("SUPER_ADMIN_USERNAME").asString(),
+  SUPER_ADMIN_ID: env.get("SUPER_ADMIN_ID").asInt(),
 
   // Прокси
   PROXY_ENABLED: env.get("PROXY_ENABLED").default("false").asBool(),

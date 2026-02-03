@@ -5,13 +5,14 @@ export function ChatListView({ chats, onSelectChat, onBack }) {
     <section className="panel">
       <div className="panel-header">
         <h2>Ваши чаты</h2>
-        <button className="ghost" onClick={onBack}>
-          Попробовать снова
-        </button>
+        <p>В списке указаны чаты, которые зарегистрированы в боте Альтрон и в которых вы администратор.</p>
+        <p>Выберите чат, чтобы настроить его.</p>
       </div>
 
       {chats.length === 0 ? (
-        <p>Нет чатов, где вы администратор.</p>
+        <>
+          <p>Нет чатов, где вы администратор.</p>
+        </>
       ) : (
         <ul className="chat-list">
           {chats.map(chat => (
@@ -29,6 +30,10 @@ export function ChatListView({ chats, onSelectChat, onBack }) {
           ))}
         </ul>
       )}
+
+      <button className="ghost" style={{ marginTop: "24px" }} onClick={onBack}>
+        Назад
+      </button>
     </section>
   )
 }

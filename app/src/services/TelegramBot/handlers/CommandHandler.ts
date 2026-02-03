@@ -30,7 +30,7 @@ export class CommandHandler {
     this.config = config
     this.chatRepository = chatRepository
     this.botService = botService
-    this.bot = botService.getBotApi()
+    this.bot = botService.getBot()
     this.eventBus = eventBus
   }
 
@@ -66,11 +66,11 @@ export class CommandHandler {
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
 
       const message = getMessage("welcome")
-      await this.bot.sendGroupMessage(context.chat!.id, message)
+      await this.bot.sendGroupMessage({ chat_id: context.chat!.id, text: message })
     } catch (error) {
       this.logger.e("Error handling start command:", error)
       const errorMessage = getMessage("command_start_error")
-      await this.bot.sendGroupMessage(context.chat!.id, errorMessage)
+      await this.bot.sendGroupMessage({ chat_id: context.chat!.id, text: errorMessage })
     }
   }
 
@@ -133,6 +133,9 @@ export class CommandHandler {
         case "/mute":
         case "/unmute":
           // Логика перенесена в ModerationService через EventBus
+          break
+        case "/clearhistory":
+          // Логика перенесена в GroupAgentService через EventBus
           break
         case "/addaltronkey":
         case "/ultron":
@@ -258,6 +261,27 @@ export class CommandHandler {
         }
         break
       }
+      case "/clearhistory": {
+        const rawTarget = parts[1]
+        const targetProvided = Boolean(rawTarget)
+        let targetChatId: number | undefined
+        if (rawTarget) {
+          const asNumber = Number(rawTarget)
+          if (Number.isInteger(asNumber) && String(asNumber) === rawTarget) {
+            targetChatId = asNumber
+          }
+        }
+
+        await this.eventBus.emit(EVENTS.COMMAND_CLEAR_HISTORY, {
+          actorId,
+          chatId,
+          messageId,
+          targetChatId,
+          targetProvided,
+          actorUsername: context.from?.username,
+        })
+        break
+      }
       default:
         break
     }
@@ -287,11 +311,11 @@ export class CommandHandler {
       await this.deleteUserCommandMessage(context as TelegramMessageContext)
 
       const message = getMessage("help")
-      await this.bot.sendGroupMessage(context.chat!.id, message)
+      await this.bot.sendGroupMessage({ chat_id: context.chat!.id, text: message })
     } catch (error) {
       this.logger.e("Error handling help command:", error)
       const errorMessage = getMessage("help_command_error")
-      await this.bot.sendGroupMessage(context.chat!.id, errorMessage)
+      await this.bot.sendGroupMessage({ chat_id: context.chat!.id, text: errorMessage })
     }
   }
 

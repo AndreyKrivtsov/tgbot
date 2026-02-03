@@ -161,11 +161,13 @@ export class Application {
         const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
         const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
         const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
+        const authorizationService = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
 
         return new GroupAgentService(this.config, {
           eventBus,
           chatRepository,
           redisService,
+          authorizationService,
         })
       })
     }

@@ -1,8 +1,9 @@
 import type { IService } from "../../core/Container.js"
 import type { AppConfig } from "../../config.js"
-import type { EventBus, MessageReceivedEvent } from "../../core/EventBus.js"
+import type { ClearHistoryCommand, EventBus, MessageReceivedEvent, TelegramAction } from "../../core/EventBus.js"
 import type { ChatRepository } from "../../repository/ChatRepository.js"
 import type { RedisService } from "../RedisService/index.js"
+import type { AuthorizationService } from "../AuthorizationService/index.js"
 import { GROUP_AGENT_CONFIG } from "../../constants.js"
 import type { GroupAgentConfigType } from "../../constants.js"
 import { MessageBuffer } from "./application/MessageBuffer.js"
@@ -29,6 +30,7 @@ import { PromptAssembler } from "./application/PromptAssembler.js"
 import { HistoryToPromptMapper } from "./application/HistoryToPromptMapper.js"
 import { CompactPromptBuilder } from "./infrastructure/prompt/CompactPromptBuilder.js"
 import { CompactResponseParser } from "./infrastructure/prompt/CompactResponseParser.js"
+import { getMessage } from "../../shared/messages/index.js"
 
 import type { AIProviderPort } from "./ports/AIProviderPort.js"
 import type { ReviewStatePort } from "./ports/ReviewStatePort.js"
@@ -41,6 +43,7 @@ interface Dependencies {
   eventBus?: EventBus
   chatRepository?: ChatRepository
   redisService?: RedisService
+  authorizationService?: AuthorizationService
 }
 
 export class GroupAgentService implements IService {
@@ -141,6 +144,10 @@ export class GroupAgentService implements IService {
     this.deps.eventBus.onGroupAgentReviewDecision(async (event) => {
       await this.reviewManager?.handleDecision(event)
     })
+
+    this.deps.eventBus.onCommandClearHistory(async (cmd: ClearHistoryCommand) => {
+      await this.handleClearHistory(cmd)
+    })
   }
 
   async start(): Promise<void> {
@@ -233,6 +240,98 @@ export class GroupAgentService implements IService {
     }
 
     this.messageBuffer.addMessage(buffered)
+  }
+
+  private async handleClearHistory(cmd: ClearHistoryCommand): Promise<void> {
+    if (!this.deps.eventBus || !this.stateStore) {
+      return
+    }
+
+    const { actorId, chatId, messageId, targetChatId, targetProvided, actorUsername } = cmd
+    const authorization = this.deps.authorizationService
+    if (!authorization) {
+      return
+    }
+
+    const hasTarget = Boolean(targetProvided)
+    const isValidTarget = typeof targetChatId === "number" && Number.isInteger(targetChatId) && targetChatId !== 0
+
+    if (hasTarget && !isValidTarget) {
+      await this.sendCommandMessage(chatId, getMessage("clear_history_usage"), messageId)
+      return
+    }
+
+    const isPrivate = chatId > 0
+    if (isPrivate) {
+      if (!hasTarget) {
+        await this.sendCommandMessage(chatId, getMessage("clear_history_private_usage"), messageId)
+        return
+      }
+
+      if (!authorization.isSuperAdmin(actorUsername)) {
+        await this.sendCommandMessage(chatId, getMessage("clear_history_no_permission"), messageId)
+        return
+      }
+
+      await this.clearChatState(targetChatId!, chatId, messageId)
+      return
+    }
+
+    if (hasTarget) {
+      if (!authorization.isSuperAdmin(actorUsername)) {
+        await this.sendCommandMessage(chatId, getMessage("clear_history_no_permission"), messageId)
+        return
+      }
+
+      await this.clearChatState(targetChatId!, chatId, messageId)
+      return
+    }
+
+    const authResult = await authorization.checkGroupAdmin(chatId, actorId, actorUsername)
+    if (!authResult.authorized) {
+      const reasonKey = authResult.reason === "no_group_admin_permission" ? "no_group_admin_permission" : "no_admin_permission"
+      await this.sendCommandMessage(chatId, getMessage(reasonKey), messageId)
+      return
+    }
+
+    await this.clearChatState(chatId, chatId, messageId)
+  }
+
+  private async clearChatState(targetChatId: number, responseChatId: number, messageId?: number): Promise<void> {
+    this.messageBuffer.clear(targetChatId)
+    await this.stateStore?.clearBuffer(targetChatId)
+    await this.stateStore?.clearHistory(targetChatId)
+    await this.sendCommandMessage(responseChatId, getMessage("clear_history_success", { chatId: targetChatId }), messageId)
+
+    console.info(`[GroupAgentService] Chat state cleared for chat ${targetChatId}`)
+  }
+
+  private async sendCommandMessage(chatId: number, text: string, replyToMessageId?: number): Promise<void> {
+    if (!this.deps.eventBus) {
+      return
+    }
+
+    const actions: TelegramAction[] = []
+
+    if (replyToMessageId) {
+      actions.push({
+        type: "deleteMessage",
+        params: { messageId: replyToMessageId },
+      })
+    }
+
+    actions.push({
+      type: "sendMessage",
+      params: {
+        text,
+      },
+    })
+
+    await this.deps.eventBus.emitAIResponse({
+      chatId,
+      text,
+      actions,
+    })
   }
 
   private async buildBufferedMessage(event: MessageReceivedEvent): Promise<IncomingGroupMessage | null> {

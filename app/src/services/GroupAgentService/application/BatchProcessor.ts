@@ -211,7 +211,6 @@ export class BatchProcessor {
     while (true) {
       try {
         this.logger.d("Classifying batch:", { chatId: input.chatId })
-        // this.logger.d("Prompt:", input.prompt)
 
         const aiResult = await this.deps.aiProvider.classifyBatch({
           chatId: input.chatId,

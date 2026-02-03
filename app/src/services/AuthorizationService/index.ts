@@ -43,7 +43,7 @@ export class AuthorizationService implements IService {
       return false
     }
 
-    let superAdminUsername = this.config.ADMIN_USERNAME
+    let superAdminUsername = this.config.SUPER_ADMIN_USERNAME
 
     if (superAdminUsername?.startsWith("@")) {
       superAdminUsername = superAdminUsername.replace("@", "")

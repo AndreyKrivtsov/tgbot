@@ -18,7 +18,7 @@ describe("AuthorizationService (unit)", () => {
 
   it("isSuperAdmin: возвращает true для админа", () => {
     const config = makeConfig()
-    config.ADMIN_USERNAME = "admin"
+    config.SUPER_ADMIN_USERNAME = "admin"
     const service = new AuthorizationService(config, makeLogger(), {
       eventBus: makeEventBus(),
       chatRepository: mockChatRepository,
@@ -40,7 +40,7 @@ describe("AuthorizationService (unit)", () => {
 
   it("checkGroupAdmin: возвращает authorized=true для суперадмина", async () => {
     const config = makeConfig()
-    config.ADMIN_USERNAME = "admin"
+    config.SUPER_ADMIN_USERNAME = "admin"
     const service = new AuthorizationService(config, makeLogger(), {
       eventBus: makeEventBus(),
       chatRepository: mockChatRepository,

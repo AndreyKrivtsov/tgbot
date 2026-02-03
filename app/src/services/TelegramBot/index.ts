@@ -253,6 +253,21 @@ export class TelegramBotService implements IService {
         })
       }
 
+      if (this.dependencies.redisService) {
+        const superAdminId = this.config.SUPER_ADMIN_ID
+        const superAdminUsername = this.config.SUPER_ADMIN_USERNAME
+
+        if (!superAdminId || !superAdminUsername) {
+          this.logger.e("⚠️ SUPER_ADMIN_ID or SUPER_ADMIN_USERNAME not set - super admin cache disabled")
+        } else {
+          await this.dependencies.redisService.setSuperAdmin({
+            userId: superAdminId,
+            username: superAdminUsername.replace(/^@/, ""),
+          })
+          this.logger.i("✅ Super admin cache set")
+        }
+      }
+
       // Счетчики обрабатываются в AntiSpamService
 
       this.logger.i(`✅ TelegramBot service started: @${botInfo.username}`)
@@ -425,6 +440,16 @@ export class TelegramBotService implements IService {
       throw new Error("Bot is not initialized")
     }
     return this.bot.api
+  }
+
+  /**
+   * Получение обертки бота для безопасного взаимодействия
+   */
+  getBot() {
+    if (!this.bot) {
+      throw new Error("Bot is not initialized")
+    }
+    return this.bot
   }
 
   /**

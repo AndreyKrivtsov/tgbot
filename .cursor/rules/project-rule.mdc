@@ -50,38 +50,14 @@ Infrastructure Layer (Database, Redis, Docker)
   1. Первый запрос: установка бана с until_date = текущее время + 60 секунд
   2. Второй запрос: автоматический разбан через 60 секунд
 
-2. Антиспам система (AntiSpamService)
-- Цель: Фильтрация спам-сообщений у новых пользователей
-- Логика:
-  - Проверка только первых 5 сообщений пользователя
-  - Интеграция с внешним API (порт 6323)
-  - Градация наказаний: предупреждение → кик → бан
-  - Очистка счетчиков через час
-- Хранение данных: Счетчики сообщений для пользователей хранятся в Redis для быстрого доступа и автоматической очистки
-
-3. ИИ-чат (AIChatService)
-- Провайдер: Google Gemini (через GeminiAdapter)
-- Активация: Упоминание бота, ответ на сообщение бота
-- Архитектура:
-  - Упрощенная Event-Driven архитектура (генерирует AI_RESPONSE события)
-  - ChatSettingsRepositoryAdapter - инверсия зависимостей от репозитория
-  - Интеграция логики обработки, контекста и отправки в едином сервисе
-- Особенности:
-  - Система очередей для обработки запросов
-  - Адаптивное throttling (5-20 сек задержки) с token bucket
-  - Контекстная память (500 сообщений) с Redis кешированием
-  - Персонализация через системные промпты (JSONB структура)
-  - API ключи хранятся per-chat в БД
-  - Отправка ответов через события (TelegramActionsAdapter)
-
-4. ИИ-модерация (AIModerationService)
+4. ИИ-модерация (GroupAgentService)
 - Провайдер: Google Gemini
 - Цель: Автоматическая модерация сообщений через AI
 - Логика:
-  - Батчевая обработка сообщений (каждые 30 секунд)
+  - Батчевая обработка сообщений (каждые 1 минуту)
   - Буферизация до 200 сообщений
   - Анализ на спам, оскорбления, рекламу, мат
-  - Действия: warn, mute, kick, ban, delete
+  - Действия: warn, mute, kick, ban, delete (удаление сообщения)
 - Интеграция: Через EventBus (MESSAGE_RECEIVED → MODERATION_BATCH_RESULT → TelegramActionsAdapter)
 
 5. Управление настройками чатов (ChatRepository)
@@ -186,8 +162,6 @@ RedisService:
 Docker Compose services:
 - postgres: База данных
 - redis: Кеширование и очереди
-- antispam: Внешний API антиспама
-- llama: LLM сервис (опционально)
 - pgadmin: Администрирование БД (опционально)
 
 Скрипты управления:
@@ -201,7 +175,7 @@ Docker Compose services:
 
 Веб API (WebApiService):
 - Endpoint: http://localhost:3000
-- Функции: Статистика сервисов, health checks, MessageDeletionManager status
+- Функции: Настройка для админов чатов, статистика для супер-админа
 - Формат: JSON responses
 - Framework: Fastify
 
@@ -253,12 +227,9 @@ Core слой:
 Горизонтальное масштабирование:
 - Stateless архитектура
 - Кеширование в Redis
-- Очереди для ИИ-запросов
 
 Вертикальное масштабирование:
 - Оптимизация запросов к БД
-- Адаптивное throttling
-- Cleanup старых данных
 
 Основные принципы работы
 
@@ -270,7 +241,7 @@ Core слой:
 
 2. Обработка сообщений (Event-Driven):
    - Telegram → TelegramBotService → MessageHandler → EventBus.emit(MESSAGE_RECEIVED)
-   - Подписчики: AIChatService (обработка ИИ-запросов), AIModerationService (батчевая модерация), AntiSpamService (антиспам)
+   - Подписчики: GroupAgentService (батчевая модерация)
    - Команды: Обрабатываются напрямую в CommandHandler
 
 3. Регистрация группы:
@@ -284,22 +255,8 @@ Core слой:
    - Успех → EventBus.emit(CAPTCHA_PASSED) с actions[] (unrestrict, deleteMessage)
    - Неудача/таймаут → EventBus.emit(CAPTCHA_FAILED) с actions[] (ban, deleteMessage)
 
-5. Антиспам (Event-Driven):
-   - MESSAGE_RECEIVED → AntiSpamService → проверка первых 5 сообщений → внешний API
-   - Обнаружен спам → EventBus.emit(SPAM_DETECTED) с actions[] (deleteMessage, sendMessage, kick/ban)
-   - TelegramActionsAdapter → выполняет actions (градация: предупреждение → кик → бан)
-
-6. ИИ-чат (Event-Driven):
-   - MESSAGE_RECEIVED → AIChatService → проверка активации (упоминание/ответ на бота)
-   - Обработка: ChatQueueManager → AdaptiveThrottleManager → генерация ответа через Gemini
-   - Ответ готов → EventBus.emit(AI_RESPONSE) с actions[] (sendMessage)
-   - TelegramActionsAdapter → выполняет actions (отправка ответа пользователю)
-
 7. ИИ-модерация (Event-Driven):
-   - MESSAGE_RECEIVED → AIModerationService → буферизация сообщений
-   - Каждые 30 сек → батчевый анализ через Gemini
-   - EventBus.emit(MODERATION_BATCH_RESULT) с violations (действия: warn, mute, kick, ban, delete)
-   - Примечание: Требует доработки для интеграции с TelegramActionsAdapter
+   - Сервис GroupAgentService еще не описан
 
 8. Graceful Shutdown:
    - SIGTERM/SIGINT → App.stop() → Application.stop() → Container.stop()

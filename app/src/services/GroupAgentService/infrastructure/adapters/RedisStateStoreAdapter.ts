@@ -27,6 +27,10 @@ export class RedisStateStoreAdapter implements StateStorePort {
     )
   }
 
+  async clearHistory(chatId: number): Promise<void> {
+    await this.redis.del(historyKey(chatId))
+  }
+
   async clearAllHistory(): Promise<void> {
     const keys = await this.redis.keys(`${HISTORY_PREFIX}:*`)
     if (!keys || keys.length === 0) {
@@ -69,5 +73,9 @@ export class RedisStateStoreAdapter implements StateStorePort {
         await this.redis.del(key)
       }
     }
+  }
+
+  async clearBuffer(chatId: number): Promise<void> {
+    await this.redis.del(bufferKey(chatId))
   }
 }

@@ -122,7 +122,10 @@ function App() {
     <div className="app">
       <header className="panel">
         <h1>Ultron Control</h1>
-        <p>Управляйте настройками ИИ и администрированием прямо из Telegram Mini App.</p>
+        <p>Управляйте настройками бота Альтрон.</p>
+        <p>Для работы необходимо зарегистрировать группу в боте, для этого добавьте бота в группу и напишите команду /register</p>
+        <p>Для работы ИИ необходимо добавить API ключ Gemini в настройки чата. Инструкции по добавлению ключа будут позже</p>
+        <p>Группа для обсуждения бота: <a href="https://t.me/ultron_community" target="_blank" rel="noopener noreferrer">@ultron_community</a></p>
       </header>
 
       {view === Views.WELCOME && (

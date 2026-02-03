@@ -6,6 +6,11 @@ import type { CacheService } from "../services/CacheService/index.js"
 import type { RedisService } from "../services/RedisService/index.js"
 import { CACHE_CONFIG } from "../constants.js"
 
+interface SuperAdminInfo {
+  userId: number
+  username: string
+}
+
 export class ChatRepository {
   private databaseService: DatabaseService
   private cacheService?: CacheService
@@ -19,6 +24,19 @@ export class ChatRepository {
 
   private getAdminsCacheKey(chatId: number): string {
     return `${CACHE_CONFIG.KEYS.CHAT_ADMINS}:${chatId}`
+  }
+
+  private getSuperAdminCacheKey(): string {
+    return CACHE_CONFIG.KEYS.SUPER_ADMIN
+  }
+
+  private buildSuperAdminEntry(chatId: number, superAdmin: SuperAdminInfo): GroupAdmin {
+    return {
+      groupId: chatId,
+      userId: superAdmin.userId,
+      username: superAdmin.username,
+      createdAt: new Date(),
+    }
   }
 
   private async setAdminsCache(chatId: number, admins: GroupAdmin[]): Promise<void> {
@@ -343,30 +361,68 @@ export class ChatRepository {
    * Получить администраторов чата
    */
   async getChatAdmins(chatId: number): Promise<GroupAdmin[]> {
+    let admins: GroupAdmin[] | null = null
+
     if (this.redisService) {
       const cached = await this.redisService.get<GroupAdmin[]>(this.getAdminsCacheKey(chatId))
       if (cached !== null) {
-        return cached
+        admins = cached
       }
     } else if (this.cacheService) {
       const cached = this.cacheService.get(this.getAdminsCacheKey(chatId)) as GroupAdmin[] | null
       if (cached !== null) {
-        return cached
+        admins = cached
       }
     }
 
     try {
-      const adminsFromDb = await this.getDb()
-        .select()
-        .from(groupAdmins)
-        .where(eq(groupAdmins.groupId, chatId))
+      if (!admins) {
+        const adminsFromDb = await this.getDb()
+          .select()
+          .from(groupAdmins)
+          .where(eq(groupAdmins.groupId, chatId))
 
-      await this.setAdminsCache(chatId, adminsFromDb)
-      return adminsFromDb
+        await this.setAdminsCache(chatId, adminsFromDb)
+        admins = adminsFromDb
+      }
+
+      const superAdmin = await this.getSuperAdmin()
+      if (superAdmin) {
+        return [...admins, this.buildSuperAdminEntry(chatId, superAdmin)]
+      }
+      return admins
     } catch (error) {
       console.error("Error getting chat admins:", error)
+      const superAdmin = await this.getSuperAdmin()
+      if (superAdmin) {
+        return [this.buildSuperAdminEntry(chatId, superAdmin)]
+      }
       return []
     }
+  }
+
+  async setSuperAdmin(superAdmin: SuperAdminInfo): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.setSuperAdmin(superAdmin)
+      return
+    }
+    if (this.cacheService) {
+      this.cacheService.set(
+        this.getSuperAdminCacheKey(),
+        superAdmin,
+        CACHE_CONFIG.SUPER_ADMIN_TTL_SECONDS,
+      )
+    }
+  }
+
+  async getSuperAdmin(): Promise<SuperAdminInfo | null> {
+    if (this.redisService) {
+      return await this.redisService.getSuperAdmin()
+    }
+    if (this.cacheService) {
+      return this.cacheService.get(this.getSuperAdminCacheKey()) as SuperAdminInfo | null
+    }
+    return null
   }
 
   /**

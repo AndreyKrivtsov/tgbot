@@ -45,6 +45,7 @@ export const EVENTS = {
   COMMAND_UNMUTE: "command.unmute",
   COMMAND_ULTRON_TOGGLE: "command.ultron.toggle",
   COMMAND_ADD_ALTRON_KEY: "command.ultron.addKey",
+  COMMAND_CLEAR_HISTORY: "command.clearHistory",
 } as const
 
 /**
@@ -250,6 +251,11 @@ export interface UltronToggleCommand extends BaseCommand {
 export interface AddAltronKeyCommand extends BaseCommand {
   targetChat: { username: string }
   apiKey: string
+  actorUsername?: string
+}
+export interface ClearHistoryCommand extends BaseCommand {
+  targetChatId?: number
+  targetProvided?: boolean
   actorUsername?: string
 }
 
@@ -576,5 +582,13 @@ export class EventBus {
 
   emitCommandAddAltronKey(data: AddAltronKeyCommand): Promise<void> {
     return this.emit(EVENTS.COMMAND_ADD_ALTRON_KEY, data)
+  }
+
+  onCommandClearHistory(handler: (data: ClearHistoryCommand) => Promise<void>): void {
+    this.on(EVENTS.COMMAND_CLEAR_HISTORY, handler)
+  }
+
+  emitCommandClearHistory(data: ClearHistoryCommand): Promise<void> {
+    return this.emit(EVENTS.COMMAND_CLEAR_HISTORY, data)
   }
 }
