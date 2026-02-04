@@ -8,6 +8,7 @@ RUN npm config set registry https://registry.npmjs.com/
 RUN npm cache clean --force
 RUN npm i
 COPY . .
+RUN npm run migrate
 ENV NODE_ENV=production
 RUN npm run build
 COPY entrypoint.sh ./
