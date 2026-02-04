@@ -1,8 +1,17 @@
 {
+  "name": "ultron-group-agent",
   "type": "module",
   "private": true,
+  "author": {
+    "name": "Andrey Krivtsov"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0 <=24.x.x",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
-    "dev": "tsx watch --env-file .env src/index.ts",
+    "dev": "tsx watch --env-file .env src/index.ts --ignore dist --ignore coverage",
     "build": "tsc",
     "start": "node --env-file=.env.production dist/index.js",
     "prod": "npm run build && npm start",
@@ -11,16 +20,16 @@
     "lint:fix": "eslint . --fix",
     "generate": "npx drizzle-kit generate",
     "push": "npx drizzle-kit push",
-    "migrate": "node drizzle/migrate.js migrate",
+    "migrate": "npx drizzle-kit migrate",
     "studio": "npx drizzle-kit studio",
-    "test": "jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --watchAll=false",
     "test:unit": "jest src/__tests__/unit",
     "test:integration": "jest src/__tests__/integration",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node drizzle/migrate.js migrate",
+    "db:migrate": "npx drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:drop": "drizzle-kit drop",
     "db:push": "drizzle-kit push"

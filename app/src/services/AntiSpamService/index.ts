@@ -1,10 +1,16 @@
 import type { AppConfig } from "../../config.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { IService } from "../../core/Container.js"
+import type { EventBus, MessageReceivedEvent } from "../../core/EventBus.js"
+import type { RedisService } from "../RedisService/index.js"
+import { getMessage } from "../../shared/messages/index.js"
+
 import { ANTI_SPAM_CONFIG } from "../../constants.js"
+import { UserCounters } from "./UserCounters.js"
 
 interface AntiSpamDependencies {
-  // Пока нет зависимостей, но оставляем для расширяемости
+  eventBus?: EventBus
+  redisService?: RedisService
 }
 
 interface AntiSpamResult {
@@ -35,6 +41,8 @@ export class AntiSpamService implements IService {
   private dependencies: AntiSpamDependencies
   private settings: AntiSpamSettings
   private isRunning = false
+  private eventBus?: EventBus
+  private userCounters?: UserCounters
 
   constructor(
     config: AppConfig,
@@ -52,6 +60,13 @@ export class AntiSpamService implements IService {
       maxRetries: ANTI_SPAM_CONFIG.MAX_RETRIES,
       retryDelayMs: ANTI_SPAM_CONFIG.RETRY_DELAY_MS,
       ...settings,
+    }
+
+    this.eventBus = dependencies.eventBus
+
+    // Инициализируем UserCounters если доступен Redis
+    if (dependencies.redisService) {
+      this.userCounters = new UserCounters(logger, dependencies.redisService)
     }
   }
 
@@ -79,7 +94,107 @@ export class AntiSpamService implements IService {
     // Проверяем доступность API
     await this.healthCheck()
 
+    // Подписываемся на события сообщений если доступен EventBus
+    if (this.eventBus) {
+      this.setupEventListeners()
+    }
+
     this.logger.i("✅ Anti-spam service started")
+  }
+
+  /**
+   * Настройка слушателей событий
+   */
+  private setupEventListeners(): void {
+    if (!this.eventBus)
+      return
+
+    // Слушаем валидные групповые сообщения во втором приоритете
+    this.eventBus.onMessageGroupOrdered(async (event: MessageReceivedEvent) => {
+      try {
+        // Инкрементируем счетчик сообщений и проверяем только первые 5 сообщений пользователя
+        if (this.userCounters) {
+          const userCounter = await this.userCounters.incrementMessageCount(event.from.id)
+          if (userCounter && userCounter.messageCount > 5) {
+            return false // Пропускаем проверку для опытных пользователей, передаем дальше
+          }
+        }
+
+        // Проверяем сообщение на спам
+        const spamResult = await this.checkMessage(event.from.id, event.text)
+
+        if (spamResult.isSpam) {
+          // Получаем текущий счетчик спама и увеличиваем его
+          let spamCount = 0
+          if (this.userCounters) {
+            const userCounter = await this.userCounters.getUserCounter(event.from.id)
+            spamCount = userCounter?.spamCount || 0
+            // Увеличиваем счетчик спама
+            await this.userCounters.incrementSpamCounter(event.from.id)
+          }
+
+          // Определяем действия в зависимости от счетчика спама
+          const actions: any[] = [
+            {
+              type: "deleteMessage",
+              params: { messageId: event.id },
+            },
+          ]
+
+          if (spamCount < 2) {
+            // Предупреждение
+            const modifier = spamCount > 0 ? "Повторное с" : ""
+            const name = event.from.username ? `@${event.from.username}` : event.from.firstName
+            const admin = "" // Можно будет добавить информацию об админе позже
+
+            actions.push({
+              type: "sendMessage",
+              params: {
+                text: getMessage("spam_warning", { modifier, name, admin }),
+                autoDelete: 20000,
+              },
+            })
+          } else {
+            // Кик пользователя
+            const name = event.from.username ? `@${event.from.username}` : event.from.firstName
+            const admin = "" // Можно будет добавить информацию об админе позже
+
+            actions.push(
+              {
+                type: "sendMessage",
+                params: {
+                  text: getMessage("spam_kick", { name, admin }),
+                  autoDelete: 20000,
+                },
+              },
+              {
+                type: "kick",
+                params: {
+                  userId: event.from.id,
+                  clearCounter: true, // Будет очищен через UserCounters в адаптере
+                },
+              },
+            )
+          }
+
+          // Генерируем событие обнаружения спама с действиями
+          await this.eventBus!.emitSpamDetected({
+            chatId: event.chat.id,
+            userId: event.from.id,
+            messageId: event.id,
+            username: event.from.username,
+            firstName: event.from.firstName,
+            spamCount,
+            actions,
+          })
+          return true // Спам обнаружен — поглощаем событие
+        }
+        return false // Не спам — передаем дальше
+      } catch (error) {
+        this.logger.e("Error in spam detection:", error)
+        return false
+      }
+    }, 50)
   }
 
   /**
@@ -114,11 +229,6 @@ export class AntiSpamService implements IService {
     if (!this.isRunning) {
       this.logger.w("❌ Anti-spam service is not running")
       return { isSpam: false, error: "Service not running" }
-    }
-
-    if (!this.config.ANTISPAM_URL) {
-      this.logger.w("❌ ANTISPAM_URL not configured")
-      return { isSpam: false, error: "API URL not configured" }
     }
 
     if (!message || message.trim().length === 0) {

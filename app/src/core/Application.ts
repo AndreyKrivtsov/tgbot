@@ -16,12 +16,16 @@ export class Application {
     this.config = config
   }
 
+  private isSkipped(key: string): boolean {
+    const envKey = `SKIP_${key.toUpperCase()}`
+    const val = process.env[envKey]
+    return val === "1" || val === "true"
+  }
+
   /**
    * Инициализация всех сервисов приложения
    */
   async initialize(): Promise<void> {
-    this.logger.i("🏗️ Setting up application services...")
-
     // Регистрируем основные сервисы
     await this.registerCoreServices()
 
@@ -33,217 +37,277 @@ export class Application {
 
     // Регистрируем веб-сервисы
     await this.registerWebServices()
-
-    this.logger.i("✅ Application services registered")
   }
 
   /**
    * Запуск приложения
    */
   async start(): Promise<void> {
-    this.logger.i("🚀 Starting application services...")
-
     // Запускаем все сервисы через контейнер
     await this.container.start()
-
-    this.logger.i("✅ Application services started")
   }
 
   /**
    * Остановка приложения
    */
   async stop(): Promise<void> {
-    this.logger.i("🛑 Stopping application services...")
-
     // Останавливаем все сервисы через контейнер
     await this.container.stop()
-
-    this.logger.i("✅ Application services stopped")
   }
 
   /**
    * Регистрация core сервисов
    */
   async registerCoreServices(): Promise<void> {
-    this.logger.i("📦 Registering core services...")
+    // Message Provider
+    if (!this.isSkipped("message_provider")) {
+      this.container.register("messageProvider", async () => {
+        const { createMessageProvider } = await import("../shared/messages/index.js")
+        return createMessageProvider()
+      })
+    }
 
     // Database Service
-    this.container.register("database", async () => {
-      const { DatabaseService } = await import("../services/DatabaseService/index.js")
-      return new DatabaseService(this.config, this.logger)
-    })
+    if (!this.isSkipped("db")) {
+      this.container.register("database", async () => {
+        const { DatabaseService } = await import("../services/DatabaseService/index.js")
+        return new DatabaseService(this.config, this.logger)
+      })
+    }
 
     // Cache Service
-    this.container.register("cache", async () => {
-      const { CacheService } = await import("../services/CacheService/index.js")
-      return new CacheService(this.config, this.logger)
-    })
-
-    this.logger.i("✅ Core services registered")
+    if (!this.isSkipped("cache")) {
+      this.container.register("cache", async () => {
+        const { CacheService } = await import("../services/CacheService/index.js")
+        return new CacheService(this.config, this.logger)
+      })
+    }
   }
 
   /**
    * Регистрация infrastructure сервисов
    */
   async registerInfrastructureServices(): Promise<void> {
-    this.logger.i("🔧 Registering infrastructure services...")
-
     // Redis Service
-    this.container.register("redis", async () => {
-      const { RedisService } = await import("../services/RedisService/index.js")
-      return new RedisService(this.config, this.logger)
-    })
-
-    this.logger.i("✅ Infrastructure services registered")
+    if (!this.isSkipped("redis")) {
+      this.container.register("redis", async () => {
+        const { RedisService } = await import("../services/RedisService/index.js")
+        return new RedisService(this.config, this.logger)
+      })
+    }
   }
 
   /**
    * Регистрация business сервисов
    */
   async registerBusinessServices(): Promise<void> {
-    this.logger.i("🏢 Registering business services...")
-
     // EventBus - медиатор событий
-    this.container.register("eventBus", async () => {
-      const { EventBus } = await import("./EventBus.js")
-      return new EventBus()
-    })
+    if (!this.isSkipped("eventbus")) {
+      this.container.register("eventBus", async () => {
+        const { EventBus } = await import("./EventBus.js")
+        return new EventBus()
+      })
+    }
 
     // Chat Repository
-    this.container.register("chatRepository", async () => {
-      const { ChatRepository } = await import("../repository/ChatRepository.js")
-      const database = await this.container.getAsync("database") as any
-      const cache = await this.container.getAsync("cache") as any
-      return new ChatRepository(database, cache)
-    })
-
-    // Chat Settings Service
-    this.container.register("chatSettings", async () => {
-      const { ChatSettingsService } = await import("../services/ChatSettingsService/index.js")
-      const chatRepository = await this.container.getAsync("chatRepository") as any
-      const logger = await this.container.getAsync("logger") as any
-      return new ChatSettingsService(logger, chatRepository)
-    })
+    if (!this.isSkipped("chat_repository")) {
+      this.container.register("chatRepository", async () => {
+        const { ChatRepository } = await import("../repository/ChatRepository.js")
+        const database = this.container.has("database") ? await this.container.getAsync("database") as any : undefined
+        const cache = this.container.has("cache") ? await this.container.getAsync("cache") as any : undefined
+        const redis = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
+        return new ChatRepository(database, cache, redis)
+      })
+    }
 
     // Captcha Service
-    this.container.register("captcha", async () => {
-      const { CaptchaService } = await import("../services/CaptchaService/index.js")
+    if (!this.isSkipped("captcha")) {
+      this.container.register("captcha", async () => {
+        const { CaptchaService } = await import("../services/CaptchaService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
 
-      // Настройки капчи (можно перенести в БД позже)
-      const captchaSettings = {
-        timeoutMs: 60000, // 60 секунд
-        checkIntervalMs: 5000, // 5 секунд
-      }
+        // Настройки капчи (можно перенести в БД позже)
+        const captchaSettings = {
+          timeoutMs: 60000, // 60 секунд
+          checkIntervalMs: 5000, // 5 секунд
+        }
 
-      return new CaptchaService(this.config, this.logger, {}, captchaSettings)
-    })
+        // Не создаём адаптер и не запрашиваем telegramBot здесь, чтобы избежать цикла
+        return new CaptchaService(this.config, this.logger, { eventBus }, captchaSettings)
+      })
+    }
 
     // Anti-Spam Service
-    this.container.register("antiSpam", async () => {
-      const { AntiSpamService } = await import("../services/AntiSpamService/index.js")
+    // if (!this.isSkipped("antispam")) {
+    //   this.container.register("antiSpam", async () => {
+    //     const { AntiSpamService } = await import("../services/AntiSpamService/index.js")
+    //     const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+    //     const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
 
-      // Настройки антиспама (можно перенести в БД позже)
-      const antiSpamSettings = {
-        timeoutMs: 5000, // 5 секунд
-        maxRetries: 2, // 2 попытки
-        retryDelayMs: 1000, // 1 секунда
-      }
+    //     // Настройки антиспама (можно перенести в БД позже)
+    //     const antiSpamSettings = {
+    //       timeoutMs: 5000, // 5 секунд
+    //       maxRetries: 2, // 2 попытки
+    //       retryDelayMs: 1000, // 1 секунда
+    //     }
 
-      this.logger.i("🛡️ [ANTISPAM DEBUG] Registering AntiSpamService with settings:", JSON.stringify(antiSpamSettings, null, 2))
-      this.logger.i("🛡️ [ANTISPAM DEBUG] ANTISPAM_URL from config:", this.config.ANTISPAM_URL)
+    //     return new AntiSpamService(this.config, this.logger, { eventBus, redisService }, antiSpamSettings)
+    //   })
+    // }
 
-      return new AntiSpamService(this.config, this.logger, {}, antiSpamSettings)
-    })
+    if (!this.isSkipped("group_agent")) {
+      this.container.register("groupAgent", async () => {
+        const { GroupAgentService } = await import("../services/GroupAgentService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+        const redisService = this.container.has("redis") ? await this.container.getAsync("redis") as any : undefined
+        const authorizationService = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
 
-    // Chat Service
-    this.container.register("chat", async () => {
-      const { AIChatServiceRefactored } = await import("../services/AIChatService/AIChatServiceRefactored.js")
-      const { GeminiAdapter } = await import("../services/AIChatService/providers/GeminiAdapter.js")
-      const { AdaptiveChatThrottleManager } = await import("../services/AIChatService/AdaptiveThrottleManager.js")
-      const database = await this.container.getAsync("database") as any
-      const redis = await this.container.getAsync("redis") as any
-      const eventBus = await this.container.getAsync("eventBus") as any
-      const logger = await this.container.getAsync("logger") as any
-      const aiProvider = new GeminiAdapter(logger)
-      const throttleManager = new AdaptiveChatThrottleManager(logger)
-      const aiChatService = new AIChatServiceRefactored(
-        this.config,
-        logger,
-        {
-          database,
-          redis,
+        return new GroupAgentService(this.config, {
           eventBus,
-        },
-        aiProvider,
-        throttleManager,
-      )
+          chatRepository,
+          redisService,
+          authorizationService,
+        })
+      })
+    }
 
-      // Подключаем ChatSettingsService к AIChatService для синхронизации кешей
-      const chatSettings = await this.container.getAsync("chatSettings") as any
-      chatSettings.setAIChatService(aiChatService)
+    // Authorization Service
+    if (!this.isSkipped("authorization")) {
+      this.container.register("authorization", async () => {
+        const { AuthorizationService } = await import("../services/AuthorizationService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+        return new AuthorizationService(this.config, this.logger, { eventBus, chatRepository })
+      })
+    }
 
-      return aiChatService
-    })
+    // Group Management Service (register/unregister)
+    if (!this.isSkipped("group_management")) {
+      this.container.register("groupManagement", async () => {
+        const { GroupManagementService } = await import("../services/GroupManagementService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+        const authorizationService = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
+        const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
 
-    this.logger.i("✅ Business services registered")
+        return new GroupManagementService(this.config, this.logger, {
+          eventBus,
+          chatRepository,
+          authorizationService,
+          telegramPort: telegramBot
+            ? {
+                getChatAdministrators: (chatId: number) => telegramBot.getChatAdministrators(chatId),
+              }
+            : undefined,
+        })
+      })
+    }
+
+    // Moderation Service (ban/mute)
+    if (!this.isSkipped("moderation")) {
+      this.container.register("moderation", async () => {
+        const { ModerationService } = await import("../services/ModerationService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const authorizationService = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
+        const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
+
+        return new ModerationService(this.config, this.logger, {
+          eventBus,
+          authorizationService,
+          telegramPort: telegramBot
+            ? {
+                getChatMember: (params: { chat_id: number, user_id: number | string }) => telegramBot.getChatMember(params),
+              }
+            : undefined,
+        })
+      })
+    }
+
+    // Chat Configuration Service (ultron toggle, API key)
+    if (!this.isSkipped("chat_configuration")) {
+      this.container.register("chatConfiguration", async () => {
+        const { ChatConfigurationService } = await import("../services/ChatConfigurationService/index.js")
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
+        const authorizationService = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+        const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") as any : undefined
+
+        return new ChatConfigurationService(this.config, this.logger, {
+          eventBus,
+          authorizationService,
+          chatRepository,
+          telegramPort: telegramBot
+            ? {
+                getChat: (params: { chat_id: string }) => telegramBot.getChat(params as any),
+              }
+            : undefined,
+        })
+      })
+    }
   }
 
   /**
    * Регистрация web сервисов
    */
   async registerWebServices(): Promise<void> {
-    this.logger.i("🌐 Registering web services...")
-
     // Telegram Bot Service (с зависимостями)
-    this.container.register("telegramBot", async () => {
-      const { TelegramBotService } = await import("../services/TelegramBot/index.js")
-      const redisService = await this.container.getAsync("redis")
-      const captchaService = await this.container.getAsync("captcha")
-      const antiSpamService = await this.container.getAsync("antiSpam")
-      const chatService = await this.container.getAsync("chat")
-      const chatRepository = await this.container.getAsync("chatRepository")
-      const chatSettingsService = await this.container.getAsync("chatSettings")
-      const eventBus = await this.container.getAsync("eventBus") as any
+    if (!this.isSkipped("telegram")) {
+      this.container.register("telegramBot", async () => {
+        const { TelegramBotService } = await import("../services/TelegramBot/index.js")
+        const redisService = this.container.has("redis") ? await this.container.getAsync("redis") : undefined
+        const captchaService = this.container.has("captcha") ? await this.container.getAsync("captcha") : undefined
+        const antiSpamService = this.container.has("antiSpam") ? await this.container.getAsync("antiSpam") : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") : undefined
+        const eventBus = this.container.has("eventBus") ? await this.container.getAsync("eventBus") as any : undefined
 
-      // Настройки Telegram бота (можно перенести в БД позже)
-      const botSettings = {
-        captchaTimeoutMs: 60000, // 60 секунд
-        captchaCheckIntervalMs: 5000, // 5 секунд
-        errorMessageDeleteTimeoutMs: 60000, // 60 секунд
-        deleteSystemMessages: true, // Удалять системные сообщения
-        temporaryBanDurationSec: 40, // 40 секунд
-        autoUnbanDelayMs: 5000, // 5 секунд
-        maxMessagesForSpamCheck: 5, // Проверять антиспамом первые 5 сообщений
-      }
+        // Настройки Telegram бота (можно перенести в БД позже)
+        const botSettings = {
+          captchaTimeoutMs: 60000, // 60 секунд
+          captchaCheckIntervalMs: 5000, // 5 секунд
+          errorMessageDeleteTimeoutMs: 60000, // 60 секунд
+          deleteSystemMessages: true, // Удалять системные сообщения
+          temporaryBanDurationSec: 40, // 40 секунд
+          autoUnbanDelayMs: 5000, // 5 секунд
+          maxMessagesForSpamCheck: 5, // Проверять антиспамом первые 5 сообщений
+        }
 
-      const botService = new TelegramBotService(this.config, this.logger, {
-        redisService: redisService as any,
-        captchaService: captchaService as any,
-        antiSpamService: antiSpamService as any,
-        chatService: chatService as any,
-        chatRepository: chatRepository as any,
-        chatSettingsService: chatSettingsService as any,
-      }, botSettings)
+        const botService = new TelegramBotService(this.config, this.logger, {
+          redisService: redisService as any,
+          captchaService: captchaService as any,
+          antiSpamService: antiSpamService as any,
+          chatRepository: chatRepository as any,
+        }, botSettings)
 
-      // Подключаем EventBus после инициализации
-      botService.setupEventBusListeners(eventBus)
+      // Подключаем EventBus после инициализации TelegramBot (если он уже инициализирован)
+      // Если нет — отложим подключение до конца initialize()
+      ;(botService as any)._pendingEventBus = eventBus
 
-      return botService
-    })
-
-    // API Server Service
-    this.container.register("apiServer", async () => {
-      const { ApiServerService } = await import("../services/ApiServerService/index.js")
-      const database = await this.container.getAsync("database")
-      const telegramBot = await this.container.getAsync("telegramBot")
-
-      return new ApiServerService(this.config, this.logger, {
-        database,
-        telegramBot,
+        return botService
       })
-    })
+    }
 
-    this.logger.i("✅ Web services registered")
+    // Web API Server Service
+    if (!this.isSkipped("api")) {
+      this.container.register("apiServer", async () => {
+        const { WebApiService } = await import("../services/WebApiService/index.js")
+        const database = this.container.has("database") ? await this.container.getAsync("database") : undefined
+        const telegramBot = this.container.has("telegramBot") ? await this.container.getAsync("telegramBot") : undefined
+        const groupManagement = this.container.has("groupManagement") ? await this.container.getAsync("groupManagement") as any : undefined
+        const chatConfiguration = this.container.has("chatConfiguration") ? await this.container.getAsync("chatConfiguration") as any : undefined
+        const authorization = this.container.has("authorization") ? await this.container.getAsync("authorization") as any : undefined
+        const chatRepository = this.container.has("chatRepository") ? await this.container.getAsync("chatRepository") as any : undefined
+
+        return new WebApiService(this.config, this.logger, {
+          database,
+          telegramBot,
+          groupManagement,
+          chatConfiguration,
+          authorizationService: authorization,
+          chatRepository,
+        })
+      })
+    }
   }
 
   /**

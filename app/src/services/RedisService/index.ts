@@ -1,6 +1,7 @@
 import type { IService } from "../../core/Container.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { AppConfig } from "../../config.js"
+import { CACHE_CONFIG } from "../../constants.js"
 import { createClient } from "redis"
 import type { RedisClientType } from "redis"
 
@@ -424,6 +425,31 @@ export class RedisService implements IService {
   async getBotUsername(): Promise<string | null> {
     const botInfo = await this.getBotInfo()
     return botInfo?.username || null
+  }
+
+  /**
+   * Кеширование информации о суперадмине
+   */
+  async setSuperAdmin(superAdmin: { userId: number, username: string }): Promise<void> {
+    await this.set(
+      CACHE_CONFIG.KEYS.SUPER_ADMIN,
+      superAdmin,
+      CACHE_CONFIG.SUPER_ADMIN_TTL_SECONDS,
+    )
+  }
+
+  async getSuperAdmin(): Promise<{ userId: number, username: string } | null> {
+    return await this.get(CACHE_CONFIG.KEYS.SUPER_ADMIN)
+  }
+
+  async getSuperAdminId(): Promise<number | null> {
+    const superAdmin = await this.getSuperAdmin()
+    return superAdmin?.userId ?? null
+  }
+
+  async getSuperAdminUsername(): Promise<string | null> {
+    const superAdmin = await this.getSuperAdmin()
+    return superAdmin?.username ?? null
   }
 
   /**

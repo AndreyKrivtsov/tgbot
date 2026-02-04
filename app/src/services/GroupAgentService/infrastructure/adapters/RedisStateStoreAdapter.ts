@@ -1,0 +1,81 @@
+import type { RedisService } from "../../../RedisService/index.js"
+import { GROUP_AGENT_CONFIG } from "../../../../constants.js"
+import type { StateStorePort } from "../../ports/StateStorePort.js"
+import type { BufferState, StoredChatHistory } from "../../domain/Batch.js"
+
+const HISTORY_PREFIX = "group_agent:history"
+const BUFFER_PREFIX = "group_agent:buffer"
+
+const historyKey = (chatId: number): string => `${HISTORY_PREFIX}:${chatId}`
+const bufferKey = (chatId: number): string => `${BUFFER_PREFIX}:${chatId}`
+
+export class RedisStateStoreAdapter implements StateStorePort {
+  private readonly redis: RedisService
+
+  constructor(redis: RedisService) {
+    this.redis = redis
+  }
+
+  async loadHistory(chatId: number): Promise<StoredChatHistory | null> {
+    return await this.redis.get<StoredChatHistory>(historyKey(chatId))
+  }
+
+  async saveHistory(history: StoredChatHistory): Promise<void> {
+    await this.redis.set(
+      historyKey(history.chatId),
+      history,
+    )
+  }
+
+  async clearHistory(chatId: number): Promise<void> {
+    await this.redis.del(historyKey(chatId))
+  }
+
+  async clearAllHistory(): Promise<void> {
+    const keys = await this.redis.keys(`${HISTORY_PREFIX}:*`)
+    if (!keys || keys.length === 0) {
+      return
+    }
+
+    for (const key of keys) {
+      await this.redis.del(key)
+    }
+  }
+
+  async loadBuffers(): Promise<BufferState[]> {
+    const keys = await this.redis.keys(`${BUFFER_PREFIX}:*`)
+    if (!keys || keys.length === 0) {
+      return []
+    }
+
+    const buffers: BufferState[] = []
+    for (const key of keys) {
+      const data = await this.redis.get<BufferState>(key)
+      if (data) {
+        buffers.push(data)
+      }
+    }
+
+    return buffers
+  }
+
+  async saveBuffers(buffers: BufferState[]): Promise<void> {
+    const seen = new Set<string>()
+    for (const buffer of buffers) {
+      const key = bufferKey(buffer.chatId)
+      seen.add(key)
+      await this.redis.set(key, buffer, GROUP_AGENT_CONFIG.BUFFER_TTL_SECONDS)
+    }
+
+    const keys = await this.redis.keys(`${BUFFER_PREFIX}:*`)
+    for (const key of keys) {
+      if (!seen.has(key)) {
+        await this.redis.del(key)
+      }
+    }
+  }
+
+  async clearBuffer(chatId: number): Promise<void> {
+    await this.redis.del(bufferKey(chatId))
+  }
+}

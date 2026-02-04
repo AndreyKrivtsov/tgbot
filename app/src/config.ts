@@ -8,7 +8,6 @@ export interface AppConfig {
 
   // Сервисы
   ANTISPAM_URL: string
-  LLAMA_URL: string
 
   // Опциональные сервисы
   REDIS_URL: string
@@ -16,8 +15,9 @@ export interface AppConfig {
   // Веб-сервер
   PORT: number
 
-  // Админ
-  ADMIN_USERNAME?: string
+  // Суперадмин
+  SUPER_ADMIN_USERNAME?: string
+  SUPER_ADMIN_ID?: number
 
   // Прокси
   PROXY_ENABLED: boolean
@@ -44,15 +44,14 @@ export const config: AppConfig = {
 
   ANTISPAM_URL: env.get("ANTISPAM_URL").required().asString(),
 
-  LLAMA_URL: env.get("LLAMA_URL").required().asString(),
-
   // Опциональные сервисы
   REDIS_URL: env.get("REDIS_URL").required().asString(),
 
   // Веб-сервер
   PORT: env.get("PORT").default(3000).asPortNumber(),
 
-  ADMIN_USERNAME: env.get("ADMIN_USERNAME").asString(),
+  SUPER_ADMIN_USERNAME: env.get("SUPER_ADMIN_USERNAME").asString(),
+  SUPER_ADMIN_ID: env.get("SUPER_ADMIN_ID").asInt(),
 
   // Прокси
   PROXY_ENABLED: env.get("PROXY_ENABLED").default("false").asBool(),

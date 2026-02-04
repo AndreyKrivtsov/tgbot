@@ -2,7 +2,7 @@ import { Bot } from "gramio"
 import type { MessageContext, NewChatMembersContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import { BOT_CONFIG } from "../../../constants.js"
-import type { MessageDeletionManager } from "../features/MessageDeletionManager.js"
+import type { MessageDeletionManager } from "../utils/MessageDeletionManager.js"
 import { MessageFormatter } from "../utils/MessageFormatter.js"
 
 /**
@@ -30,37 +30,45 @@ export class GramioBot {
 
   /**
    * Запуск бота с настройкой allowed_updates для получения событий участников
+   * При ошибке подключения повторяет попытку каждую секунду
    */
   async start(): Promise<void> {
-    try {
-      // Настраиваем allowed_updates для получения всех необходимых событий
-      const allowedUpdates = [
-        "message",
-        "edited_message",
-        "callback_query",
-        "chat_member",
-        "left_chat_member",
-        "my_chat_member",
-      ]
+    let attempt = 0
 
-      this.logger.i("🔧 Configuring bot with allowed_updates:", allowedUpdates)
+    while (true) {
+      attempt++
 
-      // Очищаем webhook и настраиваем getUpdates с allowed_updates
-      await this.bot.api.deleteWebhook({ drop_pending_updates: true })
+      try {
+        // Настраиваем allowed_updates для получения всех необходимых событий
+        const allowedUpdates = [
+          "message",
+          "edited_message",
+          "callback_query",
+          "chat_member",
+          "left_chat_member",
+          "my_chat_member",
+        ]
 
-      // Настраиваем allowed_updates через getUpdates
-      await this.bot.api.getUpdates({
-        allowed_updates: allowedUpdates as any,
-        limit: 1,
-        timeout: 1,
-      })
+        this.logger.i(`🔧 [Attempt ${attempt}] Configuring bot...`)
 
-      this.logger.i("✅ Bot configured with allowed_updates successfully")
+        // Очищаем webhook и настраиваем getUpdates с allowed_updates
+        await this.bot.api.deleteWebhook({ drop_pending_updates: true })
 
-      await this.bot.start()
-    } catch (error) {
-      this.logger.e("❌ Failed to start bot with allowed_updates:", error)
-      throw error
+        // Настраиваем allowed_updates через getUpdates
+        await this.bot.api.getUpdates({
+          allowed_updates: allowedUpdates as any,
+          limit: 1,
+          timeout: 1,
+        })
+
+        await this.bot.start()
+
+        this.logger.i("✅ Bot started successfully")
+        return
+      } catch (error: any) {
+        this.logger.w(`⚠️ Failed to start bot. Retrying in 1 second...`, error)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
     }
   }
 
@@ -79,9 +87,50 @@ export class GramioBot {
 
   /**
    * Получение информации о боте
+   * При ошибке подключения повторяет попытку каждую секунду
    */
   async getMe() {
-    return await this.bot.api.getMe()
+    let attempt = 0
+    const startTime = Date.now()
+
+    while (true) {
+      attempt++
+
+      try {
+        if (attempt === 1) {
+          this.logger.i(`🔍 Getting bot info...`)
+        } else {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000)
+          this.logger.w(`⚠️ [Attempt ${attempt}] Retrying to get bot info... (elapsed: ${elapsed}s)`)
+        }
+
+        const botInfo = await this.bot.api.getMe()
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        this.logger.i(`✅ Bot info retrieved successfully (${elapsed}s, ${attempt} attempt${attempt > 1 ? "s" : ""})`)
+        return botInfo
+      } catch (error: any) {
+        // Проверяем, является ли это сетевой ошибкой
+        const isNetworkError = error?.cause?.code === "UND_ERR_CONNECT_TIMEOUT"
+          || error?.code === "UND_ERR_CONNECT_TIMEOUT"
+          || error?.message?.includes("fetch failed")
+          || error?.message?.includes("timeout")
+
+        if (isNetworkError) {
+          // Логируем детали ошибки только на первых попытках и периодически
+          if (attempt === 1 || attempt % 10 === 0) {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000)
+            const errorCode = error?.cause?.code || error?.code || "UNKNOWN"
+            this.logger.w(`⚠️ Network error (${errorCode}) on attempt ${attempt} (${elapsed}s elapsed). Retrying...`)
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } else {
+          // Если это не сетевая ошибка, логируем детали и пробрасываем дальше
+          const elapsed = Math.floor((Date.now() - startTime) / 1000)
+          this.logger.e(`❌ Non-network error after ${attempt} attempt(s) (${elapsed}s elapsed):`, error)
+          throw error
+        }
+      }
+    }
   }
 
   /**
@@ -196,6 +245,55 @@ export class GramioBot {
     })
   }
 
+  async muteUser(
+    chatId: number,
+    userId: number,
+    durationMinutes?: number,
+    permissions: ChatPermissions = {
+      can_send_messages: false,
+      can_send_audios: false,
+      can_send_documents: false,
+      can_send_photos: false,
+      can_send_videos: false,
+      can_send_video_notes: false,
+      can_send_voice_notes: false,
+      can_send_polls: false,
+      can_send_other_messages: false,
+      can_add_web_page_previews: false,
+      can_change_info: false,
+      can_invite_users: false,
+      can_pin_messages: false,
+    },
+  ): Promise<void> {
+    const untilDate = typeof durationMinutes === "number" && durationMinutes > 0
+      ? Math.floor(Date.now() / 1000) + Math.floor(durationMinutes * 60)
+      : undefined
+
+    await this.restrictUser(chatId, userId, permissions, untilDate)
+  }
+
+  async unmuteUser(
+    chatId: number,
+    userId: number,
+    permissions: ChatPermissions = {
+      can_send_messages: true,
+      can_send_audios: true,
+      can_send_documents: true,
+      can_send_photos: true,
+      can_send_videos: true,
+      can_send_video_notes: true,
+      can_send_voice_notes: true,
+      can_send_polls: true,
+      can_send_other_messages: true,
+      can_add_web_page_previews: true,
+      can_change_info: false,
+      can_invite_users: true,
+      can_pin_messages: false,
+    },
+  ): Promise<void> {
+    await this.unrestrictUser(chatId, userId, permissions)
+  }
+
   /**
    * Бан пользователя
    */
@@ -241,30 +339,6 @@ export class GramioBot {
   }
 
   /**
-   * Временный бан пользователя
-   */
-  async temporaryBanUser(chatId: number, userId: number, durationSec: number): Promise<void> {
-    const untilDate = Math.floor(Date.now() / 1000) + durationSec
-    await this.banUser(chatId, userId, untilDate)
-  }
-
-  /**
-   * Отправка сообщения с автоудалением (упрощенный интерфейс)
-   */
-  async sendTempMessage(
-    chatId: number,
-    text: string,
-    deleteAfterMs: number,
-    parseMode?: "HTML" | "Markdown" | "MarkdownV2",
-  ): Promise<MessageResult> {
-    return await this.sendAutoDeleteMessage({
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    }, deleteAfterMs)
-  }
-
-  /**
    * Отправка сообщения с автоудалением в групповых чатах
    * В приватных чатах (chatId > 0) сообщения НЕ удаляются
    * В групповых чатах (chatId < 0) сообщения удаляются через заданное время
@@ -287,6 +361,27 @@ export class GramioBot {
    */
   async getChatAdministrators(chatId: number): Promise<any[]> {
     return await this.bot.api.getChatAdministrators({ chat_id: chatId })
+  }
+
+  /**
+   * Получить информацию об участнике чата (обертка над getChatMember)
+   */
+  async getChatMember(params: { chat_id: number, user_id: number | string }): Promise<any> {
+    return await this.bot.api.getChatMember(params as any)
+  }
+
+  /**
+   * Получить информацию о чате (обертка над getChat)
+   */
+  async getChat(params: { chat_id: number | string }): Promise<any> {
+    return await this.bot.api.getChat(params as any)
+  }
+
+  /**
+   * Обновление inline клавиатуры сообщения
+   */
+  async editMessageReplyMarkup(params: { chat_id: number, message_id: number, reply_markup: { inline_keyboard: any[][] } }): Promise<any> {
+    return await this.bot.api.editMessageReplyMarkup(params as any)
   }
 
   /**

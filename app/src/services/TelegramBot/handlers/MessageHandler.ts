@@ -1,59 +1,51 @@
-import type { MessageContext } from "gramio"
 import type { Logger } from "../../../helpers/Logger.js"
 import type { AppConfig } from "../../../config.js"
-import type { AIChatServiceRefactored } from "../../AIChatService/AIChatServiceRefactored.js"
 import type { TelegramBot, TelegramBotSettings, TelegramMessageContext } from "../types/index.js"
-import type { SpamDetector } from "../features/SpamDetector.js"
-import type { UserManager } from "../features/UserManager.js"
 import type { CommandHandler } from "./CommandHandler.js"
 import type { ChatRepository } from "../../../repository/ChatRepository.js"
-import { getMessage } from "../utils/Messages.js"
-import { MessageFormatter } from "../utils/MessageFormatter.js"
-import { BOT_CONFIG } from "../../../constants.js"
+import type { AntiSpamService } from "../../AntiSpamService/index.js"
+import type { TelegramBotService } from "../index.js"
+import type { EventBus } from "../../../core/EventBus.js"
+// no EVENTS import needed here; we use typed emitters
 
-/**
- * Обработчик сообщений для Telegram бота
- */
 export class MessageHandler {
   private logger: Logger
   private config: AppConfig
   private bot: TelegramBot
   private settings: TelegramBotSettings
-  private spamDetector?: SpamDetector
-  private userManager: UserManager
-  private commandHandler?: CommandHandler
   private chatRepository: ChatRepository
+  private botService: TelegramBotService
+  private eventBus: EventBus
   private isProcessing = false
 
-  // AI Chat Service
-  private chatService?: AIChatServiceRefactored
+  // Опциональные сервисы
+  private antiSpamService?: AntiSpamService
+  private commandHandler?: CommandHandler
 
   constructor(
     logger: Logger,
     config: AppConfig,
     bot: TelegramBot,
     settings: TelegramBotSettings,
-    userManager: UserManager,
     chatRepository: ChatRepository,
-    spamDetector?: SpamDetector,
+    userRestrictions: any,
+    botService: TelegramBotService,
+    eventBus: EventBus,
+    antiSpamService?: AntiSpamService,
     commandHandler?: CommandHandler,
-    chatService?: AIChatServiceRefactored,
   ) {
     this.logger = logger
     this.config = config
     this.bot = bot
     this.settings = settings
-    this.userManager = userManager
     this.chatRepository = chatRepository
-    this.spamDetector = spamDetector
+    this.botService = botService
+    this.eventBus = eventBus
+    this.antiSpamService = antiSpamService
     this.commandHandler = commandHandler
-    this.chatService = chatService
   }
 
-  /**
-   * Основной обработчик сообщений
-   */
-  async handleMessage(context: TelegramMessageContext): Promise<void> {
+  private async handleMessageEvent(context: TelegramMessageContext): Promise<void> {
     if (this.isProcessing) {
       this.logger.w("Message handler is already processing, skipping message")
       return
@@ -64,199 +56,63 @@ export class MessageHandler {
     try {
       const { from, chat, text: messageText } = context
 
-      // Проверяем наличие обязательных данных
+      // Общая валидация
       if (!from || !chat || !messageText) {
-        this.logger.w("Incomplete message data, skipping")
+        this.logger.d("Empty message text, skipping")
         return
       }
 
-      // Обработка команд
-      if (this.commandHandler && messageText.startsWith("/")) {
+      // Игнорируем сообщения от ботов
+      if ((from as any).is_bot) {
+        return
+      }
+
+      const chatType = (chat as any).type
+      const isGroup = chatType === "group" || chatType === "supergroup" || chat.id < 0
+      const isPrivate = chatType === "private" || chat.id > 0
+
+      // Сначала проверяем команды (и в группах, и в приватах)
+      const isCommand = messageText.startsWith("/")
+      if (isCommand && this.commandHandler) {
         await this.commandHandler.handleCommand(context)
         return
       }
 
-      // Проверяем, есть ли чат в базе данных (только для групп)
-      if (chat.id < 0) {
+      if (isGroup) {
+        // Проверка активности группы
         const isActive = await this.chatRepository.isChatActive(chat.id)
         if (!isActive) {
           this.logger.w(`Chat ${chat.id} is not active or not found in database, skipping message processing`)
           return
         }
+
+        // Эмитим валидное групповое сообщение (ordered)
+        // Счетчики сообщений обрабатываются в AntiSpamService
+        await this.eventBus.emitMessageGroupOrdered({
+          from: { id: from.id, username: from.username, firstName: from.firstName },
+          chat: { id: chat.id, type: chatType || (chat.id < 0 ? "supergroup" : "group") },
+          text: messageText,
+          id: (context as any).id || (context as any).messageId || Date.now(),
+          replyMessage: (context as any).replyMessage,
+        })
+        return
       }
 
-      // Обновляем счетчик пользователя
-      await this.userManager.updateMessageCounter(from.id, from.username, from.firstName)
-      // Сохраняем соответствие userId <-> username
-      await this.userManager.saveUserMapping(chat.id, from.id, from.username)
-
-      // Получаем информацию о боте для проверки упоминаний
-      const botInfo = await this.bot.getMe()
-
-      // Проверяем, является ли сообщение обращением к AI
-      if (this.chatService) {
-        // Проверяем, является ли это ответом на сообщение бота
-        const isReplyToBotMessage = context.replyMessage?.from?.id === botInfo.id
-
-        // Проверяем упоминание бота или ответ на его сообщение
-        const isMention = this.chatService.isBotMention(messageText, botInfo.username, isReplyToBotMessage)
-
-        // Если есть упоминание или ответ на сообщение бота, обрабатываем через AI
-        if (isMention) {
-          return this.handleChat(context, messageText)
-        }
+      if (isPrivate) {
+        // Приватные НЕ-командные сообщения не эмитим
+        // Просто выходим из обработчика без дополнительной логики
       }
 
-      // Обработка спама
-      if (this.spamDetector) {
-        const userCounter = await this.userManager.getUserOrCreate(from.id, from.username, from.firstName)
-        const spamResult = await this.spamDetector.checkMessage(from.id, messageText, userCounter)
-        if (spamResult.isSpam) {
-          await this.spamDetector.handleSpamMessage(context, spamResult.reason, userCounter)
-        }
-      }
+      // Обработка команд больше не требуется здесь
     } catch (error) {
-      this.logger.e("Error handling message:", error)
+      this.logger.e("Error handling message event:", error)
     } finally {
       this.isProcessing = false
     }
   }
 
-  /**
-   * Обработка AI ответов
-   */
-  async handleAIResponse(contextId: string, response: string, _messageId: number, userMessageId?: number, isError?: boolean): Promise<void> {
-    try {
-      const chatId = Number.parseInt(contextId)
-
-      // Подготавливаем параметры сообщения
-      const messageParams: any = {
-        chat_id: chatId,
-        text: response,
-      }
-
-      // Если есть ID сообщения пользователя, отвечаем на него
-      if (userMessageId) {
-        messageParams.reply_parameters = {
-          message_id: userMessageId,
-        }
-      }
-
-      // Отправляем ответ AI в чат
-      if (isError) {
-        // Для сообщений об ошибках используем автоудаление (20 секунд)
-        await this.bot.sendGroupMessage(messageParams, BOT_CONFIG.MESSAGE_DELETE_SHORT_TIMEOUT_MS)
-      } else {
-        // Обычные ответы отправляем без автоудаления
-        await this.bot.sendMessage(messageParams)
-      }
-
-      this.logger.d(`✅ AI response sent to chatId=${chatId} (${response.length} chars)${userMessageId ? ` as reply to msgId=${userMessageId}` : ""}`)
-    } catch (error) {
-      this.logger.e("Error handling AI response:", error)
-
-      // Попробуем отправить сообщение об ошибке
-      try {
-        const chatId = Number.parseInt(contextId)
-        const errorMessage = getMessage("ai_response_error")
-        await this.bot.sendGroupMessage({
-          chat_id: chatId,
-          text: errorMessage,
-        })
-      } catch (sendError) {
-        this.logger.e("Failed to send error message:", sendError)
-      }
-    }
-  }
-
-  /**
-   * Обработка AI чата
-   */
-  private async handleChat(context: TelegramMessageContext, messageText: string): Promise<void> {
-    if (!this.chatService || !context.from) {
-      this.logger.w("Cannot handle AI chat: missing chatService or user info")
-      return
-    }
-
-    try {
-      const userId = context.from.id
-      const chatId = context.chat.id
-      const username = context.from.username
-      const firstName = context.from.firstName
-      const userMessageId = context.id // ID сообщения пользователя для reply
-
-      this.logger.d(`🤖 Processing AI message from ${firstName} (${userId}) in chat ${chatId}`)
-
-      // Обрабатываем сообщение через AI Chat Service
-      const result = await this.chatService.processMessage(
-        userId,
-        chatId,
-        messageText,
-        username,
-        firstName,
-        userMessageId, // Передаем ID сообщения пользователя
-      )
-
-      if (!result.success) {
-        this.logger.w(`❌ Failed to queue AI message: ${result.reason}`)
-      }
-    } catch (error) {
-      this.logger.e("Error handling AI chat:", error)
-    }
-  }
-
-  /**
-   * Получение статистики обработки сообщений
-   */
-  getMessageStats(): object {
-    return {
-      isProcessing: this.isProcessing,
-      hasSpamDetector: !!this.spamDetector,
-      hasCommandHandler: !!this.commandHandler,
-      hasChatService: !!this.chatService,
-    }
-  }
-
-  /**
-   * Проверка наличия AI сервиса
-   */
-  hasAIService(): boolean {
-    return !!this.chatService
-  }
-
-  /**
-   * Установка AI сервиса
-   */
-  setAIService(chatService: AIChatServiceRefactored): void {
-    this.chatService = chatService
-  }
-
-  /**
-   * Обработка ограниченного пользователя
-   */
-  async handleRestrictedUser(context: any, restriction: any): Promise<void> {
-    try {
-      if (context.delete) {
-        await context.delete()
-      }
-
-      const escapedReason = MessageFormatter.escapeMarkdownV2(restriction.reason || getMessage("reason_not_specified"))
-      const escapedAdminUsername = this.config.ADMIN_USERNAME
-        ? MessageFormatter.escapeMarkdownV2(this.config.ADMIN_USERNAME)
-        : ""
-
-      const restrictionText = getMessage("user_restricted", {
-        reason: escapedReason,
-        admin: escapedAdminUsername,
-      })
-
-      await this.bot.sendGroupMessage({
-        chat_id: context.chat.id,
-        text: restrictionText,
-        parse_mode: "MarkdownV2",
-      })
-    } catch (error) {
-      this.logger.e("Error handling restricted user:", error)
-    }
+  async handleMessage(context: TelegramMessageContext): Promise<void> {
+    // Сразу валидируем и маршрутизируем
+    await this.handleMessageEvent(context)
   }
 }

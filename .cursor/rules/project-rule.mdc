@@ -1,31 +1,38 @@
 ---
 alwaysApply: true
 ---
-
 Системная инструкция - Telegram Bot "Ultron"
 
 Обзор проекта
 
-Ultron - это многофункциональный Telegram-бот для модерации групп с интеграцией ИИ-помощника. Построен на модульной архитектуре с использованием TypeScript, Node.js, PostgreSQL и Redis.
+Ultron - это многофункциональный Telegram-бот для модерации групп с интеграцией ИИ-помощника и ИИ-модератора. Построен на модульной архитектуре с использованием TypeScript, Node.js, PostgreSQL и Redis.
 
 Архитектура системы
 
 Core принципы:
 - Модульность: Четкое разделение ответственности между сервисами
-- Dependency Injection: Централизованное управление зависимостями через Container
+- Dependency Injection: Управление зависимостями через Container (без логирования в core)
+- Event-Driven: EventBus для слабой связности между модулями
 - Graceful Shutdown: Корректная остановка всех сервисов
-- Observability: Структурированное логирование и мониторинг
+- Observability: Структурированное логирование на уровне сервисов
 
 Основные слои:
 Application Layer (app.ts) 
     ↓
-Core Layer (Container, Application)
+Core Layer (Container, Application, EventBus)
     ↓
 Services Layer (Business Logic)
     ↓
 Repository Layer (Data Access)
     ↓
 Infrastructure Layer (Database, Redis, Docker)
+
+Архитектурные паттерны:
+- Dependency Injection (Container)
+- Event-Driven Architecture (EventBus с событиями и actions)
+- Repository Pattern (ChatRepository)
+- Ports & Adapters / Hexagonal Architecture (изоляция бизнес-логики от инфраструктуры)
+- Adapter Pattern (TelegramActionsAdapter - единый исполнитель Telegram действий)
 
 Основные функции и бизнес-логика
 
@@ -43,31 +50,33 @@ Infrastructure Layer (Database, Redis, Docker)
   1. Первый запрос: установка бана с until_date = текущее время + 60 секунд
   2. Второй запрос: автоматический разбан через 60 секунд
 
-2. Антиспам система (AntiSpamService)
-- Цель: Фильтрация спам-сообщений у новых пользователей
-- Логика:
-  - Проверка только первых 5 сообщений пользователя
-  - Интеграция с внешним API (порт 6323)
-  - Градация наказаний: предупреждение → кик → бан
-  - Очистка счетчиков через час
-- Хранение данных: Счетчики сообщений для пользователей хранятся в Redis для быстрого доступа и автоматической очистки
-
-3. ИИ-чат (AIChatService)
+4. ИИ-модерация (GroupAgentService)
 - Провайдер: Google Gemini
-- Активация: Упоминание бота, ответ на сообщение бота
-- Особенности:
-  - Система очередей для обработки запросов
-  - Адаптивное throttling (5-20 сек задержки)
-  - Контекстная память (500 сообщений)
-  - Персонализация через системные промпты
+- Цель: Автоматическая модерация сообщений через AI
+- Логика:
+  - Батчевая обработка сообщений (каждые 1 минуту)
+  - Буферизация до 200 сообщений
+  - Анализ на спам, оскорбления, рекламу, мат
+  - Действия: warn, mute, kick, ban, delete (удаление сообщения)
+- Интеграция: Через EventBus (MESSAGE_RECEIVED → MODERATION_BATCH_RESULT → TelegramActionsAdapter)
 
-4. Модерация
+5. Управление настройками чатов (ChatRepository)
+- Цель: Централизованное управление данными чатов с кешированием
+- Функции:
+  - Управление AI (enable/disable через toggleAi)
+  - Управление API ключами (setApiKey)
+  - Управление системными промптами
+  - Многоуровневое кеширование (in-memory + Redis)
+  - Автоматическая инвалидация кешей при изменениях
+- Хранение: PostgreSQL + двухуровневый кеш (CacheService + Redis)
+
+6. Команды модерации
 - Команды: /ban, /unban, /mute, /unmute
 - Права: Только администраторы групп
 - Поддержка: Username и reply-to-message форматы
-- Ограничения: Команды без username работают только в публичных чатах (через reply-to-message)
+- Обработка: CommandHandler напрямую через Telegram Bot API
 
-5. Управление группами
+7. Управление группами
 - Регистрация: /register - добавление группы в систему
 - Настройка ИИ: /addAltronKey - подключение Gemini API (только в приватном чате с ботом)
 - Переключение: /ultron - вкл/выкл ИИ функций
@@ -77,13 +86,19 @@ Infrastructure Layer (Database, Redis, Docker)
 Основные таблицы:
 - chats (id, type, title, active, created_at, updated_at) - Базовая информация о чатах
 - chat_configs (chat_id, gemini_api_key, system_prompt, ai_enabled) - Конфигурация ИИ
+  - system_prompt: JSONB структура {"основные правила", "характер", "пол"}
 - group_admins (group_id, user_id, created_at) - Администраторы групп
 
-Кеширование (Redis):
-- Bot info: Информация о боте
-- Chat contexts: Контексты разговоров ИИ
-- User counters: Счетчики сообщений для антиспама
-- TTL: 5-24 часа в зависимости от типа данных
+Кеширование (многоуровневое):
+- In-memory (CacheService):
+  - chat:${id} - информация о чате (5 минут)
+  - chat_config:${id} - конфигурация чата (10 минут)
+- Redis:
+  - bot:info - информация о боте (24 часа)
+  - ai:context:${chatId} - контексты разговоров ИИ (24 часа)
+  - user:${userId} - счетчики сообщений для антиспама (1 час)
+  - message:delete:${taskId} - задачи на удаление сообщений (1 час)
+  - captcha:user:${userId} - данные капчи (5 минут)
 
 Конфигурация и настройки
 
@@ -91,42 +106,91 @@ Infrastructure Layer (Database, Redis, Docker)
 - BOT_TOKEN - Токен Telegram бота
 - DATABASE_URL - PostgreSQL connection string
 - REDIS_URL - Redis connection string
-- ANTISPAM_URL - URL антиспам API
-- WEATHER_API_KEY - OpenWeatherMap API (опционально)
-- GEMINI_API_KEY - Google Gemini API (по умолчанию)
-- WEB_SERVER_PORT=3000 - Порт для API мониторинга
+- ANTISPAM_URL - URL антиспам API (порт 6323)
+- LLAMA_URL - URL LLM API для дополнительных возможностей
+- PORT - Порт для веб API мониторинга (по умолчанию 3000)
+- ADMIN_USERNAME - Username администратора (опционально)
+- PROXY_ENABLED - Включить прокси для AI сервисов
+- PROXY_URL - URL прокси сервера
+- PROXY_USERNAME, PROXY_PASSWORD - Аутентификация прокси (опционально)
+- LOG_LEVEL - Уровень логирования (0-2)
+- NODE_ENV - Окружение (development/production/test)
+
+Примечание: API ключи Gemini хранятся в БД per-chat, глобальный GEMINI_API_KEY не используется
 
 Константы (constants.ts):
-- BOT_CONFIG: Таймауты, интервалы, лимиты
-- AI_CHAT_CONFIG: Настройки ИИ и очередей
+- BOT_CONFIG: Таймауты, интервалы, лимиты, настройки MessageDeletionManager
+- AI_CHAT_CONFIG: Настройки ИИ, очередей, контекстов, дефолтный system_prompt
+- AI_THROTTLE_CONFIG: Адаптивное throttling с token bucket
+- AI_MODERATION_CONFIG: Батчевая модерация (интервал 30 сек, лимит 200 сообщений)
 - ANTI_SPAM_CONFIG: Параметры антиспам системы
 - CACHE_CONFIG: TTL и префиксы кеша
+- HTTP_CONFIG, UI_CONFIG, SYSTEM_CONFIG: Вспомогательные константы
+
+Сервисы и их структура
+
+TelegramBotService (модульная Event-Driven архитектура):
+- Core: GramioBot - обертка над gramio с retry логикой (бесконечные повторы каждую секунду при сетевых ошибках)
+- Handlers:
+  - MessageHandlerNew - обработка сообщений, команд через CommandHandler
+  - MemberHandler - новые/ушедшие участники, эмиссия событий для капчи
+  - CallbackHandler - обработка inline кнопок (капча)
+  - CommandHandler - команды бота (/start, /help, /ban, /mute, /register, /addAltronKey, /ultron)
+- Utils (вспомогательные утилиты, не сервисы):
+  - UserManager - управление пользователями (счетчики, маппинг)
+  - MessageDeletionManager - автоудаление сообщений с персистентностью в Redis
+  - SettingsManager - управление настройками бота
+- Adapters:
+  - TelegramActionsAdapter - ЕДИНЫЙ универсальный адаптер для выполнения всех Telegram действий
+    * Подписывается на события: CAPTCHA_PASSED, CAPTCHA_FAILED, SPAM_DETECTED, AI_RESPONSE, captcha.challenge
+    * Выполняет actions: unrestrict, restrict, ban, kick, deleteMessage, sendMessage
+    * Изолирует бизнес-логику от Telegram API
+    * Реализует Ports & Adapters pattern
+
+DatabaseService:
+- ORM: Drizzle
+- Миграции: автоматические через drizzle-kit
+- Поддержка: PostgreSQL
+
+RedisService:
+- Клиент: node-redis
+- Reconnect: автоматический с экспоненциальным backoff
+- Health checks: ping с latency мониторингом
 
 Инфраструктура
 
 Docker Compose services:
 - postgres: База данных
-- redis: Кеширование
-- antispam: Внешний API антиспама
+- redis: Кеширование и очереди
 - pgadmin: Администрирование БД (опционально)
 
 Скрипты управления:
-- start.sh - Запуск инфраструктуры
-- stop.sh - Остановка сервисов
-- monitor.sh - Мониторинг состояния
-- backup.sh - Резервное копирование
+- start-infr.dev.bash / start-infr.prod.bash - Запуск инфраструктуры
+- start-app.dev.bash / start-app.prod.bash - Запуск приложения
+- infrastructure/stop.sh - Остановка сервисов
+- infrastructure/monitor.sh - Мониторинг состояния
+- infrastructure/backup.sh - Резервное копирование
 
 Мониторинг и логирование
 
-Веб API (ApiServerService):
+Веб API (WebApiService):
 - Endpoint: http://localhost:3000
-- Функции: Статистика сервисов, health checks
+- Функции: Настройка для админов чатов, статистика для супер-админа
 - Формат: JSON responses
+- Framework: Fastify
 
 Логирование:
 - Библиотека: Кастомный Logger класс
-- Уровни: Info, Warning, Error
-- Формат: Структурированные сообщения с эмодзи
+- Уровни: Info, Warning, Error, Debug
+- Формат: [timestamp][service][level]: сообщение
+- Цвета: Эмодзи для визуального разделения
+- Вывод: Console + опционально файл (LOG_USE_FILE=true)
+
+Core слой:
+- Container - БЕЗ логирования (чистая инфраструктура)
+- Application - БЕЗ логирования (только оркестрация)
+- EventBus - БЕЗ логирования (тихо обрабатывает ошибки)
+- Логирование только на уровне сервисов
 
 Безопасность
 
@@ -163,19 +227,47 @@ Docker Compose services:
 Горизонтальное масштабирование:
 - Stateless архитектура
 - Кеширование в Redis
-- Очереди для ИИ-запросов
 
 Вертикальное масштабирование:
 - Оптимизация запросов к БД
-- Адаптивное throttling
-- Cleanup старых данных
 
 Основные принципы работы
 
-1. Регистрация группы → активация функций бота
-2. Новый участник → капча → проверка пройдена/провалена
-3. Сообщение от пользователя → антиспам (первые 5) → нормальная обработка
-4. Упоминание бота → очередь ИИ → генерация ответа → отправка
-5. Команда администратора → проверка прав → выполнение действия
+1. Старт приложения:
+   - Container создается без зависимостей
+   - Application регистрирует все сервисы через фабрики
+   - Container.initialize() создает экземпляры и вызывает initialize()
+   - Container.start() запускает все сервисы
+
+2. Обработка сообщений (Event-Driven):
+   - Telegram → TelegramBotService → MessageHandler → EventBus.emit(MESSAGE_RECEIVED)
+   - Подписчики: GroupAgentService (батчевая модерация)
+   - Команды: Обрабатываются напрямую в CommandHandler
+
+3. Регистрация группы:
+   - /register → ChatRepository.registerChat() → активация функций бота
+
+4. Новый участник (Event-Driven):
+   - new_chat_members → MemberHandler → CaptchaService.startChallenge()
+   - CaptchaService → EventBus.emit(captcha.challenge) с actions[] (sendMessage + restrict)
+   - TelegramActionsAdapter → выполняет actions (отправка капчи, ограничение пользователя)
+   - Ответ пользователя → CallbackHandler → CaptchaService.submitAnswer()
+   - Успех → EventBus.emit(CAPTCHA_PASSED) с actions[] (unrestrict, deleteMessage)
+   - Неудача/таймаут → EventBus.emit(CAPTCHA_FAILED) с actions[] (ban, deleteMessage)
+
+7. ИИ-модерация (Event-Driven):
+   - Сервис GroupAgentService еще не описан
+
+8. Graceful Shutdown:
+   - SIGTERM/SIGINT → App.stop() → Application.stop() → Container.stop()
+   - Сервисы останавливаются в обратном порядке → Container.dispose()
+
+Надежность и отказоустойчивость:
+
+- GramioBot: Бесконечные retry каждую секунду при сетевых ошибках старта
+- RedisService: Автоматический reconnect с экспоненциальным backoff (до 100 попыток)
+- MessageDeletionManager: Персистентность задач в Redis, recovery после перезапуска
+- EventBus: Promise.allSettled для обработки ошибок без прерывания
+- Container: Graceful lifecycle с корректной обработкой ошибок в stop/dispose
 
 Эта инструкция служит руководством для понимания архитектуры и бизнес-логики проекта. 

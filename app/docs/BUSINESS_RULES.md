@@ -237,19 +237,29 @@ UserManager использует разные TTL для различных ти
 
 ### Схема и ограничения
 
-1. **Чаты** (`chats`)
-   - `id` - BIGINT (Telegram chat ID может быть очень большим)
-   - `type` - VARCHAR(50) - тип чата
-   - `active` - BOOLEAN DEFAULT true - можно отключать чаты
+#### Таблица `chats`
+- `id` - BIGINT PRIMARY KEY (Telegram chat ID может быть очень большим, отрицательное для групп)
+- `type` - VARCHAR(50) NOT NULL - тип чата: 'private', 'group', 'supergroup'
+- `title` - VARCHAR(255) - название чата (может быть NULL для приватных чатов)
+- `active` - BOOLEAN DEFAULT true - флаг активности (false = деактивирован, но не удален)
+- Индексы: `idx_chats_type`, `idx_chats_active`
 
-2. **Конфигурация чатов** (`chat_configs`)
-   - `geminiApiKey` - VARCHAR(512) - длинные API ключи
-   - `systemPrompt` - JSONB - гибкая структура промптов
-   - `aiEnabled` - BOOLEAN DEFAULT true
+#### Таблица `chat_configs`
+- `chat_id` - BIGINT PRIMARY KEY (FK → chats.id, связь один-к-одному)
+- `gemini_api_key` - VARCHAR(512) - API ключ Google Gemini (может быть NULL)
+- `system_prompt` - JSONB - системный промпт в формате `{ "основные правила"?: string, "характер"?: string, "пол"?: string }`
+- `ai_enabled` - BOOLEAN DEFAULT true - включен ли ИИ в чате
+- Индексы: `idx_chat_configs_ai_enabled`
 
-3. **Админы групп** (`group_admins`)
-   - Составной PRIMARY KEY (groupId, userId)
-   - Индексы для быстрого поиска
+**Важно:** API ключи хранятся per-chat (не глобально), что позволяет использовать разные ключи для разных групп.
+
+#### Таблица `group_admins`
+- Составной PRIMARY KEY (`group_id`, `user_id`)
+- `group_id` - BIGINT NOT NULL - ID группы
+- `user_id` - BIGINT NOT NULL - ID пользователя-администратора
+- Индексы: `idx_group_admins_group`, `idx_group_admins_user`
+
+**Назначение:** Кеширование списка администраторов для быстрой проверки прав доступа. Данные синхронизируются с Telegram API при регистрации группы.
 
 ### Системные промпты - JSON структура
 

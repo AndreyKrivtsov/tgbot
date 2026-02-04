@@ -5,10 +5,11 @@ const originalConsole = console
 
 // Базовые моки для переменных окружения
 process.env.NODE_ENV = "test"
-process.env.TELEGRAM_BOT_TOKEN = "test_token"
-process.env.GEMINI_API_KEY = "test_key"
-process.env.POSTGRES_URL = "postgresql://test:test@localhost:5432/test"
-process.env.REDIS_URL = "redis://localhost:6379"
+process.env.BOT_TOKEN = process.env.BOT_TOKEN || "test_bot_token"
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://test:test@localhost:5432/test"
+process.env.ANTISPAM_URL = process.env.ANTISPAM_URL || "http://127.0.0.1:6323"
+process.env.REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379"
+process.env.LOG_LEVEL = process.env.LOG_LEVEL || "0"
 
 // Глобальные утилиты для тестов
 global.testUtils = {

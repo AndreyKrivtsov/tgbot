@@ -1,17 +1,70 @@
-import { eq, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { chatConfigs, chats, groupAdmins } from "../db/schema.js"
 import type { Chat, ChatConfig, GroupAdmin, NewChat, NewChatConfig, SystemPromptData } from "../db/schema.js"
 import type { DatabaseService } from "../services/DatabaseService/index.js"
 import type { CacheService } from "../services/CacheService/index.js"
+import type { RedisService } from "../services/RedisService/index.js"
 import { CACHE_CONFIG } from "../constants.js"
+
+interface SuperAdminInfo {
+  userId: number
+  username: string
+}
 
 export class ChatRepository {
   private databaseService: DatabaseService
   private cacheService?: CacheService
+  private redisService?: RedisService
 
-  constructor(databaseService: DatabaseService, cacheService?: CacheService) {
+  constructor(databaseService: DatabaseService, cacheService?: CacheService, redisService?: RedisService) {
     this.databaseService = databaseService
     this.cacheService = cacheService
+    this.redisService = redisService
+  }
+
+  private getAdminsCacheKey(chatId: number): string {
+    return `${CACHE_CONFIG.KEYS.CHAT_ADMINS}:${chatId}`
+  }
+
+  private getSuperAdminCacheKey(): string {
+    return CACHE_CONFIG.KEYS.SUPER_ADMIN
+  }
+
+  private buildSuperAdminEntry(chatId: number, superAdmin: SuperAdminInfo): GroupAdmin {
+    return {
+      groupId: chatId,
+      userId: superAdmin.userId,
+      username: superAdmin.username,
+      createdAt: new Date(),
+    }
+  }
+
+  private async setAdminsCache(chatId: number, admins: GroupAdmin[]): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.set(
+        this.getAdminsCacheKey(chatId),
+        admins,
+        CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
+      )
+      return
+    }
+
+    if (this.cacheService) {
+      this.cacheService.set(
+        this.getAdminsCacheKey(chatId),
+        admins,
+        CACHE_CONFIG.CHAT_ADMINS_TTL_SECONDS,
+      )
+    }
+  }
+
+  private async invalidateAdminsCache(chatId: number): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.del(this.getAdminsCacheKey(chatId))
+    }
+    if (this.cacheService) {
+      this.cacheService.delete(this.getAdminsCacheKey(chatId))
+    }
   }
 
   /**
@@ -308,15 +361,68 @@ export class ChatRepository {
    * Получить администраторов чата
    */
   async getChatAdmins(chatId: number): Promise<GroupAdmin[]> {
+    let admins: GroupAdmin[] | null = null
+
+    if (this.redisService) {
+      const cached = await this.redisService.get<GroupAdmin[]>(this.getAdminsCacheKey(chatId))
+      if (cached !== null) {
+        admins = cached
+      }
+    } else if (this.cacheService) {
+      const cached = this.cacheService.get(this.getAdminsCacheKey(chatId)) as GroupAdmin[] | null
+      if (cached !== null) {
+        admins = cached
+      }
+    }
+
     try {
-      return await this.getDb()
-        .select()
-        .from(groupAdmins)
-        .where(eq(groupAdmins.groupId, chatId))
+      if (!admins) {
+        const adminsFromDb = await this.getDb()
+          .select()
+          .from(groupAdmins)
+          .where(eq(groupAdmins.groupId, chatId))
+
+        await this.setAdminsCache(chatId, adminsFromDb)
+        admins = adminsFromDb
+      }
+
+      const superAdmin = await this.getSuperAdmin()
+      if (superAdmin) {
+        return [...admins, this.buildSuperAdminEntry(chatId, superAdmin)]
+      }
+      return admins
     } catch (error) {
       console.error("Error getting chat admins:", error)
+      const superAdmin = await this.getSuperAdmin()
+      if (superAdmin) {
+        return [this.buildSuperAdminEntry(chatId, superAdmin)]
+      }
       return []
     }
+  }
+
+  async setSuperAdmin(superAdmin: SuperAdminInfo): Promise<void> {
+    if (this.redisService) {
+      await this.redisService.setSuperAdmin(superAdmin)
+      return
+    }
+    if (this.cacheService) {
+      this.cacheService.set(
+        this.getSuperAdminCacheKey(),
+        superAdmin,
+        CACHE_CONFIG.SUPER_ADMIN_TTL_SECONDS,
+      )
+    }
+  }
+
+  async getSuperAdmin(): Promise<SuperAdminInfo | null> {
+    if (this.redisService) {
+      return await this.redisService.getSuperAdmin()
+    }
+    if (this.cacheService) {
+      return this.cacheService.get(this.getSuperAdminCacheKey()) as SuperAdminInfo | null
+    }
+    return null
   }
 
   /**
@@ -332,6 +438,7 @@ export class ChatRepository {
         })
         .onConflictDoNothing()
 
+      await this.invalidateAdminsCache(chatId)
       return true
     } catch (error) {
       console.error("Error adding admin:", error)
@@ -350,7 +457,11 @@ export class ChatRepository {
           sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
         )
 
-      return (result.count || 0) > 0
+      const success = (result.count || 0) > 0
+      if (success) {
+        await this.invalidateAdminsCache(chatId)
+      }
+      return success
     } catch (error) {
       console.error("Error removing admin:", error)
       return false
@@ -358,23 +469,50 @@ export class ChatRepository {
   }
 
   /**
+   * Полностью заменить список администраторов чата
+   */
+  async replaceAdmins(
+    chatId: number,
+    admins: Array<{ userId: number, username: string | null }>,
+  ): Promise<void> {
+    try {
+      const db = this.getDb()
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(groupAdmins)
+          .where(eq(groupAdmins.groupId, chatId))
+
+        if (admins.length > 0) {
+          const values = admins.map(admin => ({
+            groupId: chatId,
+            userId: admin.userId,
+            username: admin.username,
+          }))
+          await tx
+            .insert(groupAdmins)
+            .values(values)
+            .onConflictDoNothing()
+        }
+      })
+
+      const adminsFromDb = await this.getDb()
+        .select()
+        .from(groupAdmins)
+        .where(eq(groupAdmins.groupId, chatId))
+
+      await this.setAdminsCache(chatId, adminsFromDb)
+    } catch (error) {
+      console.error("Error replacing chat admins:", error)
+      await this.invalidateAdminsCache(chatId)
+    }
+  }
+
+  /**
    * Проверить, является ли пользователь администратором чата
    */
   async isAdmin(chatId: number, userId: number): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .select({ id: groupAdmins.userId })
-        .from(groupAdmins)
-        .where(
-          sql`${groupAdmins.groupId} = ${chatId} AND ${groupAdmins.userId} = ${userId}`,
-        )
-        .limit(1)
-
-      return result.length > 0
-    } catch (error) {
-      console.error("Error checking admin status:", error)
-      return false
-    }
+    const admins = await this.getChatAdmins(chatId)
+    return admins.some(admin => admin.userId === userId)
   }
 
   /**
@@ -420,6 +558,33 @@ export class ChatRepository {
       }))
     } catch (error) {
       console.error("Error getting active AI chats:", error)
+      return []
+    }
+  }
+
+  /**
+   * Получить список активных чатов, где пользователь является администратором
+   */
+  async getAdminChatsWithConfig(userId: number): Promise<Array<Chat & { config?: ChatConfig }>> {
+    try {
+      const result = await this.getDb()
+        .select()
+        .from(groupAdmins)
+        .innerJoin(chats, eq(groupAdmins.groupId, chats.id))
+        .leftJoin(chatConfigs, eq(chats.id, chatConfigs.chatId))
+        .where(
+          and(
+            eq(groupAdmins.userId, userId),
+            eq(chats.active, true),
+          ),
+        )
+
+      return result.map(row => ({
+        ...row.chats,
+        config: row.chat_configs || undefined,
+      }))
+    } catch (error) {
+      console.error("Error getting admin chats:", error)
       return []
     }
   }
@@ -486,12 +651,12 @@ export class ChatRepository {
     try {
       // Проверяем, существует ли чат
       const existingChat = await this.getChat(chatId)
-      
+
       if (existingChat) {
         if (existingChat.active) {
           return { success: false, message: "Группа уже зарегистрирована" }
         }
-        
+
         // Активируем существующий чат
         const success = await this.activateChat(chatId)
         if (success) {
@@ -521,15 +686,15 @@ export class ChatRepository {
     try {
       // Проверяем, существует ли чат
       const existingChat = await this.getChat(chatId)
-      
+
       if (!existingChat) {
         return { success: false, message: "Группа не найдена" }
       }
-      
+
       if (!existingChat.active) {
         return { success: false, message: "Группа уже неактивна" }
       }
-      
+
       // Деактивируем чат
       const success = await this.deactivateChat(chatId)
       if (success) {
