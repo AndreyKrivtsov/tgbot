@@ -42,8 +42,6 @@ export const DEFAULT_PROMPT_SPEC: PromptSpec = {
   triggers: [
     // respond triggers
     "обращение к боту",
-    "сложный вопрос",
-    "интересная тема",
     "нарушение правил",
     "просьба применить модерацию",
   ],
