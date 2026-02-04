@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@jest/globals"
 import { PromptAssembler } from "../../services/GroupAgentService/application/PromptAssembler.js"
 import { HistoryToPromptMapper } from "../../services/GroupAgentService/application/HistoryToPromptMapper.js"
-import { CompactPromptBuilder } from "../../services/GroupAgentService/infrastructure/prompt/CompactPromptBuilder.js"
-import { DEFAULT_PROMPT_SPEC } from "../../services/GroupAgentService/infrastructure/config/promptSpec.js"
+import { XmlPromptBuilder } from "../../services/GroupAgentService/infrastructure/prompt/XmlPromptBuilder.js"
+import { DEFAULT_PROMPT_TEXT } from "../../services/GroupAgentService/infrastructure/config/promptText.js"
 import type { BufferedMessage } from "../../services/GroupAgentService/domain/Message.js"
 import type { StoredHistoryEntry } from "../../services/GroupAgentService/domain/Batch.js"
 
@@ -71,10 +71,10 @@ function makeMessages(): BufferedMessage[] {
 }
 
 describe("PromptAssembler", () => {
-  it("формирует компактный JSON промпта с контекстом и историей", () => {
-    const assembler = new PromptAssembler(new CompactPromptBuilder(), new HistoryToPromptMapper())
+  it("формирует XML промпт с контекстом и историей", () => {
+    const assembler = new PromptAssembler(new XmlPromptBuilder(), new HistoryToPromptMapper())
     const prompt = assembler.buildPrompt({
-      spec: DEFAULT_PROMPT_SPEC,
+      system: DEFAULT_PROMPT_TEXT,
       context: {
         admins: [1, 2],
         flags: {},
@@ -84,18 +84,17 @@ describe("PromptAssembler", () => {
       messages: makeMessages(),
     })
 
-    const parsed = JSON.parse(prompt)
-    expect(parsed.task).toBe("return_json_only")
-    expect(parsed.sys).toBeDefined()
-    expect(parsed.ctx.admins).toEqual([1, 2])
-    expect(parsed.msgs).toHaveLength(2)
-    expect(parsed.h).toHaveLength(2)
+    expect(prompt).toContain("<system>")
+    expect(prompt).toContain("<input>")
+    expect(prompt).toContain("<messages>")
+    expect(prompt).toContain("<history>")
+    expect(prompt).toContain("<context>")
   })
 
-  it("не добавляет пустую историю", () => {
-    const assembler = new PromptAssembler(new CompactPromptBuilder(), new HistoryToPromptMapper())
+  it("вставляет пустую историю как []", () => {
+    const assembler = new PromptAssembler(new XmlPromptBuilder(), new HistoryToPromptMapper())
     const prompt = assembler.buildPrompt({
-      spec: DEFAULT_PROMPT_SPEC,
+      system: DEFAULT_PROMPT_TEXT,
       context: {
         admins: [],
         flags: {},
@@ -105,7 +104,6 @@ describe("PromptAssembler", () => {
       messages: makeMessages(),
     })
 
-    const parsed = JSON.parse(prompt)
-    expect(parsed.h).toBeUndefined()
+    expect(prompt).toContain("<history>[]</history>")
   })
 })

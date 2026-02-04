@@ -36,9 +36,7 @@ describe("groupManagementService (unit)", () => {
     })
   })
 
-  it("handleRegister: проверяет права админа", async () => {
-    mockAuthorizationService.checkGroupAdmin.mockResolvedValueOnce({ authorized: false, reason: "no_group_admin_permission" })
-
+  it("handleRegister: не требует прав админа", async () => {
     await service.initialize()
     // Получаем обработчик из мока
     const handler = (eventBus as any).onCommandRegister.mock.calls[0]?.[0]
@@ -52,7 +50,7 @@ describe("groupManagementService (unit)", () => {
       })
     }
 
-    expect(mockAuthorizationService.checkGroupAdmin).toHaveBeenCalledWith(-456, 123, "user")
+    expect(mockAuthorizationService.checkGroupAdmin).not.toHaveBeenCalled()
   })
 
   it("handleRegister: получает админов если чат не найден", async () => {

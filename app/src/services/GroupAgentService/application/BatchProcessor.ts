@@ -6,8 +6,8 @@ import type { StateStorePort } from "../ports/StateStorePort.js"
 import type { EventBusPort } from "../ports/EventBusPort.js"
 import type { ChatConfigPort } from "../ports/ChatConfigPort.js"
 import type { BatchClassificationResult, StoredChatHistory, StoredHistoryEntry } from "../domain/Batch.js"
+import type { BufferedMessage } from "../domain/Message.js"
 import type { AgentResponseDecision, ModerationDecision } from "../domain/Decision.js"
-import type { PromptSpec } from "../domain/PromptContract.js"
 import type { ReviewRequestBuilder } from "./ReviewRequestBuilder.js"
 import type { ModerationReviewManager } from "./ModerationReviewManager.js"
 import type { RetryPolicy } from "./RetryPolicy.js"
@@ -22,10 +22,11 @@ export interface BatchProcessorConfig {
   batchIntervalMs: number
   maxBatchSize: number
   promptMaxChars: number
+  minRequestIntervalMs: number
 }
 
-export interface PromptSpecProvider {
-  getSpec: (chatId: number) => Promise<PromptSpec>
+export interface PromptTextProvider {
+  getText: (chatId: number) => Promise<string>
 }
 
 interface Dependencies {
@@ -36,7 +37,7 @@ interface Dependencies {
   actionsBuilder: ActionsBuilder
   eventBus: EventBusPort
   chatConfig: ChatConfigPort
-  promptSpecProvider: PromptSpecProvider
+  promptTextProvider: PromptTextProvider
   reviewRequestBuilder: ReviewRequestBuilder
   reviewManager: ModerationReviewManager
   retryPolicy: RetryPolicy
@@ -53,6 +54,13 @@ export class BatchProcessor {
   private readonly logger = new Logger("BatchProcessor")
   private timer?: NodeJS.Timeout
   private processingChats: Set<number> = new Set()
+  private readonly lastSuccessAt = new Map<number, number>()
+  private readonly inflightBatches = new Map<number, {
+    messages: BufferedMessage[]
+    messageIds: number[]
+    prompt: string
+    allowedMessageIds: Set<number>
+  }>()
 
   constructor(config: BatchProcessorConfig, deps: Dependencies) {
     this.config = config
@@ -97,38 +105,39 @@ export class BatchProcessor {
 
   private async processChat(chatId: number): Promise<void> {
     this.logger.d("Processing chatId", chatId)
-    const pending = this.deps.buffer.getPendingMessages(chatId)
+    const inflight = this.inflightBatches.get(chatId)
+    const pending = inflight?.messages ?? this.deps.buffer.getPendingMessages(chatId)
 
     if (pending.length === 0) {
       return
     }
 
     const config = await this.deps.chatConfig.getChatConfig(chatId)
-    if (!config?.groupAgentEnabled) {
+    if (!config?.groupAgentEnabled || !config.geminiApiKey) {
       if (pending.length > 0) {
         const messageIds = pending.map(message => message.messageId)
         this.deps.buffer.remove(chatId, messageIds)
       }
+      this.inflightBatches.delete(chatId)
       return
     }
 
-    const toProcess = pending.slice(0, this.config.maxBatchSize)
-    this.logger.d("Messages to process", toProcess.length)
-
-    if (toProcess.length === 0) {
+    if (!this.isCooldownReady(chatId)) {
       return
     }
 
-    const messageIds = toProcess.map(message => message.messageId)
+    let batch = inflight
+    if (!batch) {
+      const toProcess = pending.slice(0, this.config.maxBatchSize)
+      this.logger.d("Messages to process", toProcess.length)
 
-    // Очищаем буфер сразу после проверки конфигурации, чтобы не терять сообщения при выключенном агенте
-    this.deps.buffer.remove(chatId, messageIds)
+      if (toProcess.length === 0) {
+        return
+      }
 
-    await this.deps.eventBus.emitTypingStarted({ chatId })
-    try {
       const history = await this.deps.stateStore.loadHistory(chatId)
       const historyEntries = history?.entries ?? []
-      const promptSpec = await this.deps.promptSpecProvider.getSpec(chatId)
+      const promptText = await this.deps.promptTextProvider.getText(chatId)
 
       this.logger.d("History entries", historyEntries.length)
       this.logger.d("Last history entry:", historyEntries[historyEntries.length - 1])
@@ -140,7 +149,7 @@ export class BatchProcessor {
       })
 
       const basePrompt = this.deps.promptAssembler.buildPrompt({
-        spec: promptSpec,
+        system: promptText,
         context,
         history: [],
         messages: toProcess,
@@ -150,56 +159,69 @@ export class BatchProcessor {
       const reducedHistory = this.deps.historyReducer.reduce(historyEntries, budget)
 
       const prompt = this.deps.promptAssembler.buildPrompt({
-        spec: promptSpec,
+        system: promptText,
         context,
         history: reducedHistory,
         messages: toProcess,
       })
 
-      const allowedMessageIds = new Set(toProcess.map(message => message.messageId))
+      const messageIds = toProcess.map(message => message.messageId)
+      const allowedMessageIds = new Set(messageIds)
 
-      const classification = await this.classifyWithRetry({
-        chatId,
+      batch = {
+        messages: toProcess,
+        messageIds,
         prompt,
         allowedMessageIds,
-      })
-
-      this.logger.d("Classification result", classification)
-
-      const resolutions = this.deps.decisionOrchestrator.buildResolutions(toProcess, classification)
-      const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
-      const responseDecisions = resolutions
-        .map(resolution => resolution.response ?? null)
-        .filter((decision): decision is AgentResponseDecision => decision !== null)
-
-      const adminMentions = await this.deps.adminMentions.getAdminMentions(chatId)
-      const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions, adminMentions)
-      const reviewDecisionKeys = new Set(
-        reviewRequests.map(request => this.decisionKey(request.decision)),
-      )
-      const immediateDecisions = moderationDecisions.filter(
-        decision => !reviewDecisionKeys.has(this.decisionKey(decision)),
-      )
-
-      const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
-      const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecisions)
-
-      if (responseEvent) {
-        await this.deps.eventBus.emitAgentResponse(responseEvent)
       }
-
-      if (moderationEvent) {
-        await this.deps.eventBus.emitModerationAction(moderationEvent)
-      }
-
-      if (reviewRequests.length > 0) {
-        await this.deps.reviewManager.enqueueRequests(reviewRequests)
-      }
-
-      await this.persistHistory(chatId, history, resolutions)
-    } finally {
-      await this.deps.eventBus.emitTypingStopped({ chatId })
+      this.inflightBatches.set(chatId, batch)
     }
+
+    const history = await this.deps.stateStore.loadHistory(chatId)
+
+    const classification = await this.classifyWithRetry({
+      chatId,
+      prompt: batch.prompt,
+      allowedMessageIds: batch.allowedMessageIds,
+    })
+
+    this.logger.d("Classification result", classification)
+
+    const resolutions = this.deps.decisionOrchestrator.buildResolutions(batch.messages, classification)
+    const moderationDecisions = resolutions.flatMap(resolution => resolution.moderationActions)
+    const responseDecisions = resolutions
+      .map(resolution => resolution.response ?? null)
+      .filter((decision): decision is AgentResponseDecision => decision !== null)
+
+    const adminMentions = await this.deps.adminMentions.getAdminMentions(chatId)
+    const reviewRequests = this.deps.reviewRequestBuilder.build(resolutions, adminMentions)
+    const reviewDecisionKeys = new Set(
+      reviewRequests.map(request => this.decisionKey(request.decision)),
+    )
+    const immediateDecisions = moderationDecisions.filter(
+      decision => !reviewDecisionKeys.has(this.decisionKey(decision)),
+    )
+
+    const moderationEvent = this.deps.actionsBuilder.buildModerationEvent(chatId, immediateDecisions)
+    const responseEvent = this.deps.actionsBuilder.buildResponseEvent(responseDecisions)
+
+    if (responseEvent) {
+      await this.deps.eventBus.emitAgentResponse(responseEvent)
+    }
+
+    if (moderationEvent) {
+      await this.deps.eventBus.emitModerationAction(moderationEvent)
+    }
+
+    if (reviewRequests.length > 0) {
+      await this.deps.reviewManager.enqueueRequests(reviewRequests)
+    }
+
+    await this.persistHistory(chatId, history, resolutions)
+
+    this.deps.buffer.remove(chatId, batch.messageIds)
+    this.inflightBatches.delete(chatId)
+    this.lastSuccessAt.set(chatId, Date.now())
   }
 
   private async classifyWithRetry(input: {
@@ -236,7 +258,7 @@ export class BatchProcessor {
       } catch (error) {
         const decision = this.deps.retryPolicy.decide({ attempt, error })
         if (!decision.shouldRetry) {
-          return { results: [] }
+          throw error
         }
 
         if (decision.delayMs > 0) {
@@ -249,6 +271,14 @@ export class BatchProcessor {
 
   private async delay(ms: number): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private isCooldownReady(chatId: number): boolean {
+    const lastSuccessAt = this.lastSuccessAt.get(chatId)
+    if (!lastSuccessAt) {
+      return true
+    }
+    return Date.now() - lastSuccessAt >= this.config.minRequestIntervalMs
   }
 
   private decisionKey(decision: ModerationDecision): string {

@@ -1,49 +1,5 @@
 export type CompactBoolean = 0 | 1
 
-export interface PromptSpec {
-  persona: {
-    r: string
-    t: string
-    v: string
-  }
-  constraints: Record<string, CompactBoolean>
-  moderation: Record<string, CompactBoolean | number>
-  triggers: string[]
-  output: {
-    schema: string
-    fields?: {
-      mid?: string
-      c?: string
-      rr?: string
-      a?: string
-      t?: string
-      tu?: string
-      tm?: string
-      d?: string
-    }
-    enums: {
-      c: string
-      a: string
-    }
-    action_hints?: {
-      none?: string
-      warn?: string
-      delete?: string
-      mute?: string
-      unmute?: string
-      kick?: string
-      ban?: string
-      unban?: string
-    }
-  }
-  predefined: {
-    fake_tech: string
-    review_notice?: string
-    mention_username?: string
-    non_admin_mute_forbidden?: string
-  }
-}
-
 export interface PromptContext {
   admins: number[]
   flags: Record<string, CompactBoolean>
@@ -74,18 +30,16 @@ export interface CompactHistoryEntry {
   ac?: number
 }
 
-export interface CompactPrompt {
-  sys: PromptSpec
-  ctx: PromptContext
-  msgs: CompactMessage[]
-  h?: CompactHistoryEntry[]
-  task: "return_json_only"
+export interface PromptBuildInput {
+  system: string
+  context: PromptContext
+  messages: CompactMessage[]
+  history?: CompactHistoryEntry[]
 }
 
 export interface CompactResultItem {
   mid: number
   c: number
-  rr: CompactBoolean
   a: number
   t?: string
   tu?: number

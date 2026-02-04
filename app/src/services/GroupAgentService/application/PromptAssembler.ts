@@ -1,6 +1,6 @@
 import type { PromptBuilderPort } from "../ports/PromptBuilderPort.js"
 import type { StoredHistoryEntry } from "../domain/Batch.js"
-import type { CompactMessage, CompactPrompt, PromptSpec } from "../domain/PromptContract.js"
+import type { CompactMessage, PromptBuildInput } from "../domain/PromptContract.js"
 import type { BufferedMessage } from "../domain/Message.js"
 import { formatMessageForAI } from "../domain/MessageFormatter.js"
 import type { HistoryToPromptMapper } from "./HistoryToPromptMapper.js"
@@ -15,8 +15,8 @@ export class PromptAssembler {
   }
 
   buildPrompt(input: {
-    spec: PromptSpec
-    context: CompactPrompt["ctx"]
+    system: PromptBuildInput["system"]
+    context: PromptBuildInput["context"]
     history: StoredHistoryEntry[]
     messages: BufferedMessage[]
   }): string {
@@ -24,15 +24,12 @@ export class PromptAssembler {
       ? this.historyMapper.map(input.history)
       : undefined
 
-    const prompt: CompactPrompt = {
-      sys: input.spec,
-      ctx: input.context,
-      ...(historyEntries ? { h: historyEntries } : {}),
-      msgs: this.mapMessages(input.messages),
-      task: "return_json_only",
-    }
-
-    return this.promptBuilder.buildPrompt(prompt)
+    return this.promptBuilder.buildPrompt({
+      system: input.system,
+      context: input.context,
+      messages: this.mapMessages(input.messages),
+      history: historyEntries,
+    })
   }
 
   private mapMessages(messages: BufferedMessage[]): CompactMessage[] {
