@@ -43,8 +43,8 @@ export class CompactResponseParser implements ResponseParserPort {
       }
 
       const classificationType = CLASSIFICATION_TYPES[item.c] ?? "normal"
-      const requiresResponse = Boolean(item.rr)
       const action = ACTION_TYPES[item.a] ?? "none"
+      const requiresResponse = Boolean(item.t) || action !== "none"
 
       const normalized: ClassificationResult = {
         messageId: item.mid,

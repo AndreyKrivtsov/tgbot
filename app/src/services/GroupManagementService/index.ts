@@ -50,15 +50,7 @@ export class GroupManagementService implements IService {
       return
     }
 
-    if (!this.deps.chatRepository || !this.deps.authorizationService) {
-      return
-    }
-
-    const authResult = await this.deps.authorizationService.checkGroupAdmin(chatId, actorId, actorUsername)
-
-    if (!authResult.authorized) {
-      const reasonKey = authResult.reason === "no_group_admin_permission" ? "no_group_admin_permission" : "no_admin_permission"
-      await this.sendMessage(chatId, getMessage(reasonKey), messageId)
+    if (!this.deps.chatRepository) {
       return
     }
 

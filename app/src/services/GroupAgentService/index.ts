@@ -8,7 +8,7 @@ import { GROUP_AGENT_CONFIG } from "../../constants.js"
 import type { GroupAgentConfigType } from "../../constants.js"
 import { MessageBuffer } from "./application/MessageBuffer.js"
 import { BatchProcessor } from "./application/BatchProcessor.js"
-import type { PromptSpecProvider } from "./application/BatchProcessor.js"
+import type { PromptTextProvider } from "./application/BatchProcessor.js"
 import { ActionsBuilder } from "./application/ActionsBuilder.js"
 import { ModerationPolicy } from "./domain/ModerationPolicy.js"
 import { ResponsePolicy } from "./domain/ResponsePolicy.js"
@@ -23,12 +23,12 @@ import type { ChatConfigPort } from "./ports/ChatConfigPort.js"
 import type { EventBusPort } from "./ports/EventBusPort.js"
 import type { StateStorePort } from "./ports/StateStorePort.js"
 import type { AdminMentionsPort } from "./ports/AdminMentionsPort.js"
-import { DEFAULT_PROMPT_SPEC } from "./infrastructure/config/promptSpec.js"
+import { DEFAULT_PROMPT_TEXT } from "./infrastructure/config/promptText.js"
 import { ContextBuilder } from "./application/ContextBuilder.js"
 import { HistoryReducer } from "./application/HistoryReducer.js"
 import { PromptAssembler } from "./application/PromptAssembler.js"
 import { HistoryToPromptMapper } from "./application/HistoryToPromptMapper.js"
-import { CompactPromptBuilder } from "./infrastructure/prompt/CompactPromptBuilder.js"
+import { XmlPromptBuilder } from "./infrastructure/prompt/XmlPromptBuilder.js"
 import { CompactResponseParser } from "./infrastructure/prompt/CompactResponseParser.js"
 import { getMessage } from "../../shared/messages/index.js"
 
@@ -66,10 +66,10 @@ export class GroupAgentService implements IService {
   private reviewManager?: ModerationReviewManager
   private adminMentionsPort?: AdminMentionsPort
 
-  private promptSpecProvider: PromptSpecProvider
+  private promptTextProvider: PromptTextProvider
   private contextBuilder?: ContextBuilder
   private historyReducer?: HistoryReducer
-  private promptBuilder?: CompactPromptBuilder
+  private promptBuilder?: XmlPromptBuilder
   private promptAssembler?: PromptAssembler
   private historyToPromptMapper?: HistoryToPromptMapper
   private responseParser?: CompactResponseParser
@@ -79,8 +79,8 @@ export class GroupAgentService implements IService {
     this.deps = deps
     this.serviceConfig = GROUP_AGENT_CONFIG
     this.messageBuffer = new MessageBuffer()
-    this.promptSpecProvider = {
-      getSpec: async (): Promise<typeof DEFAULT_PROMPT_SPEC> => DEFAULT_PROMPT_SPEC,
+    this.promptTextProvider = {
+      getText: async (): Promise<string> => DEFAULT_PROMPT_TEXT,
     }
   }
 
@@ -120,7 +120,7 @@ export class GroupAgentService implements IService {
       },
       this.historyToPromptMapper,
     )
-    this.promptBuilder = new CompactPromptBuilder()
+    this.promptBuilder = new XmlPromptBuilder()
     this.promptAssembler = new PromptAssembler(this.promptBuilder, this.historyToPromptMapper)
     this.responseParser = new CompactResponseParser()
 
@@ -163,7 +163,7 @@ export class GroupAgentService implements IService {
     const chatConfigPort = this.chatConfigPort!
     const reviewRequestBuilder = this.reviewRequestBuilder!
     const reviewManager = this.reviewManager!
-    const retryPolicy = new DefaultRetryPolicy({ maxAttempts: 2, delayMs: 1000 })
+    const retryPolicy = new DefaultRetryPolicy({ maxAttempts: 1, delayMs: 0 })
     const contextBuilder = this.contextBuilder!
     const historyReducer = this.historyReducer!
     const promptAssembler = this.promptAssembler!
@@ -178,6 +178,7 @@ export class GroupAgentService implements IService {
         batchIntervalMs: this.serviceConfig.BATCH_INTERVAL_MS,
         maxBatchSize: this.serviceConfig.MAX_BATCH_SIZE,
         promptMaxChars: this.serviceConfig.PROMPT_MAX_TOKENS * this.serviceConfig.PROMPT_TOKEN_CHAR_RATIO,
+        minRequestIntervalMs: this.serviceConfig.MIN_REQUEST_INTERVAL_MS,
       },
       {
         buffer: this.messageBuffer,
@@ -187,7 +188,7 @@ export class GroupAgentService implements IService {
         actionsBuilder,
         eventBus: eventBusPort,
         chatConfig: chatConfigPort,
-        promptSpecProvider: this.promptSpecProvider,
+        promptTextProvider: this.promptTextProvider,
         reviewRequestBuilder,
         reviewManager,
         retryPolicy,
@@ -230,7 +231,7 @@ export class GroupAgentService implements IService {
     }
 
     const config = await this.chatConfigPort.getChatConfig(event.chat.id)
-    if (!config?.groupAgentEnabled) {
+    if (!config?.groupAgentEnabled || !config.geminiApiKey) {
       return
     }
 
