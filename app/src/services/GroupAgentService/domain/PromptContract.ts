@@ -40,6 +40,7 @@ export interface PromptSpec {
     fake_tech: string
     review_notice?: string
     mention_username?: string
+    non_admin_mute_forbidden?: string
   }
 }
 

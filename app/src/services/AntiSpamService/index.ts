@@ -2,7 +2,7 @@ import type { AppConfig } from "../../config.js"
 import type { Logger } from "../../helpers/Logger.js"
 import type { IService } from "../../core/Container.js"
 import type { EventBus, MessageReceivedEvent } from "../../core/EventBus.js"
-import type { RedisService } from "../../RedisService/index.js"
+import type { RedisService } from "../RedisService/index.js"
 import { getMessage } from "../../shared/messages/index.js"
 
 import { ANTI_SPAM_CONFIG } from "../../constants.js"

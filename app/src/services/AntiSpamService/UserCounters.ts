@@ -1,5 +1,5 @@
 import type { Logger } from "../../helpers/Logger.js"
-import type { RedisService } from "../../RedisService/index.js"
+import type { RedisService } from "../RedisService/index.js"
 
 interface UserCounterData {
   messageCount: number
@@ -178,7 +178,7 @@ export class UserCounters {
     const keys = this.getRedisKeys(userId)
 
     try {
-      const results = await Promise.all([
+      const results: boolean[] = await Promise.all([
         this.redisService.del(keys.counter),
         this.redisService.del(keys.spam),
       ])

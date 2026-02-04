@@ -1,4 +1,4 @@
-import type { ChatRepository } from "../../../repository/ChatRepository.js"
+import type { ChatRepository } from "../../../../repository/ChatRepository.js"
 import type { ChatConfig, ChatConfigPort } from "../../ports/ChatConfigPort.js"
 
 export class ChatRepositoryAdapter implements ChatConfigPort {
@@ -39,6 +39,6 @@ export class ChatRepositoryAdapter implements ChatConfigPort {
 
   async getChatAdmins(chatId: number): Promise<number[]> {
     const admins = await this.chatRepository.getChatAdmins(chatId)
-    return admins.map(admin => admin.userId)
+    return admins.map((admin) => admin.userId)
   }
 }
